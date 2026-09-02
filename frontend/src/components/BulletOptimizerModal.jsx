@@ -272,14 +272,14 @@ export default function BulletOptimizerModal({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-300">
-                    <Target size={16} />
+                    {sectionType === 'project' ? <FolderGit2 size={16} /> : <Briefcase size={16} />}
                   </div>
                   <div>
                     <h4 className="font-bold text-xs uppercase tracking-wide text-indigo-300">
-                      Target Project / Experience in Resume
+                      {sectionType === 'project' ? 'Target Project in Resume' : 'Target Role / Employment in Resume'}
                     </h4>
                     <span className="text-xs font-semibold text-white">
-                      {result.target_project_name || 'Primary Technical Project'}
+                      {result.target_project_name || (sectionType === 'project' ? 'Primary Technical Project' : 'Professional Work Experience')}
                     </span>
                   </div>
                 </div>
@@ -289,7 +289,7 @@ export default function BulletOptimizerModal({
                     onClick={() => setShowBulletPicker(!showBulletPicker)}
                     className="text-[11px] text-cyan-400 hover:text-cyan-300 underline font-medium"
                   >
-                    {showBulletPicker ? 'Hide Bullets' : 'Change Target Bullet'}
+                    {showBulletPicker ? 'Hide Bullets' : `Change Target ${sectionType === 'project' ? 'Project' : 'Job'} Bullet`}
                   </button>
                 )}
               </div>
@@ -306,7 +306,11 @@ export default function BulletOptimizerModal({
               {result.original_bullet_to_replace && (
                 <div className="space-y-1.5 pt-1">
                   <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-400 uppercase tracking-wider">
-                    <span>Current Bullet Point in Resume to Replace:</span>
+                    <span>
+                      {sectionType === 'project'
+                        ? 'Current Project Bullet in Resume to Replace:'
+                        : 'Current Work History Bullet in Resume to Replace:'}
+                    </span>
                   </div>
                   <div className="font-mono text-xs text-rose-200 bg-rose-950/30 p-2.5 rounded-lg border border-rose-500/30 leading-relaxed">
                     • {result.original_bullet_to_replace}
@@ -314,11 +318,11 @@ export default function BulletOptimizerModal({
                 </div>
               )}
 
-              {/* Bullet Picker Dropdown if user wants to replace a different one */}
+              {/* Bullet Picker Dropdown */}
               {showBulletPicker && result.available_resume_bullets && (
                 <div className="p-3 bg-slate-950/90 rounded-xl border border-slate-700 space-y-2 mt-2">
                   <span className="text-xs font-semibold text-slate-300 block">
-                    Choose which existing bullet point from your resume to upgrade:
+                    Choose which existing {sectionType === 'project' ? 'project' : 'work history'} bullet to upgrade:
                   </span>
                   <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                     {result.available_resume_bullets.map((bObj, idx) => (

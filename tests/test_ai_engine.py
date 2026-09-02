@@ -60,6 +60,43 @@ def test_bulletskill_multiple_keywords_incorporation():
     assert res.original_bullet_to_replace is not None
     assert res.replacement_rationale is not None
 
+def test_project_bullet_selects_project_section_not_work_history():
+    engine = AIEngine(api_key=None)
+    resume_context = """
+    Experience:
+    Senior Software Engineer at Google (2021 - Present)
+    - Architected global payment gateway handling $10M transactions daily.
+
+    Projects:
+    Personal Distributed Event Bus
+    - Built streaming order catalog using Node.js and SQLite.
+    """
+
+    # 1. Project request must pick from Projects section
+    proj_req = BulletOptimizationRequest(
+        target_job_title="Backend Engineer",
+        section_type="project",
+        target_keywords=["Kafka"],
+        evidence_context=[resume_context]
+    )
+    proj_res = engine.optimize_bullet(proj_req)
+    assert "Event Bus" in proj_res.target_project_name or "Project" in proj_res.target_project_name
+    assert "streaming order catalog" in proj_res.original_bullet_to_replace
+    assert "Google" not in proj_res.target_project_name
+    assert "payment gateway" not in proj_res.original_bullet_to_replace
+
+    # 2. Work history request must pick from Work History section
+    work_req = BulletOptimizationRequest(
+        target_job_title="Backend Engineer",
+        section_type="work_history",
+        target_keywords=["Kafka"],
+        evidence_context=[resume_context]
+    )
+    work_res = engine.optimize_bullet(work_req)
+    assert "Google" in work_res.target_project_name or "Experience" in work_res.target_project_name
+    assert "payment gateway" in work_res.original_bullet_to_replace
+    assert "Event Bus" not in work_res.target_project_name
+
 def test_bulletskill_verified_claim():
     engine = AIEngine(api_key=None)
     req = BulletOptimizationRequest(
