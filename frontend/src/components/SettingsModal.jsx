@@ -1,34 +1,56 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Key, Globe, Cpu, Check, AlertCircle, Loader2, Sparkles } from 'lucide-react';
+import { Settings as SettingsIcon, Key, Globe, Cpu, Check, AlertCircle, Loader2, Sparkles, ExternalLink } from 'lucide-react';
 import { getSettings, updateSettings, testAISettings } from '../api/client';
 
 const PRESETS = [
   {
-    name: 'Nemotron 3 / 4 (NVIDIA NIM)',
-    url: 'https://integrate.api.nvidia.com/v1',
-    model: 'nvidia/nemotron-4-340b-instruct',
+    name: '⭐ Google Gemini (AI Studio / Free)',
+    url: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+    model: 'gemini-2.0-flash',
+    keyHelp: 'Get free key from aistudio.google.com with your Google account',
+    link: 'https://aistudio.google.com/app/apikey',
   },
   {
-    name: 'MiniMax M3 / M01',
-    url: 'https://api.minimax.chat/v1',
-    model: 'minimax/minimax-01',
+    name: 'OpenAI (GPT-4o Mini / GPT-4o)',
+    url: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+    keyHelp: 'Get key from platform.openai.com',
+    link: 'https://platform.openai.com/api-keys',
+  },
+  {
+    name: 'Groq (Free Llama 3.3 70B)',
+    url: 'https://api.groq.com/openai/v1',
+    model: 'llama-3.3-70b-versatile',
+    keyHelp: 'Free high-speed key from console.groq.com',
+    link: 'https://console.groq.com/keys',
+  },
+  {
+    name: 'OpenRouter (Claude 3.5 & GPT-4o)',
+    url: 'https://openrouter.ai/api/v1',
+    model: 'anthropic/claude-3.5-sonnet',
+    keyHelp: 'Get key from openrouter.ai',
+    link: 'https://openrouter.ai/keys',
+  },
+  {
+    name: 'NVIDIA NIM (Nemotron)',
+    url: 'https://integrate.api.nvidia.com/v1',
+    model: 'nvidia/nemotron-4-340b-instruct',
+    keyHelp: 'Free credits at build.nvidia.com',
+    link: 'https://build.nvidia.com',
   },
   {
     name: 'Local Ollama',
     url: 'http://localhost:11434/v1',
-    model: 'nemotron-mini',
-  },
-  {
-    name: 'OpenRouter (Universal)',
-    url: 'https://openrouter.ai/api/v1',
-    model: 'nvidia/nemotron-4-340b-instruct',
+    model: 'llama3.2',
+    keyHelp: 'Runs locally on your machine via Ollama',
+    link: 'https://ollama.com',
   },
 ];
 
 export default function SettingsModal({ isOpen, onClose }) {
-  const [baseUrl, setBaseUrl] = useState('https://integrate.api.nvidia.com/v1');
+  const [baseUrl, setBaseUrl] = useState('https://generativelanguage.googleapis.com/v1beta/openai/');
   const [apiKey, setApiKey] = useState('');
-  const [modelName, setModelName] = useState('nvidia/nemotron-4-340b-instruct');
+  const [modelName, setModelName] = useState('gemini-2.0-flash');
   const [defaultFollowUpDays, setDefaultFollowUpDays] = useState(7);
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -45,9 +67,9 @@ export default function SettingsModal({ isOpen, onClose }) {
   const loadCurrentSettings = async () => {
     try {
       const data = await getSettings();
-      setBaseUrl(data.api_base_url || 'https://integrate.api.nvidia.com/v1');
-      setApiKey(data.api_key || '');
-      setModelName(data.model_name || 'nvidia/nemotron-4-340b-instruct');
+      if (data.api_base_url) setBaseUrl(data.api_base_url);
+      if (data.api_key) setApiKey(data.api_key);
+      if (data.model_name) setModelName(data.model_name);
       setDefaultFollowUpDays(data.default_follow_up_days || 7);
       setTestResult(null);
     } catch (err) {
@@ -103,7 +125,7 @@ export default function SettingsModal({ isOpen, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-      <div className="glass-panel bg-slate-900 border border-slate-700 w-full max-w-xl my-8 p-6 rounded-2xl space-y-5 animate-fade-in shadow-2xl">
+      <div className="glass-panel bg-slate-900 border border-slate-700 w-full max-w-xl my-8 p-6 rounded-2xl space-y-5 animate-fade-in shadow-2xl max-h-[92vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
@@ -111,9 +133,9 @@ export default function SettingsModal({ isOpen, onClose }) {
               <SettingsIcon size={20} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">AI Model & App Settings</h3>
-              <p className="text-xs text-slate-400">
-                Configure your OpenAI-compatible endpoint (MiniMax, Nemotron, Ollama, etc.)
+              <h3 className="text-lg font-bold text-white">AI Model Provider Settings</h3>
+              <p className="text-xs text-slate-300">
+                Connect Google Gemini, OpenAI, Groq, or OpenRouter for highest quality parsing
               </p>
             </div>
           </div>
@@ -128,18 +150,27 @@ export default function SettingsModal({ isOpen, onClose }) {
         {/* Presets */}
         <div>
           <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-            Quick Provider Presets
+            Recommended AI Providers (Click to Select)
           </label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {PRESETS.map((preset, idx) => (
               <button
                 key={idx}
                 type="button"
                 onClick={() => applyPreset(preset)}
-                className="text-left p-2 rounded-lg bg-slate-950/60 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-xs text-slate-300 transition-colors"
+                className={`text-left p-2.5 rounded-xl border transition-all text-xs ${
+                  baseUrl === preset.url && modelName === preset.model
+                    ? 'bg-indigo-950/60 border-indigo-500/80 shadow-md shadow-indigo-950/30'
+                    : 'bg-slate-950/50 hover:bg-slate-800/80 border-slate-800 hover:border-slate-700'
+                }`}
               >
-                <div className="font-semibold text-indigo-300 text-[11px]">{preset.name}</div>
-                <div className="text-[10px] text-slate-500 truncate">{preset.model}</div>
+                <div className="font-bold text-slate-100 flex items-center justify-between">
+                  <span>{preset.name}</span>
+                  {baseUrl === preset.url && modelName === preset.model && (
+                    <span className="text-[10px] text-indigo-400 font-bold uppercase">Active</span>
+                  )}
+                </div>
+                <div className="text-[11px] font-mono text-slate-400 truncate mt-0.5">{preset.model}</div>
               </button>
             ))}
           </div>
@@ -149,7 +180,7 @@ export default function SettingsModal({ isOpen, onClose }) {
         <form onSubmit={handleSave} className="space-y-4">
           {/* Base URL */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+            <label className="block text-xs font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
               <Globe size={13} className="text-indigo-400" />
               <span>API Base URL</span>
             </label>
@@ -157,7 +188,7 @@ export default function SettingsModal({ isOpen, onClose }) {
               type="text"
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="e.g. https://integrate.api.nvidia.com/v1"
+              placeholder="e.g. https://generativelanguage.googleapis.com/v1beta/openai/"
               className="input-field font-mono text-xs"
               required
             />
@@ -165,7 +196,7 @@ export default function SettingsModal({ isOpen, onClose }) {
 
           {/* Model Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+            <label className="block text-xs font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
               <Cpu size={13} className="text-indigo-400" />
               <span>Model Name</span>
             </label>
@@ -173,7 +204,7 @@ export default function SettingsModal({ isOpen, onClose }) {
               type="text"
               value={modelName}
               onChange={(e) => setModelName(e.target.value)}
-              placeholder="e.g. nvidia/nemotron-4-340b-instruct or minimax/minimax-01"
+              placeholder="e.g. gemini-2.0-flash, gpt-4o-mini, or anthropic/claude-3.5-sonnet"
               className="input-field font-mono text-xs"
               required
             />
@@ -182,14 +213,14 @@ export default function SettingsModal({ isOpen, onClose }) {
           {/* API Key */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
                 <Key size={13} className="text-indigo-400" />
                 <span>API Key</span>
               </label>
               <button
                 type="button"
                 onClick={() => setShowKey(!showKey)}
-                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium"
+                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold"
               >
                 {showKey ? 'Hide' : 'Reveal'}
               </button>
@@ -198,12 +229,29 @@ export default function SettingsModal({ isOpen, onClose }) {
               type={showKey ? 'text' : 'password'}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="nvapi-... or your MiniMax / Ollama / OpenRouter key"
+              placeholder="Paste your API key here (AIzaSy... for Gemini, or sk-...)"
               className="input-field font-mono text-xs"
             />
-            <p className="text-[11px] text-slate-500 mt-1">
-              Leave blank to use the built-in offline NLP heuristic parser (no internet/API needed).
-            </p>
+
+            {/* Quick Link to Google AI Studio Key */}
+            <div className="mt-2.5 p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-xs text-indigo-200 space-y-1">
+              <div className="font-semibold text-white flex items-center gap-1.5">
+                <Sparkles size={14} className="text-cyan-400" />
+                <span>Need a high-quality key with a generous free tier?</span>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                You can get a free <strong>Google Gemini API Key</strong> in 30 seconds using your regular Google account (no credit card required):
+              </p>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 font-bold text-xs underline mt-1"
+              >
+                <span>Get Free Gemini API Key at Google AI Studio</span>
+                <ExternalLink size={12} />
+              </a>
+            </div>
           </div>
 
           {/* Test connection result */}
