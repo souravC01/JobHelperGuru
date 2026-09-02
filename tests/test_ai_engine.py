@@ -33,6 +33,28 @@ def test_bulletskill_optimization_fallback():
     assert res.requires_confirmation is True
     assert "Kafka" in res.warning
 
+def test_bulletskill_multiple_keywords_incorporation():
+    engine = AIEngine(api_key=None)
+    req = BulletOptimizationRequest(
+        target_job_title="Full Stack Engineer",
+        section_type="project",
+        target_keywords=["Kafka", "Redis", "Docker"],
+        existing_bullet="",
+        evidence_context=["Built React frontend and Node.js backend"]
+    )
+    res = engine.optimize_bullet(req)
+    assert "Kafka" in res.target_keyword
+    assert "Redis" in res.target_keyword
+    assert "Docker" in res.target_keyword
+    assert len(res.alternatives) == 3
+    for alt in res.alternatives:
+        assert "Kafka" in alt.bullet
+        assert "Redis" in alt.bullet
+        assert "Docker" in alt.bullet
+        assert alt.what != ""
+        assert alt.how != ""
+        assert alt.result_or_reason != ""
+
 def test_bulletskill_verified_claim():
     engine = AIEngine(api_key=None)
     req = BulletOptimizationRequest(

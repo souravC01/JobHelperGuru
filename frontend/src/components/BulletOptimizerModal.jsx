@@ -11,6 +11,8 @@ import {
   Loader2,
   Briefcase,
   FolderGit2,
+  X,
+  Plus,
 } from 'lucide-react';
 import { optimizeBullet } from '../api/client';
 
@@ -18,10 +20,13 @@ export default function BulletOptimizerModal({
   isOpen,
   onClose,
   initialKeyword = '',
+  initialKeywords = [],
+  initialSectionType = 'work_history',
   targetJobTitle = 'Software Engineer',
   selectedResume = null,
 }) {
-  const [keyword, setKeyword] = useState(initialKeyword);
+  const [keywords, setKeywords] = useState([]);
+  const [newSkillInput, setNewSkillInput] = useState('');
   const [sectionType, setSectionType] = useState('work_history'); // 'work_history' or 'project'
   const [existingBullet, setExistingBullet] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,17 +36,42 @@ export default function BulletOptimizerModal({
   const [userConfirmed, setUserConfirmed] = useState(false);
 
   useEffect(() => {
-    if (initialKeyword) {
-      setKeyword(initialKeyword);
+    let kwList = [];
+    if (initialKeywords && initialKeywords.length > 0) {
+      kwList = [...initialKeywords];
+    } else if (initialKeyword) {
+      kwList = [initialKeyword];
     }
-  }, [initialKeyword]);
+    setKeywords(kwList);
+    setSectionType(initialSectionType || 'work_history');
+    setResult(null);
+  }, [initialKeyword, initialKeywords, initialSectionType, isOpen]);
+
+  useEffect(() => {
+    if (isOpen && keywords.length > 0 && !result && !loading) {
+      handleGenerate();
+    }
+  }, [isOpen, keywords]);
 
   if (!isOpen) return null;
 
+  const handleRemoveSkill = (skillToRemove) => {
+    const updated = keywords.filter((k) => k !== skillToRemove);
+    setKeywords(updated);
+  };
+
+  const handleAddSkill = (e) => {
+    e.preventDefault();
+    if (newSkillInput.trim() && !keywords.includes(newSkillInput.trim())) {
+      setKeywords([...keywords, newSkillInput.trim()]);
+      setNewSkillInput('');
+    }
+  };
+
   const handleGenerate = async (e) => {
     e?.preventDefault();
-    if (!keyword.trim()) {
-      setError('Please provide a target keyword or skill.');
+    if (keywords.length === 0) {
+      setError('Please add at least one target skill to incorporate.');
       return;
     }
     setLoading(true);
@@ -50,19 +80,21 @@ export default function BulletOptimizerModal({
 
     try {
       const evidenceContext = selectedResume
-        ? [selectedResume.content.slice(0, 1500)]
+        ? [selectedResume.content.slice(0, 2000)]
         : [];
 
       const res = await optimizeBullet({
         target_job_title: targetJobTitle || 'Software Engineer',
         section_type: sectionType,
-        target_keyword: keyword.trim(),
-        existing_bullet: existingBullet.trim() || `Contributed to backend development and feature delivery.`,
+        target_keyword: keywords.join(', '),
+        target_keywords: keywords,
+        existing_bullet: existingBullet.trim() || '',
         evidence_context: evidenceContext,
       });
+
       setResult(res);
     } catch (err) {
-      setError(err.message || 'Failed to optimize bullet.');
+      setError(err.message || 'Failed to generate optimized bullet points.');
     } finally {
       setLoading(false);
     }
@@ -77,22 +109,18 @@ export default function BulletOptimizerModal({
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
       <div className="glass-panel bg-slate-900 border border-slate-700 w-full max-w-3xl my-8 p-6 rounded-2xl space-y-5 animate-fade-in shadow-2xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
+        {/* Modal Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-indigo-500/20 text-indigo-400">
               <Wand2 size={20} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <span>Resume Bullet Optimizer</span>
-                <span className="text-xs px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 font-mono font-normal border border-indigo-800/60">
-                  BulletSkill 2.0
-                </span>
+              <h3 className="text-lg font-bold text-white">
+                BulletSkill 2.0 Resume Optimizer
               </h3>
               <p className="text-xs text-slate-400">
-                Rewrites bullets to incorporate missing skills using the{' '}
-                <strong className="text-slate-200">What + How + Result/Reason</strong> framework.
+                Incorporate target skills into <strong>{sectionType === 'project' ? 'Project' : 'Work History'}</strong> bullet points
               </p>
             </div>
           </div>
@@ -104,199 +132,220 @@ export default function BulletOptimizerModal({
           </button>
         </div>
 
-        {/* Input Form */}
-        <form onSubmit={handleGenerate} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Target Missing Keyword
-              </label>
+        {/* Target Skills Pill Bank */}
+        <div className="space-y-2 glass-card p-4">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-slate-300">
+              Target Skills to Incorporate ({keywords.length})
+            </label>
+            <span className="text-[11px] text-slate-400">
+              Targeting: <strong>{targetJobTitle}</strong>
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {keywords.map((kw, i) => (
+              <span
+                key={i}
+                className="badge-pill bg-indigo-600/20 border border-indigo-500/40 text-indigo-200 text-xs py-1 px-2.5 flex items-center gap-1.5"
+              >
+                <span className="font-semibold">{kw}</span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveSkill(kw)}
+                  className="hover:text-rose-400 text-slate-400"
+                  title="Remove skill"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+
+            {/* Add skill input */}
+            <div className="flex items-center gap-1">
               <input
                 type="text"
-                placeholder="e.g. Kafka, Docker, Kubernetes, GraphQL"
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                className="input-field font-medium text-indigo-300"
-                required
+                value={newSkillInput}
+                onChange={(e) => setNewSkillInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddSkill(e)}
+                placeholder="+ Add skill..."
+                className="bg-slate-950/70 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-500 outline-none w-28 focus:w-36 transition-all"
               />
+              {newSkillInput && (
+                <button
+                  type="button"
+                  onClick={handleAddSkill}
+                  className="p-1 rounded bg-indigo-600 text-white text-xs hover:bg-indigo-500"
+                >
+                  <Plus size={12} />
+                </button>
+              )}
             </div>
+          </div>
+        </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Resume Section Type
-              </label>
-              <div className="grid grid-cols-2 gap-2 bg-slate-950/70 p-1 rounded-xl border border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setSectionType('work_history')}
-                  className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium transition-all ${
-                    sectionType === 'work_history'
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Briefcase size={13} />
-                  <span>Work History</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSectionType('project')}
-                  className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium transition-all ${
-                    sectionType === 'project'
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <FolderGit2 size={13} />
-                  <span>Project</span>
-                </button>
-              </div>
+        {/* Controls: Section Type + Optional Existing Bullet */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              Resume Section
+            </label>
+            <div className="grid grid-cols-2 gap-2 bg-slate-950/60 p-1 rounded-xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setSectionType('project');
+                  setResult(null);
+                }}
+                className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                  sectionType === 'project'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <FolderGit2 size={13} />
+                <span>Project Bullet</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSectionType('work_history');
+                  setResult(null);
+                }}
+                className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                  sectionType === 'work_history'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Briefcase size={13} />
+                <span>Work History</span>
+              </button>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Existing Bullet Point to Revise (or brief context)
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              Existing Bullet to Tweak (Optional)
             </label>
-            <textarea
-              placeholder="e.g. Developed backend services and managed database queries for order workflows."
-              rows={2}
+            <input
+              type="text"
+              placeholder="Leave blank to generate a fresh high-impact bullet..."
               value={existingBullet}
               onChange={(e) => setExistingBullet(e.target.value)}
-              className="input-field text-xs font-mono"
+              className="input-field text-xs py-2"
             />
           </div>
+        </div>
 
-          {error && (
-            <div className="p-3 bg-rose-500/20 border border-rose-500/40 rounded-lg text-rose-300 text-xs flex items-center gap-2">
-              <AlertTriangle size={14} />
-              <span>{error}</span>
-            </div>
-          )}
+        {/* Generate / Regenerate Button */}
+        <div className="flex justify-end">
+          <button
+            onClick={handleGenerate}
+            disabled={loading || keywords.length === 0}
+            className="btn-primary text-xs"
+          >
+            {loading ? (
+              <>
+                <Loader2 size={13} className="animate-spin" />
+                <span>Generating BulletSkill Candidates...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles size={13} />
+                <span>Generate Bullet Candidates ({keywords.length} Skills)</span>
+              </>
+            )}
+          </button>
+        </div>
 
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary text-xs"
-            >
-              {loading ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" />
-                  <span>Optimizing with BulletSkill...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles size={14} />
-                  <span>Generate Tailored Alternatives</span>
-                </>
-              )}
-            </button>
+        {error && (
+          <div className="p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+            <AlertTriangle size={15} />
+            <span>{error}</span>
           </div>
-        </form>
+        )}
 
-        {/* Results Area */}
+        {/* Results Container */}
         {result && (
-          <div className="space-y-5 pt-4 border-t border-slate-800 animate-fade-in">
-            {/* Claim Status Banner */}
-            <div
-              className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                result.claim_status === 'verified' || userConfirmed
-                  ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
-                  : 'bg-amber-950/40 border-amber-500/40 text-amber-300'
-              }`}
-            >
-              <div className="flex items-start gap-2.5">
-                {result.claim_status === 'verified' || userConfirmed ? (
-                  <ShieldCheck size={20} className="text-emerald-400 mt-0.5 shrink-0" />
-                ) : (
-                  <AlertTriangle size={20} className="text-amber-400 mt-0.5 shrink-0" />
-                )}
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-xs uppercase tracking-wide">
-                      {userConfirmed
-                        ? 'User Confirmed (Verified for Export)'
-                        : result.claim_status === 'verified'
-                        ? 'Verified Claim'
-                        : 'Unverified Skill Suggestion'}
-                    </span>
+          <div className="space-y-4 pt-2 border-t border-slate-800">
+            {/* Verification Gate / Warning */}
+            {result.requires_confirmation && (
+              <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 space-y-2">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <h5 className="font-bold text-xs uppercase tracking-wide text-amber-300">
+                      Unverified Skill Gate (Resume Guide 2.0 Compliance)
+                    </h5>
+                    <p className="text-xs text-amber-200/90 mt-0.5">
+                      {result.warning ||
+                        `Confirm you have hands-on experience with ${keywords.join(', ')} before exporting to your resume.`}
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
-                    {userConfirmed
-                      ? `You confirmed using ${result.target_keyword}. This bullet is now ready for resume export.`
-                      : result.warning ||
-                        `Target skill "${result.target_keyword}" matches verified evidence from your resume context.`}
-                  </p>
                 </div>
+
+                <label className="flex items-center gap-2 pt-1 text-xs cursor-pointer select-none text-slate-100 font-medium">
+                  <input
+                    type="checkbox"
+                    checked={userConfirmed}
+                    onChange={(e) => setUserConfirmed(e.target.checked)}
+                    className="rounded border-slate-700 text-indigo-600 focus:ring-0 w-4 h-4 bg-slate-900"
+                  />
+                  <span>
+                    Yes, I have worked with these technologies and verify this claim is true.
+                  </span>
+                </label>
               </div>
+            )}
 
-              {/* Confirmation Button for Unverified Skills */}
-              {result.claim_status !== 'verified' && !userConfirmed && (
-                <button
-                  type="button"
-                  onClick={() => setUserConfirmed(true)}
-                  className="btn-secondary text-xs border-amber-500/50 hover:bg-amber-500/20 text-amber-200 whitespace-nowrap"
-                >
-                  <CheckCircle2 size={14} className="text-emerald-400" />
-                  <span>Yes, I used this!</span>
-                </button>
-              )}
-            </div>
-
-            {/* 3 Alternatives */}
-            <div className="space-y-4">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Bullet Alternatives (3 Variants)
-              </h4>
-
+            {/* Alternatives Grid */}
+            <div className="space-y-3">
               {result.alternatives.map((alt, idx) => (
                 <div
                   key={idx}
-                  className="glass-card p-4 space-y-3 border-slate-700/80 hover:border-indigo-500/50 transition-all"
+                  className="glass-card p-4 space-y-2.5 border-slate-800 hover:border-slate-700 transition-all text-xs"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
-                      <Sparkles size={13} />
-                      <span>{alt.variant_name}</span>
+                    <span className="font-bold text-indigo-400 tracking-wide uppercase text-[11px]">
+                      {alt.variant_name}
                     </span>
-
                     <button
                       onClick={() => handleCopy(alt.bullet, idx)}
-                      className="text-xs flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition-colors"
                     >
                       {copiedIndex === idx ? (
                         <>
                           <Check size={12} className="text-emerald-400" />
-                          <span className="text-emerald-400 font-medium">Copied!</span>
+                          <span className="text-emerald-400 font-semibold">Copied!</span>
                         </>
                       ) : (
                         <>
                           <Copy size={12} />
-                          <span>Copy</span>
+                          <span>Copy Bullet</span>
                         </>
                       )}
                     </button>
                   </div>
 
-                  {/* The Bullet text */}
-                  <p className="text-xs font-mono text-slate-100 bg-slate-950/70 p-3 rounded-lg border border-slate-800 leading-relaxed">
+                  {/* Bullet text */}
+                  <p className="font-mono text-xs text-slate-100 bg-slate-950/70 p-3 rounded-lg border border-slate-800/90 leading-relaxed">
                     • {alt.bullet}
                   </p>
 
-                  {/* Breakdown Grid: What + How + Result/Reason */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] pt-1">
-                    <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
-                      <span className="font-semibold text-rose-400 block mb-0.5">WHAT / Keyword:</span>
-                      <span className="text-slate-300">{alt.what}</span>
+                  {/* What / How / Result Breakdown */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-1 text-[11px] text-slate-400">
+                    <div className="bg-slate-900/50 p-2 rounded border border-slate-800/60">
+                      <strong className="text-indigo-300 block mb-0.5">WHAT (Keyword):</strong>
+                      <span className="text-slate-200">{alt.what}</span>
                     </div>
-                    <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
-                      <span className="font-semibold text-sky-400 block mb-0.5">HOW it was used:</span>
-                      <span className="text-slate-300">{alt.how}</span>
+                    <div className="bg-slate-900/50 p-2 rounded border border-slate-800/60">
+                      <strong className="text-indigo-300 block mb-0.5">HOW (Action):</strong>
+                      <span className="text-slate-200">{alt.how}</span>
                     </div>
-                    <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
-                      <span className="font-semibold text-emerald-400 block mb-0.5">RESULT / Reason:</span>
-                      <span className="text-slate-300">{alt.result_or_reason}</span>
+                    <div className="bg-slate-900/50 p-2 rounded border border-slate-800/60">
+                      <strong className="text-indigo-300 block mb-0.5">RESULT / REASON:</strong>
+                      <span className="text-slate-200">{alt.result_or_reason}</span>
                     </div>
                   </div>
                 </div>
@@ -304,6 +353,12 @@ export default function BulletOptimizerModal({
             </div>
           </div>
         )}
+
+        <div className="flex justify-end pt-3 border-t border-slate-800">
+          <button onClick={onClose} className="btn-secondary text-xs">
+            Done
+          </button>
+        </div>
       </div>
     </div>
   );

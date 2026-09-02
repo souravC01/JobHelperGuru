@@ -152,14 +152,16 @@ class BulletAlternative(BaseModel):
 class BulletOptimizationRequest(BaseModel):
     target_job_title: str
     section_type: str = "work_history"  # "work_history" or "project"
-    target_keyword: str
-    existing_bullet: str
+    target_keyword: Optional[str] = ""
+    target_keywords: List[str] = Field(default_factory=list)
+    existing_bullet: Optional[str] = ""
     evidence_context: List[str] = Field(default_factory=list)
 
 
 class BulletOptimizationResponse(BaseModel):
     status: str = "rewritten"  # rewritten, suggested, no_change_needed
-    target_keyword: str
+    target_keyword: str = ""
+    target_keywords: List[str] = Field(default_factory=list)
     claim_status: ClaimStatus
     selected_bullet_index: int = 0
     alternatives: List[BulletAlternative] = Field(default_factory=list)

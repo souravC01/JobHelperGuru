@@ -1,5 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Crown, CheckCircle, AlertTriangle, Wand2, ChevronDown, ChevronUp, Sparkles, Loader2 } from 'lucide-react';
+import {
+  Crown,
+  CheckCircle,
+  AlertTriangle,
+  Wand2,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  Loader2,
+  Check,
+  FolderGit2,
+  Briefcase,
+  Plus,
+} from 'lucide-react';
 import { matchResumes } from '../api/client';
 
 export default function ResumeFitRanker({
@@ -11,6 +24,8 @@ export default function ResumeFitRanker({
   const [rankedResumes, setRankedResumes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
+  // Track selected missing skills per resume: { [resumeId]: string[] }
+  const [selectedSkillsMap, setSelectedSkillsMap] = useState({});
 
   const runRanking = async () => {
     if (!currentJob || resumes.length === 0) return;
@@ -51,6 +66,39 @@ export default function ResumeFitRanker({
     );
   }
 
+  const toggleSkillSelection = (resumeId, skill) => {
+    setSelectedSkillsMap((prev) => {
+      const currentList = prev[resumeId] || [];
+      if (currentList.includes(skill)) {
+        return { ...prev, [resumeId]: currentList.filter((s) => s !== skill) };
+      } else {
+        return { ...prev, [resumeId]: [...currentList, skill] };
+      }
+    });
+  };
+
+  const selectAllSkills = (resumeId, allSkills) => {
+    setSelectedSkillsMap((prev) => ({
+      ...prev,
+      [resumeId]: [...allSkills],
+    }));
+  };
+
+  const clearSkills = (resumeId) => {
+    setSelectedSkillsMap((prev) => ({
+      ...prev,
+      [resumeId]: [],
+    }));
+  };
+
+  const handleIncorporate = (resume, sectionType) => {
+    const selected = selectedSkillsMap[resume.resume_id] || [];
+    if (selected.length === 0) return;
+    if (onSelectKeywordForOptimization) {
+      onSelectKeywordForOptimization(selected, resume, sectionType);
+    }
+  };
+
   return (
     <div className="glass-panel p-6 space-y-5 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -80,15 +128,16 @@ export default function ResumeFitRanker({
           <span>Ranking resumes and calculating keyword matches...</span>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {rankedResumes.map((rank, idx) => {
             const isBest = rank.is_best_fit;
             const isExpanded = expandedId === rank.resume_id;
+            const selectedSkills = selectedSkillsMap[rank.resume_id] || [];
 
             return (
               <div
                 key={rank.resume_id}
-                className={`glass-card p-4 transition-all ${
+                className={`glass-card p-5 transition-all ${
                   isBest
                     ? 'border-indigo-500/60 bg-indigo-950/20 shadow-lg shadow-indigo-950/40'
                     : 'border-slate-800'
@@ -178,31 +227,98 @@ export default function ResumeFitRanker({
                       )}
                     </div>
 
-                    {/* Missing Keywords */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
+                    {/* Missing Keywords Multi-Select */}
+                    <div className="space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <h5 className="font-semibold text-rose-400 flex items-center gap-1.5">
                           <AlertTriangle size={14} />
-                          <span>Missing Skills to Incorporate ({rank.missing_keywords.length})</span>
+                          <span>Missing Skills ({rank.missing_keywords.length})</span>
+                          <span className="text-[11px] text-slate-400 font-normal">
+                            — Click skills to select for bullet generation
+                          </span>
                         </h5>
-                        <span className="text-[10px] text-slate-500">Click a keyword to generate revised bullets</span>
+
+                        {rank.missing_keywords.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => selectAllSkills(rank.resume_id, rank.missing_keywords)}
+                              className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium"
+                            >
+                              Select All
+                            </button>
+                            <span className="text-slate-600">|</span>
+                            <button
+                              onClick={() => clearSkills(rank.resume_id)}
+                              className="text-[11px] text-slate-400 hover:text-slate-200"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {rank.missing_keywords.length === 0 ? (
                         <span className="text-emerald-400 italic">All key target qualifications covered!</span>
                       ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {rank.missing_keywords.map((kw, i) => (
+                        <div className="flex flex-wrap gap-2">
+                          {rank.missing_keywords.map((kw, i) => {
+                            const isSelected = selectedSkills.includes(kw);
+
+                            return (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => toggleSkillSelection(rank.resume_id, kw)}
+                                className={`badge-pill text-xs py-1 px-3 flex items-center gap-1.5 transition-all cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-indigo-600 text-white border-indigo-400 shadow-md shadow-indigo-600/30 font-bold scale-[1.03]'
+                                    : 'bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 hover:border-rose-400'
+                                }`}
+                              >
+                                {isSelected ? (
+                                  <Check size={13} className="text-white stroke-[3]" />
+                                ) : (
+                                  <Plus size={12} className="text-rose-400" />
+                                )}
+                                <span>{kw}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Action Bar when 1 or more skills selected */}
+                      {selectedSkills.length > 0 && (
+                        <div className="p-3.5 rounded-xl bg-indigo-950/50 border border-indigo-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in shadow-lg">
+                          <div className="flex items-center gap-2">
+                            <Sparkles size={16} className="text-cyan-400 shrink-0" />
+                            <div>
+                              <span className="text-xs font-bold text-white">
+                                {selectedSkills.length} Skill{selectedSkills.length > 1 ? 's' : ''} Selected:{' '}
+                              </span>
+                              <span className="text-xs font-mono text-cyan-300">
+                                {selectedSkills.join(', ')}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-wrap">
                             <button
-                              key={i}
-                              onClick={() => onSelectKeywordForOptimization && onSelectKeywordForOptimization(kw, rank)}
-                              className="badge-pill bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 hover:border-rose-400 text-[11px] py-0.5 flex items-center gap-1 transition-all"
-                              title={`Click to optimize bullet point for "${kw}"`}
+                              onClick={() => handleIncorporate(rank, 'project')}
+                              className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
                             >
-                              <span>{kw}</span>
-                              <Wand2 size={11} className="text-indigo-400" />
+                              <FolderGit2 size={13} />
+                              <span>Incorporate into Project</span>
                             </button>
-                          ))}
+
+                            <button
+                              onClick={() => handleIncorporate(rank, 'work_history')}
+                              className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 bg-slate-900 border-indigo-400/40 text-indigo-200 hover:text-white"
+                            >
+                              <Briefcase size={13} />
+                              <span>Incorporate into Work History</span>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>

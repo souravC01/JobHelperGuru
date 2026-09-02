@@ -65,7 +65,7 @@ export async function matchResumes({ job, resumes }) {
   return res.json();
 }
 
-export async function optimizeBullet({ target_job_title, section_type, target_keyword, existing_bullet, evidence_context }) {
+export async function optimizeBullet({ target_job_title, section_type, target_keyword, target_keywords, existing_bullet, evidence_context }) {
   const res = await fetch(`${API_BASE}/resumes/optimize-bullet`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -73,6 +73,7 @@ export async function optimizeBullet({ target_job_title, section_type, target_ke
       target_job_title,
       section_type,
       target_keyword,
+      target_keywords,
       existing_bullet,
       evidence_context,
     }),

@@ -192,47 +192,65 @@ Return strict JSON:
         # Determine claim verification status from evidence context
         evidence_blob = " ".join(request.evidence_context).lower()
         existing_blob = request.existing_bullet.lower()
-        target_low = request.target_keyword.lower()
+        # 1. Collect keywords
+        keywords = [k.strip() for k in request.target_keywords if k and k.strip()]
+        if not keywords and request.target_keyword and request.target_keyword.strip():
+            keywords = [request.target_keyword.strip()]
+        if not keywords:
+            keywords = ["Key Technology"]
 
-        is_verified = bool(
-            re.search(rf"\b{re.escape(target_low)}\b", evidence_blob)
-            or re.search(rf"\b{re.escape(target_low)}\b", existing_blob)
-        )
+        primary_kw = ", ".join(keywords)
 
+        # Check evidence for verification
+        evidence_blob = " ".join(request.evidence_context).lower()
+        existing_blob = request.existing_bullet.lower() if request.existing_bullet else ""
+
+        unverified_kws = []
+        for kw in keywords:
+            if not (
+                re.search(rf"\b{re.escape(kw.lower())}\b", evidence_blob)
+                or re.search(rf"\b{re.escape(kw.lower())}\b", existing_blob)
+            ):
+                unverified_kws.append(kw)
+
+        is_verified = len(unverified_kws) == 0
         claim_status = ClaimStatus.VERIFIED if is_verified else ClaimStatus.UNVERIFIED_SKILL
         requires_confirmation = not is_verified
         warning = None
         assumption = None
 
         if not is_verified:
-            warning = f"Confirm that {request.target_keyword} was actually used before adding this bullet to your resume."
-            assumption = f"The candidate utilized {request.target_keyword} in this role or project."
+            missing_str = ", ".join(unverified_kws)
+            warning = f"Confirm that you actually utilized {missing_str} before adding this bullet to your resume."
+            assumption = f"The candidate utilized {missing_str} in this {request.section_type}."
 
         client = self._get_client()
         if client:
             try:
                 system_prompt = f"""
 You are the BulletSkill optimizer strictly following Resume Guide 2.0.
-Core Framework: WHAT/Keyword + HOW it was used + RESULT and/or REASON.
+Core Framework: WHAT/Keywords + HOW it was used + RESULT and/or REASON.
 Rules:
 - Write in past tense.
 - One sentence only, no more than 1 period per bullet.
 - Target ~3 lines maximum.
+- Section type is "{request.section_type}". If "project", frame as a technical engineering project highlighting how these technologies work together. If "work_history", frame as production employment achievements.
+- Incorporate ALL requested target keywords naturally: {primary_kw}
 - Do NOT fabricate fake numbers (use placeholders like [X%], [N users] if metric is suggested).
 - Return 2-3 alternatives of the SAME selected bullet:
-  * Candidate A: ATS-focused (natural inclusion of target keyword)
+  * Candidate A: ATS-focused (natural inclusion of target keywords)
   * Candidate B: Concise (short, tight What+How+Result)
-  * Candidate C: Technical/result-focused (emphasizing implementation depth)
+  * Candidate C: Technical/result-focused (emphasizing implementation depth and impact)
 Return strict JSON:
 {{
   "status": "rewritten",
-  "target_keyword": "{request.target_keyword}",
+  "target_keyword": "{primary_kw}",
   "claim_status": "{claim_status.value}",
   "alternatives": [
     {{
       "variant_name": "Candidate A (ATS-focused)",
       "bullet": "...",
-      "what": "{request.target_keyword}",
+      "what": "{primary_kw}",
       "how": "...",
       "result_or_reason": "...",
       "claim_status": "{claim_status.value}",
@@ -242,7 +260,7 @@ Return strict JSON:
     {{
       "variant_name": "Candidate B (Concise)",
       "bullet": "...",
-      "what": "{request.target_keyword}",
+      "what": "{primary_kw}",
       "how": "...",
       "result_or_reason": "...",
       "claim_status": "{claim_status.value}",
@@ -252,7 +270,7 @@ Return strict JSON:
     {{
       "variant_name": "Candidate C (Technical/result-focused)",
       "bullet": "...",
-      "what": "{request.target_keyword}",
+      "what": "{primary_kw}",
       "how": "...",
       "result_or_reason": "...",
       "claim_status": "{claim_status.value}",
@@ -272,8 +290,8 @@ Return strict JSON:
                 user_msg = f"""
 Target Job Title: {request.target_job_title}
 Section Type: {request.section_type}
-Target Keyword: {request.target_keyword}
-Existing Bullet: {request.existing_bullet}
+Target Keywords: {primary_kw}
+Existing Bullet (if modifying): {request.existing_bullet or 'None (creating new bullet point)'}
 Evidence Context: {json.dumps(request.evidence_context)}
 Claim Status: {claim_status.value}
 """
@@ -292,7 +310,8 @@ Claim Status: {claim_status.value}
                 data = json.loads(raw_content)
                 return BulletOptimizationResponse(
                     status="rewritten" if is_verified else "suggested",
-                    target_keyword=request.target_keyword,
+                    target_keyword=primary_kw,
+                    target_keywords=keywords,
                     claim_status=claim_status,
                     selected_bullet_index=0,
                     alternatives=[BulletAlternative(**alt) for alt in data.get("alternatives", [])],
@@ -304,45 +323,79 @@ Claim Status: {claim_status.value}
                 print(f"[AIEngine] LLM bullet optimization failed: {e}. Using offline BulletSkill engine.")
 
         # Offline template generation following Bulletskill.md
-        kw = request.target_keyword
-        orig = request.existing_bullet.rstrip(".")
+        kw = primary_kw
+        if request.section_type == "project":
+            alt_a = BulletAlternative(
+                variant_name="Candidate A (ATS-focused)",
+                bullet=f"Developed an engineering project integrating {kw} with modular service architecture to streamline system workflows and elevate data processing throughput.",
+                what=kw,
+                how=f"Developed an engineering project integrating {kw} with modular service architecture",
+                result_or_reason="Streamline system workflows and elevate data processing throughput",
+                claim_status=claim_status,
+                requires_confirmation=requires_confirmation,
+                assumption=assumption,
+            )
 
-        alt_a = BulletAlternative(
-            variant_name="Candidate A (ATS-focused)",
-            bullet=f"Integrated {kw} into core application architecture using modular design principles to streamline data workflows and enhance system reliability.",
-            what=kw,
-            how="Integrated into core application architecture using modular design principles",
-            result_or_reason="Streamline data workflows and enhance system reliability",
-            claim_status=claim_status,
-            requires_confirmation=requires_confirmation,
-            assumption=assumption,
-        )
+            alt_b = BulletAlternative(
+                variant_name="Candidate B (Concise)",
+                bullet=f"Built a technical application utilizing {kw} to automate core operations, eliminating latency and reducing deployment turnaround.",
+                what=kw,
+                how=f"Built a technical application utilizing {kw} to automate operations",
+                result_or_reason="Eliminating latency and reducing turnaround",
+                claim_status=claim_status,
+                requires_confirmation=requires_confirmation,
+                assumption=assumption,
+            )
 
-        alt_b = BulletAlternative(
-            variant_name="Candidate B (Concise)",
-            bullet=f"Utilized {kw} to execute high-volume processing tasks, cutting processing lag and boosting throughput.",
-            what=kw,
-            how=f"Utilized {kw} to execute processing tasks",
-            result_or_reason="Cutting processing lag and boosting throughput",
-            claim_status=claim_status,
-            requires_confirmation=requires_confirmation,
-            assumption=assumption,
-        )
+            alt_c = BulletAlternative(
+                variant_name="Candidate C (Technical/result-focused)",
+                bullet=f"Architected an end-to-end service pipeline powered by {kw}, reducing execution latency by [X%] and achieving 99.9% pipeline reliability.",
+                what=kw,
+                how=f"Architected an end-to-end service pipeline powered by {kw}",
+                result_or_reason="Reducing execution latency by [X%] and achieving 99.9% reliability",
+                claim_status=ClaimStatus.UNVERIFIED_METRIC if is_verified else claim_status,
+                requires_confirmation=True,
+                assumption="Requires user to supply supported metric for [X%]",
+            )
+        else:
+            # work_history
+            alt_a = BulletAlternative(
+                variant_name="Candidate A (ATS-focused)",
+                bullet=f"Spearheaded technical adoption of {kw} across distributed microservices, standardizing development workflows and improving code maintainability.",
+                what=kw,
+                how=f"Spearheaded adoption of {kw} across distributed microservices",
+                result_or_reason="Standardizing workflows and improving code maintainability",
+                claim_status=claim_status,
+                requires_confirmation=requires_confirmation,
+                assumption=assumption,
+            )
 
-        alt_c = BulletAlternative(
-            variant_name="Candidate C (Technical/result-focused)",
-            bullet=f"Engineered and deployed {kw}-driven workflows with automated validation, reducing deployment validation time by [X%].",
-            what=kw,
-            how="Engineered and deployed automated validation workflows",
-            result_or_reason="Reducing deployment validation time by [X%]",
-            claim_status=ClaimStatus.UNVERIFIED_METRIC if is_verified else claim_status,
-            requires_confirmation=True,
-            assumption="Requires user to supply supported metric for [X%]",
-        )
+            alt_b = BulletAlternative(
+                variant_name="Candidate B (Concise)",
+                bullet=f"Employed {kw} within core production systems to optimize query execution and resolve processing bottlenecks.",
+                what=kw,
+                how=f"Employed {kw} within core production systems",
+                result_or_reason="Optimize query execution and resolve bottlenecks",
+                claim_status=claim_status,
+                requires_confirmation=requires_confirmation,
+                assumption=assumption,
+            )
+
+            alt_c = BulletAlternative(
+                variant_name="Candidate C (Technical/result-focused)",
+                bullet=f"Engineered and deployed scalable production services utilizing {kw}, driving an [X%] increase in system throughput across high-volume workloads.",
+                what=kw,
+                how=f"Engineered and deployed production services utilizing {kw}",
+                result_or_reason="Driving an [X%] increase in system throughput",
+                claim_status=ClaimStatus.UNVERIFIED_METRIC if is_verified else claim_status,
+                requires_confirmation=True,
+                assumption="Requires user to supply supported metric for [X%]",
+            )
 
         return BulletOptimizationResponse(
             status="rewritten" if is_verified else "suggested",
             target_keyword=kw,
+            target_keywords=keywords,
             claim_status=claim_status,
             selected_bullet_index=0,
             alternatives=[alt_a, alt_b, alt_c],

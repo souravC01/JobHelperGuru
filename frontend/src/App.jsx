@@ -28,7 +28,8 @@ export default function App() {
 
   // Modals state
   const [isOptimizerOpen, setIsOptimizerOpen] = useState(false);
-  const [optimizerKeyword, setOptimizerKeyword] = useState('');
+  const [optimizerKeywords, setOptimizerKeywords] = useState([]);
+  const [optimizerSectionType, setOptimizerSectionType] = useState('work_history');
   const [isCoverLetterOpen, setIsCoverLetterOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [selectedResumeForJob, setSelectedResumeForJob] = useState(null);
@@ -57,8 +58,17 @@ export default function App() {
     setCurrentJob(data);
   };
 
-  const handleOpenOptimizer = (keyword = '', targetResume = null) => {
-    setOptimizerKeyword(keyword || (currentJob?.required_skills?.[0] || 'Target Qualification'));
+  const handleOpenOptimizer = (keywordsArg = '', targetResume = null, sectionType = 'work_history') => {
+    let kwList = [];
+    if (Array.isArray(keywordsArg)) {
+      kwList = keywordsArg;
+    } else if (typeof keywordsArg === 'string' && keywordsArg.trim()) {
+      kwList = [keywordsArg.trim()];
+    } else {
+      kwList = [currentJob?.required_skills?.[0] || 'Target Qualification'];
+    }
+    setOptimizerKeywords(kwList);
+    setOptimizerSectionType(sectionType || 'work_history');
     if (targetResume) {
       setSelectedResumeForJob(targetResume);
     }
@@ -236,9 +246,9 @@ export default function App() {
               <ResumeFitRanker
                 currentJob={currentJob}
                 resumes={resumes}
-                onSelectKeywordForOptimization={(kw, rank) => {
+                onSelectKeywordForOptimization={(skills, rank, sectionType) => {
                   const matchingResume = resumes.find((r) => r.id === rank.resume_id);
-                  handleOpenOptimizer(kw, matchingResume);
+                  handleOpenOptimizer(skills, matchingResume, sectionType);
                 }}
                 onBestResumeSelected={(best) => {
                   const matchingResume = resumes.find((r) => r.id === best.resume_id);
@@ -264,7 +274,8 @@ export default function App() {
       <BulletOptimizerModal
         isOpen={isOptimizerOpen}
         onClose={() => setIsOptimizerOpen(false)}
-        initialKeyword={optimizerKeyword}
+        initialKeywords={optimizerKeywords}
+        initialSectionType={optimizerSectionType}
         targetJobTitle={currentJob?.title || 'Software Engineer'}
         selectedResume={selectedResumeForJob}
       />
