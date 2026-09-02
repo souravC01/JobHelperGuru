@@ -13,6 +13,7 @@ import {
   Mail,
   Loader2,
   AlertCircle,
+  GraduationCap,
 } from 'lucide-react';
 import SkillsMatrix from './SkillsMatrix';
 import ATSKeywordBank from './ATSKeywordBank';
@@ -230,6 +231,13 @@ export default function JobAnalyzer({
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-950/40 border border-purple-800/50 text-purple-300 font-medium">
                       <Briefcase size={13} />
                       <span>{currentJob.experience_level}</span>
+                    </div>
+                  )}
+
+                  {currentJob.is_new_grad_role && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-cyan-950/50 border border-cyan-700/60 text-cyan-300 font-medium">
+                      <GraduationCap size={14} className="text-cyan-400" />
+                      <span>🎓 New Grad Role (4mo prior / 6mo post rule)</span>
                     </div>
                   )}
 

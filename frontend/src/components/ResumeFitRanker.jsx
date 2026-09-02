@@ -12,6 +12,8 @@ import {
   FolderGit2,
   Briefcase,
   Plus,
+  GraduationCap,
+  CheckCircle2,
 } from 'lucide-react';
 import { matchResumes } from '../api/client';
 
@@ -31,16 +33,16 @@ export default function ResumeFitRanker({
     if (!currentJob || resumes.length === 0) return;
     setLoading(true);
     try {
-      const data = await matchResumes({ job: currentJob, resumes });
-      setRankedResumes(data);
-      if (data.length > 0) {
-        setExpandedId(data[0].resume_id);
+      const results = await matchResumes(currentJob);
+      setRankedResumes(results);
+      if (results.length > 0) {
+        setExpandedId(results[0].resume_id);
         if (onBestResumeSelected) {
-          onBestResumeSelected(data[0]);
+          onBestResumeSelected(results[0]);
         }
       }
     } catch (err) {
-      console.error('Failed to match resumes:', err);
+      console.error('Failed to rank resumes:', err);
     } finally {
       setLoading(false);
     }
@@ -50,30 +52,24 @@ export default function ResumeFitRanker({
     if (currentJob && resumes.length > 0) {
       runRanking();
     }
-  }, [currentJob, resumes]);
+  }, [currentJob, resumes.length]);
 
-  if (!currentJob) return null;
-
-  if (resumes.length === 0) {
-    return (
-      <div className="glass-panel p-6 text-center space-y-2">
-        <Sparkles className="mx-auto text-indigo-400" size={28} />
-        <h4 className="font-semibold text-slate-200 text-sm">Compare Multiple Resumes</h4>
-        <p className="text-xs text-slate-400 max-w-md mx-auto">
-          You haven't added any resumes yet. Add your resumes in the <strong>Resume Library</strong> tab to see which version fits this job best!
-        </p>
-      </div>
-    );
+  if (!currentJob || resumes.length === 0) {
+    return null;
   }
 
   const toggleSkillSelection = (resumeId, skill) => {
     setSelectedSkillsMap((prev) => {
       const currentList = prev[resumeId] || [];
-      if (currentList.includes(skill)) {
-        return { ...prev, [resumeId]: currentList.filter((s) => s !== skill) };
-      } else {
-        return { ...prev, [resumeId]: [...currentList, skill] };
-      }
+      const isSelected = currentList.includes(skill);
+      const updatedList = isSelected
+        ? currentList.filter((s) => s !== skill)
+        : [...currentList, skill];
+
+      return {
+        ...prev,
+        [resumeId]: updatedList,
+      };
     });
   };
 
@@ -133,6 +129,10 @@ export default function ResumeFitRanker({
             const isBest = rank.is_best_fit;
             const isExpanded = expandedId === rank.resume_id;
             const selectedSkills = selectedSkillsMap[rank.resume_id] || [];
+            const nonSkillTerms = ['new grad', 'new graduate', 'entry level', 'recent grad', 'degree'];
+            const displayMissing = (rank.missing_keywords || []).filter(
+              (k) => !nonSkillTerms.some((ns) => k.toLowerCase().includes(ns))
+            );
 
             return (
               <div
@@ -167,6 +167,24 @@ export default function ResumeFitRanker({
                           </span>
                         )}
                       </div>
+
+                      {/* New Grad Eligibility Status Badge */}
+                      {rank.is_new_grad_role && (
+                        <div className="flex items-center gap-1.5 mt-1">
+                          {rank.new_grad_eligible ? (
+                            <span className="badge-pill bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-[10px] py-0.5 px-2 flex items-center gap-1 font-medium">
+                              <GraduationCap size={12} className="text-emerald-400" />
+                              <span>🎓 New Grad Eligible ({rank.graduation_status})</span>
+                            </span>
+                          ) : (
+                            <span className="badge-pill bg-amber-950/60 border border-amber-500/40 text-amber-300 text-[10px] py-0.5 px-2 flex items-center gap-1 font-medium">
+                              <AlertTriangle size={12} className="text-amber-400" />
+                              <span>🎓 New Grad Check: {rank.graduation_status || 'Graduation date not detected'}</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
+
                       <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
                         {rank.fit_summary || 'Evaluated against required job skills'}
                       </p>
@@ -200,6 +218,28 @@ export default function ResumeFitRanker({
                 {/* Expanded Details */}
                 {isExpanded && (
                   <div className="mt-4 pt-4 border-t border-slate-800/80 space-y-4 animate-fade-in text-xs">
+                    {/* Education & Graduation Status Verification */}
+                    {rank.graduation_status && (
+                      <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <GraduationCap size={16} className={rank.new_grad_eligible ? "text-emerald-400" : "text-amber-400"} />
+                          <div>
+                            <span className="font-semibold text-slate-200">Education & Graduation: </span>
+                            <span className="text-slate-300">{rank.graduation_status}</span>
+                          </div>
+                        </div>
+                        {rank.is_new_grad_role && (
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shrink-0 self-start sm:self-auto ${
+                            rank.new_grad_eligible
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          }`}>
+                            {rank.new_grad_eligible ? '✓ Meets 4mo/6mo Rule' : 'Verify Timeline'}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     {/* Fit explanation */}
                     {rank.fit_summary && (
                       <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 text-slate-300 leading-relaxed">
@@ -212,7 +252,7 @@ export default function ResumeFitRanker({
                     <div>
                       <h5 className="font-semibold text-emerald-400 flex items-center gap-1.5 mb-2">
                         <CheckCircle size={14} />
-                        <span>Matched Keywords ({rank.matched_keywords.length})</span>
+                        <span>Matched Technical Skills ({rank.matched_keywords.length})</span>
                       </h5>
                       {rank.matched_keywords.length === 0 ? (
                         <span className="text-slate-500 italic">No direct matches found.</span>
@@ -232,16 +272,16 @@ export default function ResumeFitRanker({
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <h5 className="font-semibold text-rose-400 flex items-center gap-1.5">
                           <AlertTriangle size={14} />
-                          <span>Missing Skills ({rank.missing_keywords.length})</span>
+                          <span>Missing Skills ({displayMissing.length})</span>
                           <span className="text-[11px] text-slate-400 font-normal">
                             — Click skills to select for bullet generation
                           </span>
                         </h5>
 
-                        {rank.missing_keywords.length > 0 && (
+                        {displayMissing.length > 0 && (
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => selectAllSkills(rank.resume_id, rank.missing_keywords)}
+                              onClick={() => selectAllSkills(rank.resume_id, displayMissing)}
                               className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium"
                             >
                               Select All
@@ -257,11 +297,11 @@ export default function ResumeFitRanker({
                         )}
                       </div>
 
-                      {rank.missing_keywords.length === 0 ? (
+                      {displayMissing.length === 0 ? (
                         <span className="text-emerald-400 italic">All key target qualifications covered!</span>
                       ) : (
                         <div className="flex flex-wrap gap-2">
-                          {rank.missing_keywords.map((kw, i) => {
+                          {displayMissing.map((kw, i) => {
                             const isSelected = selectedSkills.includes(kw);
 
                             return (

@@ -104,6 +104,8 @@ class JobAnalysisResult(BaseModel):
     work_mode: str = "Unknown"  # Remote, Hybrid, Onsite, Unknown
     salary_range: str = "Not specified"
     experience_level: str = "Not specified"  # Entry, Mid, Senior, Lead
+    is_new_grad_role: bool = False
+    new_grad_criteria: Optional[str] = None
     required_skills: List[str] = Field(default_factory=list)
     preferred_skills: List[str] = Field(default_factory=list)
     tech_stack: List[str] = Field(default_factory=list)
@@ -119,6 +121,10 @@ class ResumeMatchResult(BaseModel):
     matched_keywords: List[str] = Field(default_factory=list)
     missing_keywords: List[str] = Field(default_factory=list)
     fit_summary: str = ""
+    is_new_grad_role: bool = False
+    new_grad_eligible: Optional[bool] = None
+    graduation_status: Optional[str] = None
+    graduation_date: Optional[str] = None
 
 
 class RankedResume(BaseModel):
@@ -129,6 +135,10 @@ class RankedResume(BaseModel):
     missing_keywords: List[str]
     fit_summary: str
     is_best_fit: bool = False
+    is_new_grad_role: bool = False
+    new_grad_eligible: Optional[bool] = None
+    graduation_status: Optional[str] = None
+    graduation_date: Optional[str] = None
 
 
 class ClaimStatus(str, Enum):

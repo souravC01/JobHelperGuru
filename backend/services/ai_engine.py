@@ -14,7 +14,7 @@ from backend.models import (
     BulletOptimizationResponse,
     OutreachResponse,
 )
-from backend.services.heuristic_parser import HeuristicParser
+from backend.services.heuristic_parser import HeuristicParser, filter_skills
 
 
 class AIEngine:
@@ -75,6 +75,17 @@ Do not wrap in markdown quotes. Return only raw JSON.
                 raw_content = re.sub(r"^```\s*", "", raw_content)
                 raw_content = re.sub(r"\s*```$", "", raw_content)
                 data = json.loads(raw_content)
+                # Sanitize skills from non-skills (e.g. New Grad, Degree, etc.)
+                data["required_skills"] = filter_skills(data.get("required_skills", []))
+                data["preferred_skills"] = filter_skills(data.get("preferred_skills", []))
+                data["tech_stack"] = filter_skills(data.get("tech_stack", []))
+                data["ats_keywords"] = filter_skills(data.get("ats_keywords", []))
+
+                is_ng = bool(re.search(r"\b(new grad|new graduate|recent grad|recent graduate|university graduate|class of (?:20\d{2})|fresh graduate)\b", text, re.I))
+                data["is_new_grad_role"] = data.get("is_new_grad_role", is_ng)
+                if data["is_new_grad_role"]:
+                    data["new_grad_criteria"] = "Graduating in the next 4 months or graduated within the last 6 months"
+
                 return JobAnalysisResult(**data)
             except Exception as e:
                 # Log and fallback to heuristic
@@ -98,6 +109,7 @@ You are an expert technical recruiter and ATS matcher.
 Given a target job and multiple candidate resumes, evaluate each resume's fit.
 Score each resume from 0 to 100 based on required skills and ATS keywords.
 Identify matched keywords, missing keywords, and provide a 2-sentence rationale for the fit score.
+CRITICAL: Do NOT list 'New Grad', 'Recent Graduate', 'Degree', or career stages as missing keywords. Focus only on technical tools, frameworks, and architecture.
 Return strict JSON:
 [
   {
@@ -137,15 +149,23 @@ Return strict JSON:
                 eval_map = {item["resume_id"]: item for item in ai_evals}
                 for r in resumes:
                     ev = eval_map.get(r.id, {})
+                    eligibility = self.heuristic.check_new_grad_eligibility(r.content)
+                    matched_kws = filter_skills(ev.get("matched_keywords", []))
+                    missing_kws = filter_skills(ev.get("missing_keywords", []))
+
                     ranked_list.append(
                         RankedResume(
                             resume_id=r.id,
                             resume_name=r.name,
                             match_score=ev.get("match_score", 50),
-                            matched_keywords=ev.get("matched_keywords", []),
-                            missing_keywords=ev.get("missing_keywords", []),
+                            matched_keywords=matched_kws,
+                            missing_keywords=missing_kws,
                             fit_summary=ev.get("fit_summary", ""),
                             is_best_fit=False,
+                            is_new_grad_role=job.is_new_grad_role,
+                            new_grad_eligible=eligibility["eligible"] if job.is_new_grad_role else None,
+                            graduation_status=eligibility["status"],
+                            graduation_date=eligibility["grad_date"],
                         )
                     )
             except Exception as e:
@@ -165,6 +185,10 @@ Return strict JSON:
                         missing_keywords=m.missing_keywords,
                         fit_summary=m.fit_summary,
                         is_best_fit=False,
+                        is_new_grad_role=m.is_new_grad_role,
+                        new_grad_eligible=m.new_grad_eligible,
+                        graduation_status=m.graduation_status,
+                        graduation_date=m.graduation_date,
                     )
                 )
 

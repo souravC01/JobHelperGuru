@@ -1,6 +1,7 @@
 import re
 from collections import Counter
-from typing import List, Set, Tuple
+from datetime import datetime
+from typing import List, Set, Tuple, Optional, Dict, Any
 
 from backend.models import JobAnalysisResult, ResumeMatchResult
 
@@ -35,10 +36,96 @@ SKILL_TAXONOMY = {
     "Code reviews", "Stakeholder management"
 }
 
+# Non-skill terms that must never be treated as technical or ATS skills
+NON_SKILL_TERMS = {
+    "new grad", "new graduate", "new grads", "new graduates",
+    "recent grad", "recent graduate", "recent grads", "recent graduates",
+    "entry level", "entry-level", "fresh grad", "fresh graduate",
+    "university graduate", "university grad", "college graduate", "college grad",
+    "undergraduate", "bachelor", "master", "phd", "degree", "diploma",
+    "authorization", "work authorization", "citizenship", "visa",
+    "years of experience", "years experience"
+}
+
+
+def is_non_skill(term: str) -> bool:
+    if not term:
+        return True
+    low = term.strip().lower()
+    if low in NON_SKILL_TERMS:
+        return True
+    return any(
+        low == ns or low.startswith(ns + " ") or low.endswith(" " + ns)
+        for ns in NON_SKILL_TERMS
+    )
+
+
+def filter_skills(skills: List[str]) -> List[str]:
+    return [s.strip() for s in skills if s and s.strip() and not is_non_skill(s)]
+
 
 class HeuristicParser:
     def __init__(self, taxonomy: Set[str] = None):
         self.taxonomy = taxonomy or SKILL_TAXONOMY
+
+    def check_new_grad_eligibility(self, resume_text: str, ref_date: Optional[datetime] = None) -> Dict[str, Any]:
+        """
+        Determines whether a candidate qualifies as a New Grad:
+        - Graduating in the next 4 months (0 <= months_diff <= 4)
+        - Graduated within the last 6 months (-6 <= months_diff < 0)
+        """
+        ref_date = ref_date or datetime.now()
+        months_map = {
+            'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+            'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+        }
+        patterns = [
+            r'(?:expected|graduation|graduating|degree\s+expected|completion)[:\s]+([A-Za-z]+)\s+((?:20)\d{2})',
+            r'(?:expected|graduation|graduating)[:\s]+((?:20)\d{2})',
+            r'(?:bachelor|master|bsc|ba|bs|b\.s\.|b\.sc|diploma|degree).*?((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*)\s+((?:20)\d{2})',
+            r'class\s+of\s+((?:20)\d{2})',
+            r'(?:bachelor|master|bsc|ba|bs).*?((?:20)\d{2})'
+        ]
+
+        grad_date = None
+        grad_str = ''
+
+        for pat in patterns:
+            m = re.search(pat, resume_text, re.IGNORECASE)
+            if m:
+                groups = m.groups()
+                if len(groups) == 2 and groups[0].lower()[:3] in months_map:
+                    m_num = months_map[groups[0].lower()[:3]]
+                    y_num = int(groups[1])
+                    grad_date = datetime(y_num, m_num, 1)
+                    grad_str = f'{groups[0].capitalize()} {y_num}'
+                    break
+                elif len(groups) == 1 and groups[0].isdigit():
+                    y_num = int(groups[0])
+                    grad_date = datetime(y_num, 6, 1)
+                    grad_str = f'June {y_num}'
+                    break
+
+        if not grad_date:
+            return {'eligible': False, 'status': 'Graduation date not detected', 'grad_date': None, 'months_diff': None}
+
+        months_diff = (grad_date.year - ref_date.year) * 12 + (grad_date.month - ref_date.month)
+        is_eligible = (-6 <= months_diff <= 4)
+
+        if 0 <= months_diff <= 4:
+            timing = f'graduating in {months_diff} month(s) ({grad_str})'
+            status = f'Eligible New Grad ({timing})'
+        elif -6 <= months_diff < 0:
+            timing = f'graduated {-months_diff} month(s) ago ({grad_str})'
+            status = f'Eligible New Grad ({timing})'
+        elif months_diff > 4:
+            timing = f'expected graduation in {months_diff} months ({grad_str})'
+            status = f'Current Student ({timing} - exceeds 4-month new grad window)'
+        else:
+            timing = f'graduated {-months_diff} months ago ({grad_str})'
+            status = f'Experienced Professional ({timing} - exceeds 6-month new grad window)'
+
+        return {'eligible': is_eligible, 'status': status, 'grad_date': grad_str, 'months_diff': months_diff}
 
     def analyze_job_text(self, text: str) -> JobAnalysisResult:
         lowered = text.lower()
@@ -62,9 +149,12 @@ class HeuristicParser:
         elif re.search(r"\b(onsite|in-office|on-site)\b", lowered):
             work_mode = "Onsite"
 
-        # 3. Experience Level Detection
+        # 3. Experience Level & New Grad Detection
         exp_level = "Not specified"
-        if re.search(r"\b(entry level|junior|associate|intern|new grad)\b", lowered):
+        is_new_grad = bool(re.search(r"\b(new grad|new graduate|recent grad|recent graduate|university graduate|class of (?:20\d{2})|fresh graduate)\b", lowered))
+        new_grad_criteria = "Graduating in the next 4 months or graduated within the last 6 months" if is_new_grad else None
+
+        if is_new_grad or re.search(r"\b(entry level|junior|associate|intern)\b", lowered):
             exp_level = "Entry"
         elif re.search(r"\b(lead|principal|staff|architect|director|head of)\b", lowered):
             exp_level = "Senior / Lead"
@@ -86,7 +176,6 @@ class HeuristicParser:
         tech_stack = []
         soft_skills = []
 
-        # Find sections in the JD
         req_section = ""
         pref_section = ""
 
@@ -110,17 +199,22 @@ class HeuristicParser:
             else:
                 tech_stack.append(skill)
 
+        # Filter out any non-skill terms like "New Grad", "Degree", etc.
+        required_skills = filter_skills(required_skills)
+        preferred_skills = filter_skills(preferred_skills)
+        tech_stack = filter_skills(tech_stack)
+
         if not required_skills:
             required_skills = tech_stack[:5]
 
-        # 5. Extract ATS Keywords (top frequent capitalized and domain keywords)
+        # 5. Extract ATS Keywords (top frequent capitalized and domain keywords, strictly excluding non-skills)
         words = re.findall(r"\b[A-Za-z0-9+#.-]{3,20}\b", text)
         stop_words = {"the", "and", "for", "with", "you", "will", "our", "are", "that", "this", "from", "have", "your", "work", "team", "years", "experience", "about", "role", "help"}
-        filtered_words = [w for w in words if w.lower() not in stop_words and len(w) > 2]
+        filtered_words = [w for w in words if w.lower() not in stop_words and len(w) > 2 and not is_non_skill(w)]
         counts = Counter(filtered_words)
 
         ats_candidates = list(dict.fromkeys(found_skills + [w for w, _ in counts.most_common(30) if w[0].isupper()]))
-        ats_keywords = ats_candidates[:20]
+        ats_keywords = filter_skills(ats_candidates)[:20]
 
         summary = f"Role requiring proficiency in {', '.join(required_skills[:3]) if required_skills else 'software engineering'} with {work_mode} flexibility."
 
@@ -131,6 +225,8 @@ class HeuristicParser:
             work_mode=work_mode,
             salary_range=salary_range,
             experience_level=exp_level,
+            is_new_grad_role=is_new_grad,
+            new_grad_criteria=new_grad_criteria,
             required_skills=required_skills,
             preferred_skills=preferred_skills,
             tech_stack=list(dict.fromkeys(tech_stack)),
@@ -144,6 +240,8 @@ class HeuristicParser:
         if not target_skills:
             target_skills = job_analysis.tech_stack[:10]
 
+        target_skills = filter_skills(target_skills)
+
         matched = []
         missing = []
 
@@ -154,11 +252,18 @@ class HeuristicParser:
             else:
                 missing.append(skill)
 
+        # Strict filter for missing and matched
+        matched = filter_skills(matched)
+        missing = filter_skills(missing)
+
         total_target = len(target_skills)
         if total_target == 0:
             score = 50
         else:
             score = int((len(matched) / total_target) * 100)
+
+        # Check New Grad eligibility
+        eligibility = self.check_new_grad_eligibility(resume_text)
 
         fit_summary = (
             f"Matches {len(matched)} of {total_target} key target skills ({score}%). "
@@ -171,4 +276,8 @@ class HeuristicParser:
             matched_keywords=matched,
             missing_keywords=missing,
             fit_summary=fit_summary,
+            is_new_grad_role=job_analysis.is_new_grad_role,
+            new_grad_eligible=eligibility["eligible"] if job_analysis.is_new_grad_role else None,
+            graduation_status=eligibility["status"],
+            graduation_date=eligibility["grad_date"],
         )
