@@ -27,6 +27,7 @@ export default function BulletOptimizerModal({
   initialSectionType = 'work_history',
   targetJobTitle = 'Software Engineer',
   selectedResume = null,
+  onMarkSkillsAdded = null,
 }) {
   const [keywords, setKeywords] = useState([]);
   const [newSkillInput, setNewSkillInput] = useState('');
@@ -38,6 +39,7 @@ export default function BulletOptimizerModal({
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [userConfirmed, setUserConfirmed] = useState(false);
   const [showBulletPicker, setShowBulletPicker] = useState(false);
+  const [addedConfirmed, setAddedConfirmed] = useState(false);
 
   useEffect(() => {
     let kwList = [];
@@ -82,6 +84,7 @@ export default function BulletOptimizerModal({
     setLoading(true);
     setError('');
     setUserConfirmed(false);
+    setAddedConfirmed(false);
 
     const bulletToUse = overrideBullet !== null ? overrideBullet : existingBullet;
 
@@ -120,6 +123,13 @@ export default function BulletOptimizerModal({
     navigator.clipboard.writeText(text);
     setCopiedIndex(idx);
     setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const handleMarkAdded = () => {
+    if (onMarkSkillsAdded && keywords.length > 0) {
+      onMarkSkillsAdded(keywords);
+      setAddedConfirmed(true);
+    }
   };
 
   return (
@@ -398,22 +408,39 @@ export default function BulletOptimizerModal({
                     <span className="font-bold text-indigo-300 tracking-wide uppercase text-[11px]">
                       {alt.variant_name}
                     </span>
-                    <button
-                      onClick={() => handleCopy(alt.bullet, idx)}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition-colors"
-                    >
-                      {copiedIndex === idx ? (
-                        <>
-                          <Check size={12} className="text-emerald-400" />
-                          <span className="text-emerald-400 font-semibold">Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={12} />
-                          <span>Copy Bullet</span>
-                        </>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleCopy(alt.bullet, idx)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition-colors"
+                      >
+                        {copiedIndex === idx ? (
+                          <>
+                            <Check size={12} className="text-emerald-400" />
+                            <span className="text-emerald-400 font-semibold">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={12} />
+                            <span>Copy Bullet</span>
+                          </>
+                        )}
+                      </button>
+
+                      {onMarkSkillsAdded && (
+                        <button
+                          onClick={handleMarkAdded}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold transition-all ${
+                            addedConfirmed
+                              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30 font-bold'
+                              : 'bg-blue-950/70 border border-blue-500/50 text-blue-300 hover:bg-blue-900/60 hover:text-white'
+                          }`}
+                          title="Marks these skills as adopted into your resume, moving them to Matched Technical Skills (Blue) and recalculating your match score!"
+                        >
+                          <CheckCircle2 size={12} className={addedConfirmed ? 'text-white' : 'text-blue-400'} />
+                          <span>{addedConfirmed ? '✓ Added to Resume' : 'Mark Skills Added'}</span>
+                        </button>
                       )}
-                    </button>
+                    </div>
                   </div>
 
                   {/* Bullet text */}
@@ -439,6 +466,39 @@ export default function BulletOptimizerModal({
                 </div>
               ))}
             </div>
+
+            {/* Added Confirmation & Recalculate Callout */}
+            {addedConfirmed ? (
+              <div className="p-3.5 bg-blue-950/70 border border-blue-500/50 rounded-xl flex items-center justify-between gap-3 text-xs animate-fade-in shadow-lg shadow-blue-950/50">
+                <div className="flex items-center gap-2.5 text-blue-200">
+                  <CheckCircle2 size={18} className="text-blue-400 shrink-0" />
+                  <div>
+                    <span className="font-bold text-white">Skills Adopted! </span>
+                    <span>
+                      <strong className="text-cyan-300 font-mono">{keywords.join(', ')}</strong> moved to <strong>Matched Technical Skills (Blue)</strong> in your comparison card. Your projected ATS score has been boosted!
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              onMarkSkillsAdded && (
+                <div className="p-3.5 bg-slate-900/90 border border-blue-500/30 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-slate-300">
+                    <Sparkles size={16} className="text-blue-400 shrink-0" />
+                    <span>
+                      Put this bullet into your resume? Move these skills to Matched (Blue) to re-evaluate your match score.
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleMarkAdded}
+                    className="btn-primary bg-blue-600 hover:bg-blue-500 border-blue-400 text-xs py-1.5 px-3 flex items-center gap-1.5 self-start sm:self-auto shrink-0 shadow-md shadow-blue-600/30 font-semibold"
+                  >
+                    <CheckCircle2 size={13} />
+                    <span>Move {keywords.length} Skill{keywords.length > 1 ? 's' : ''} to Matched (Blue)</span>
+                  </button>
+                </div>
+              )
+            )}
           </div>
         )}
 

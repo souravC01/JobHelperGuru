@@ -33,6 +33,26 @@ export default function App() {
   const [isCoverLetterOpen, setIsCoverLetterOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [selectedResumeForJob, setSelectedResumeForJob] = useState(null);
+  // Potentially added skills: { [resumeId]: string[] }
+  const [adoptedSkillsMap, setAdoptedSkillsMap] = useState({});
+
+  const handleAdoptSkills = (skills, resumeId = null) => {
+    const targetId = resumeId || selectedResumeForJob?.id;
+    if (!targetId || !skills || skills.length === 0) return;
+    const skillsList = Array.isArray(skills) ? skills : [skills];
+    setAdoptedSkillsMap((prev) => {
+      const existing = prev[targetId] || [];
+      const combined = Array.from(new Set([...existing, ...skillsList]));
+      return { ...prev, [targetId]: combined };
+    });
+  };
+
+  const handleRemoveAdoptedSkill = (skill, resumeId) => {
+    setAdoptedSkillsMap((prev) => {
+      const existing = prev[resumeId] || [];
+      return { ...prev, [resumeId]: existing.filter((s) => s !== skill) };
+    });
+  };
 
   const loadInitialData = async () => {
     try {
@@ -246,6 +266,9 @@ export default function App() {
               <ResumeFitRanker
                 currentJob={currentJob}
                 resumes={resumes}
+                adoptedSkillsMap={adoptedSkillsMap}
+                onAdoptSkills={handleAdoptSkills}
+                onRemoveAdoptedSkill={handleRemoveAdoptedSkill}
                 onSelectKeywordForOptimization={(skills, rank, sectionType) => {
                   const matchingResume = resumes.find((r) => r.id === rank.resume_id);
                   handleOpenOptimizer(skills, matchingResume, sectionType);
@@ -278,6 +301,7 @@ export default function App() {
         initialSectionType={optimizerSectionType}
         targetJobTitle={currentJob?.title || 'Software Engineer'}
         selectedResume={selectedResumeForJob}
+        onMarkSkillsAdded={(skills) => handleAdoptSkills(skills, selectedResumeForJob?.id)}
       />
 
       <CoverLetterModal

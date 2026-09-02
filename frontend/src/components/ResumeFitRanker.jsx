@@ -20,6 +20,9 @@ import { matchResumes } from '../api/client';
 export default function ResumeFitRanker({
   currentJob,
   resumes = [],
+  adoptedSkillsMap = {},
+  onAdoptSkills = null,
+  onRemoveAdoptedSkill = null,
   onSelectKeywordForOptimization,
   onBestResumeSelected,
 }) {
@@ -130,10 +133,21 @@ export default function ResumeFitRanker({
             const isBest = rank.is_best_fit;
             const isExpanded = expandedId === rank.resume_id;
             const selectedSkills = selectedSkillsMap[rank.resume_id] || [];
+            const adoptedSkills = (adoptedSkillsMap && adoptedSkillsMap[rank.resume_id]) || [];
+
             const nonSkillTerms = ['new grad', 'new graduate', 'entry level', 'recent grad', 'degree'];
             const displayMissing = (rank.missing_keywords || []).filter(
-              (k) => !nonSkillTerms.some((ns) => k.toLowerCase().includes(ns))
+              (k) => !nonSkillTerms.some((ns) => k.toLowerCase().includes(ns)) && !adoptedSkills.includes(k)
             );
+
+            // Dynamically recalculate projected match score with adopted skills
+            const totalKeywords = (rank.matched_keywords.length + (rank.missing_keywords?.length || 0)) || 1;
+            const baseScore = rank.match_score;
+            const hasAdopted = adoptedSkills.length > 0;
+            const projectedScore = hasAdopted
+              ? Math.min(100, Math.max(baseScore, Math.round(((rank.matched_keywords.length + adoptedSkills.length) / totalKeywords) * 100)))
+              : baseScore;
+            const scoreDiff = projectedScore - baseScore;
 
             return (
               <div
@@ -192,21 +206,28 @@ export default function ResumeFitRanker({
                     </div>
                   </div>
 
-                  {/* Match Score Gauge */}
+                  {/* Match Score Gauge (Dynamic Recalculation with Adopted Skills) */}
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <div className="text-sm font-extrabold text-white">{rank.match_score}%</div>
-                      <div className="w-24 bg-slate-800 rounded-full h-1.5 overflow-hidden mt-1">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span className="text-sm font-extrabold text-white">{projectedScore}%</span>
+                        {hasAdopted && scoreDiff > 0 && (
+                          <span className="badge-pill bg-blue-950/80 border border-blue-400/50 text-blue-300 text-[10px] py-0.2 px-1.5 font-bold animate-pulse">
+                            +{scoreDiff}% Boosted
+                          </span>
+                        )}
+                      </div>
+                      <div className="w-24 bg-slate-800 rounded-full h-1.5 overflow-hidden mt-1 relative flex">
                         <div
-                          className={`h-full rounded-full ${
-                            rank.match_score >= 75
-                              ? 'bg-emerald-400'
-                              : rank.match_score >= 50
-                              ? 'bg-indigo-400'
-                              : 'bg-amber-400'
-                          }`}
-                          style={{ width: `${rank.match_score}%` }}
+                          className="h-full bg-emerald-400 transition-all duration-500"
+                          style={{ width: `${baseScore}%` }}
                         />
+                        {hasAdopted && scoreDiff > 0 && (
+                          <div
+                            className="h-full bg-blue-500 transition-all duration-500"
+                            style={{ width: `${scoreDiff}%` }}
+                          />
+                        )}
                       </div>
                     </div>
 
@@ -249,19 +270,57 @@ export default function ResumeFitRanker({
                       </div>
                     )}
 
-                    {/* Matched Keywords */}
+                    {/* Matched Keywords (Both Verified Green & Potentially Added Blue) */}
                     <div>
-                      <h5 className="font-semibold text-emerald-400 flex items-center gap-1.5 mb-2">
-                        <CheckCircle size={14} />
-                        <span>Matched Technical Skills ({rank.matched_keywords.length})</span>
-                      </h5>
-                      {rank.matched_keywords.length === 0 ? (
+                      <div className="flex items-center justify-between mb-2">
+                        <h5 className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                          <CheckCircle size={14} />
+                          <span>Matched Technical Skills ({rank.matched_keywords.length + adoptedSkills.length})</span>
+                        </h5>
+                        {adoptedSkills.length > 0 && (
+                          <span className="text-[10px] text-blue-300 font-semibold bg-blue-950/60 border border-blue-500/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Sparkles size={11} className="text-blue-400" />
+                            <span>{adoptedSkills.length} Potentially Added (Blue)</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {rank.matched_keywords.length === 0 && adoptedSkills.length === 0 ? (
                         <span className="text-slate-500 italic">No direct matches found.</span>
                       ) : (
                         <div className="flex flex-wrap gap-1.5">
+                          {/* Verified matches from original resume text */}
                           {rank.matched_keywords.map((kw, i) => (
                             <span key={i} className="badge-pill badge-tech text-[11px] py-0.5">
                               {kw} ✓
+                            </span>
+                          ))}
+
+                          {/* Potentially added skills from optimized bullets (Color-coded Blue) */}
+                          {adoptedSkills.map((kw, i) => (
+                            <span
+                              key={`adopted-${i}`}
+                              className="badge-pill bg-blue-950/80 border border-blue-400 text-blue-200 text-[11px] py-0.5 px-2.5 flex items-center gap-1.5 shadow-md shadow-blue-950/50 animate-fade-in"
+                              title="Potentially added to resume — re-evaluated and counting towards score!"
+                            >
+                              <Sparkles size={11} className="text-blue-400" />
+                              <span>{kw}</span>
+                              <span className="text-[9px] uppercase font-bold text-blue-300 bg-blue-900/70 px-1 py-0.2 rounded border border-blue-500/40">
+                                Added
+                              </span>
+                              {onRemoveAdoptedSkill && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRemoveAdoptedSkill(kw, rank.resume_id);
+                                  }}
+                                  className="text-blue-400 hover:text-rose-400 hover:bg-rose-950/40 rounded p-0.5 transition-colors ml-0.5"
+                                  title="Remove from added and return to missing"
+                                >
+                                  ✕
+                                </button>
+                              )}
                             </span>
                           ))}
                         </div>
@@ -344,6 +403,20 @@ export default function ResumeFitRanker({
                           </div>
 
                           <div className="flex items-center gap-2 flex-wrap">
+                            {onAdoptSkills && (
+                              <button
+                                onClick={() => {
+                                  onAdoptSkills(selectedSkills, rank.resume_id);
+                                  clearSkills(rank.resume_id);
+                                }}
+                                className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 bg-blue-950/80 border-blue-400/80 text-blue-200 hover:bg-blue-900 hover:text-white"
+                                title="Move selected skills to Matched (Blue) and re-evaluate score immediately"
+                              >
+                                <CheckCircle2 size={13} className="text-blue-400" />
+                                <span>Mark as Added (Blue)</span>
+                              </button>
+                            )}
+
                             <button
                               onClick={() => handleIncorporate(rank, 'project')}
                               className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
