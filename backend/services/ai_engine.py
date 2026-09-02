@@ -176,6 +176,87 @@ Return strict JSON:
         return ranked_list
 
     # --- 3. Bulletskill.md Optimizer ---
+    @staticmethod
+    def _parse_classified_bullets(raw_text: str) -> tuple[List[Dict[str, str]], List[Dict[str, str]]]:
+        """
+        Intelligently parses resume text into (project_bullets, work_bullets).
+        Handles unicode bullets (●, •, ◦, etc.), multi-line wrapped text, and classifies
+        projects vs work history sections even without explicit 'Projects' headers.
+        """
+        normalized = re.sub(r'[\u25cf\u25cb\u25e6\u2043\u2219\u25aa\u25ab\u2022\u2023\u25b6\u25ba\u2192]', '• ', raw_text)
+        
+        sections = []
+        curr_sec_name = 'General Experience'
+        current_bullets = []
+        current_bullet_text = []
+
+        lines = [l.strip() for l in normalized.splitlines() if l.strip()]
+        for line in lines:
+            is_bullet_start = bool(re.match(r'^(?:[•*–]|-(?=\s)|\d+\.)\s*', line))
+            
+            is_known_header = any(h in line.lower() for h in ['education & certificates', 'education', 'work history', 'professional experience', 'experience', 'projects', 'skills', 'certif']) and len(line) < 60 and not is_bullet_start
+            has_tech_stack_or_dash = ((' - ' in line or ' – ' in line or ' | ' in line) and any(t in line.lower() for t in ['java', 'python', 'react', 'spring', 'docker', 'cloud', 'sql', 'aws', 'c++', 'javascript', 'simulator', 'platform', 'app', 'developer', 'engineer', 'analyst'])) and len(line) < 140 and not is_bullet_start
+            has_job_pattern = (bool(re.search(r'\b(at|@)\b.*(?:19|20)\d{2}', line, re.IGNORECASE)) or bool(re.search(r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(?:19|20)\d{2}', line))) and not is_bullet_start
+            
+            is_title = (is_known_header or has_tech_stack_or_dash or has_job_pattern) and not is_bullet_start
+            if is_title:
+                if current_bullet_text:
+                    current_bullets.append(' '.join(current_bullet_text))
+                    current_bullet_text = []
+                if current_bullets:
+                    sections.append((curr_sec_name, current_bullets))
+                    current_bullets = []
+                curr_sec_name = line
+            elif is_bullet_start:
+                if current_bullet_text:
+                    current_bullets.append(' '.join(current_bullet_text))
+                    current_bullet_text = []
+                clean_b = re.sub(r'^(?:[•*–]|-(?=\s)|\d+\.)\s*', '', line).strip()
+                current_bullet_text.append(clean_b)
+            else:
+                if current_bullet_text:
+                    current_bullet_text.append(line)
+                elif len(line) < 80:
+                    curr_sec_name = line
+
+        if current_bullet_text:
+            current_bullets.append(' '.join(current_bullet_text))
+        if current_bullets:
+            sections.append((curr_sec_name, current_bullets))
+
+        project_bullets = []
+        work_bullets = []
+
+        for s_name, b_list in sections:
+            low_name = s_name.lower().strip()
+            # Skip education section
+            if low_name in ['education', 'education & certificates', 'academic background', 'education and coursework', 'certificates']:
+                continue
+                
+            is_work = (
+                bool(re.search(r'\b(at|@)\b', low_name)) or
+                any(w in low_name for w in ['co-op', 'intern', 'employment', 'experience', 'company', 'developer at', 'analyst at', 'engineer at']) or
+                bool(re.search(r'(?:19|20)\d{2}', s_name))
+            )
+            is_project = (
+                any(p in low_name for p in ['project', 'simulator', 'platform', 'marketplace', 'app', 'system', 'tool', 'portal']) or
+                (not is_work and any(tech in low_name for tech in ['java', 'python', 'react', 'spring', 'docker', 'cloud', 'sql', 'aws', 'api']))
+            )
+
+            for b in b_list:
+                item = {'section': s_name, 'bullet': b}
+                if is_project and not is_work:
+                    project_bullets.append(item)
+                elif is_work:
+                    work_bullets.append(item)
+                else:
+                    if any(p in b.lower() for p in ['project', 'built', 'created', 'designed']):
+                        project_bullets.append(item)
+                    else:
+                        work_bullets.append(item)
+
+        return project_bullets, work_bullets
+
     def optimize_bullet(self, request: BulletOptimizationRequest) -> BulletOptimizationResponse:
         """
         Implements Bulletskill.md framework:
@@ -224,40 +305,9 @@ Return strict JSON:
             warning = f"Confirm that you actually utilized {missing_str} before adding this bullet to your resume."
             assumption = f"The candidate utilized {missing_str} in this {request.section_type}."
 
-        # Separate candidate resume bullets into Projects vs Work History
-        project_bullets = []
-        work_bullets = []
+        # Separate candidate resume bullets into Projects vs Work History using smart classifier
         raw_evidence = "\n".join(request.evidence_context)
-        current_mode = "work"
-        current_sec = "Professional Experience"
-
-        for line in raw_evidence.splitlines():
-            sline = line.strip()
-            if not sline:
-                continue
-            low = sline.lower()
-
-            # Section header heuristics
-            if any(h in low for h in ["project", "personal project", "academic project", "open source project", "key project"]) and len(sline) < 60 and not sline.startswith(("-", "•", "*")):
-                current_mode = "project"
-                current_sec = sline.strip("#:- ")
-                continue
-            elif any(h in low for h in ["experience", "employment", "work history", "career", "professional experience"]) and len(sline) < 60 and not sline.startswith(("-", "•", "*")):
-                current_mode = "work"
-                current_sec = sline.strip("#:- ")
-                continue
-            elif len(sline) < 50 and not sline.startswith(("-", "•", "*")) and (sline.isupper() or sline.startswith("###") or sline.startswith("**")):
-                current_sec = sline.strip("#:- *")
-                continue
-
-            if sline.startswith(("-", "•", "*", "–")) or (len(sline) > 30 and sline[0].isupper() and sline.endswith(".")):
-                clean_b = re.sub(r"^[-•*–\d\.]+\s*", "", sline).strip()
-                if len(clean_b) > 15:
-                    item = {"section": current_sec, "bullet": clean_b}
-                    if current_mode == "project":
-                        project_bullets.append(item)
-                    else:
-                        work_bullets.append(item)
+        project_bullets, work_bullets = self._parse_classified_bullets(raw_evidence)
 
         is_project = (request.section_type == "project")
         target_section_bullets = project_bullets if is_project else work_bullets
