@@ -55,13 +55,19 @@ export async function deleteResume(id) {
   return res.json();
 }
 
-export async function matchResumes({ job, resumes }) {
+export async function matchResumes(payload) {
+  const job = payload?.job || (payload?.title || payload?.required_skills ? payload : null);
+  const resumes = payload?.resumes;
   const res = await fetch(`${API_BASE}/resumes/match`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ job, resumes }),
   });
-  if (!res.ok) throw new Error('Failed to rank resumes');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    console.error('Match error details:', err);
+    throw new Error(err.detail || 'Failed to rank resumes');
+  }
   return res.json();
 }
 

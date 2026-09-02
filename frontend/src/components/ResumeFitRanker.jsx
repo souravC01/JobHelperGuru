@@ -33,7 +33,8 @@ export default function ResumeFitRanker({
     if (!currentJob || resumes.length === 0) return;
     setLoading(true);
     try {
-      const results = await matchResumes(currentJob);
+      const jobPayload = currentJob?.analysis || currentJob;
+      const results = await matchResumes({ job: jobPayload, resumes });
       setRankedResumes(results);
       if (results.length > 0) {
         setExpandedId(results[0].resume_id);
