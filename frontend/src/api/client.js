@@ -33,6 +33,23 @@ export async function addResume({ name, content }) {
   return res.json();
 }
 
+export async function uploadResumeFile(file, name = '') {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (name) {
+    formData.append('name', name);
+  }
+  const res = await fetch(`${API_BASE}/resumes/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to upload document' }));
+    throw new Error(err.detail || 'Failed to upload document');
+  }
+  return res.json();
+}
+
 export async function deleteResume(id) {
   const res = await fetch(`${API_BASE}/resumes/${id}`, { method: 'DELETE' });
   return res.json();

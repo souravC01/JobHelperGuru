@@ -43,6 +43,29 @@ def test_resumes_crud_and_match():
     del_res = client.delete(f"/api/resumes/{r_id}")
     assert del_res.status_code == 200
 
+def test_upload_resume_file_endpoint():
+    import docx
+    import io
+
+    doc = docx.Document()
+    doc.add_paragraph("Staff Engineer with extensive Kubernetes and Go experience.")
+    bio = io.BytesIO()
+    doc.save(bio)
+    docx_bytes = bio.getvalue()
+
+    files = {"file": ("staff_resume.docx", docx_bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
+    data = {"name": "Staff Resume"}
+
+    upload_res = client.post("/api/resumes/upload", files=files, data=data)
+    assert upload_res.status_code == 200
+    res_data = upload_res.json()
+    assert res_data["name"] == "Staff Resume"
+    assert "Kubernetes" in res_data["content"]
+    assert "Go" in res_data["content"]
+
+    # Cleanup
+    client.delete(f"/api/resumes/{res_data['id']}")
+
 def test_applications_crud_and_excel_export():
     # 1. Create Application
     create_res = client.post("/api/applications", json={

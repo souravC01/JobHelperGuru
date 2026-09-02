@@ -117,6 +117,9 @@ def analyze_job(req: JobAnalyzeRequest):
     }
 
 
+from fastapi import FastAPI, HTTPException, Response, Depends, UploadFile, File, Form
+from backend.services.document_parser import extract_text_from_file
+
 # --- Resumes ---
 @app.get("/api/resumes", response_model=List[Resume])
 def get_resumes():
@@ -128,6 +131,26 @@ def add_resume(req: ResumeCreate):
     if not req.name.strip() or not req.content.strip():
         raise HTTPException(status_code=400, detail="Resume name and content are required.")
     return storage.add_resume(name=req.name, content=req.content)
+
+
+@app.post("/api/resumes/upload", response_model=Resume)
+async def upload_resume_file(
+    file: UploadFile = File(...),
+    name: Optional[str] = Form(None),
+):
+    try:
+        content_bytes = await file.read()
+        extracted_text = extract_text_from_file(content_bytes, file.filename)
+        if not extracted_text.strip():
+            raise HTTPException(status_code=400, detail="No readable text could be extracted from this document.")
+
+        resume_name = name.strip() if (name and name.strip()) else Path(file.filename).stem
+        resume = storage.add_resume(name=resume_name, content=extracted_text)
+        return resume
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
 
 
 @app.delete("/api/resumes/{resume_id}")

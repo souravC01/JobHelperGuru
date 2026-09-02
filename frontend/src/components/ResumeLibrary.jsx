@@ -1,6 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { FileText, Plus, Trash2, CheckCircle, Upload, AlertCircle } from 'lucide-react';
-import { getResumes, addResume, deleteResume } from '../api/client';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  FileText,
+  Plus,
+  Trash2,
+  CheckCircle,
+  Upload,
+  AlertCircle,
+  Loader2,
+  FileCheck,
+  Sparkles,
+} from 'lucide-react';
+import { getResumes, addResume, deleteResume, uploadResumeFile } from '../api/client';
 
 export default function ResumeLibrary({ onResumesUpdated }) {
   const [resumes, setResumes] = useState([]);
@@ -10,6 +20,10 @@ export default function ResumeLibrary({ onResumesUpdated }) {
   const [newContent, setNewContent] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef(null);
+  const directFileInputRef = useRef(null);
 
   const loadResumes = async () => {
     setLoading(true);
@@ -50,7 +64,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this resume?')) return;
+    if (!window.confirm('Are you sure you want to delete this resume profile?')) return;
     try {
       await deleteResume(id);
       await loadResumes();
@@ -59,17 +73,65 @@ export default function ResumeLibrary({ onResumesUpdated }) {
     }
   };
 
-  const handleFileUpload = (e) => {
+  // Handles parsing PDF, DOCX, or text file into form
+  const handleProcessFile = async (file) => {
+    if (!file) return;
+    setUploadingDoc(true);
+    setError('');
+    const suggestedTitle = file.name.replace(/\.[^/.]+$/, '');
+    if (!newName) {
+      setNewName(suggestedTitle);
+    }
+
+    try {
+      // If it's a plain text/md file, we can parse locally or via API
+      if (file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+        const text = await file.text();
+        setNewContent(text);
+      } else {
+        // PDF or DOCX: use backend document extractor
+        const res = await uploadResumeFile(file, suggestedTitle);
+        setNewName(res.name);
+        setNewContent(res.content);
+        // Refresh library in background since backend added it
+        await loadResumes();
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to extract text from file.');
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  // Direct 1-click upload from header
+  const handleDirectUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (!newName) {
-      setNewName(file.name.replace(/\.[^/.]+$/, ''));
+    setLoading(true);
+    try {
+      const suggestedTitle = file.name.replace(/\.[^/.]+$/, '');
+      if (file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+        const text = await file.text();
+        await addResume({ name: suggestedTitle, content: text });
+      } else {
+        await uploadResumeFile(file, suggestedTitle);
+      }
+      await loadResumes();
+    } catch (err) {
+      alert(err.message || 'Failed to upload document');
+    } finally {
+      setLoading(false);
+      if (directFileInputRef.current) directFileInputRef.current.value = '';
     }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setNewContent(event.target.result);
-    };
-    reader.readAsText(file);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      handleProcessFile(file);
+    }
   };
 
   return (
@@ -79,41 +141,78 @@ export default function ResumeLibrary({ onResumesUpdated }) {
         <div>
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <FileText className="text-indigo-400" size={22} />
-            <span>My Resume Library</span>
+            <span>My Resume Profiles ({resumes.length})</span>
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Store tailored versions of your resume (e.g. Backend, Full-Stack, Machine Learning) to automatically match against target job descriptions.
+          <p className="text-xs text-slate-300 mt-1">
+            Upload tailored versions of your resume (PDF, Word DOCX, Markdown, or Text). The app automatically compares them to find your best fit.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setError('');
-            setShowAddModal(true);
-          }}
-          className="btn-primary text-xs"
-        >
-          <Plus size={16} />
-          <span>Add New Resume</span>
-        </button>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* 1-Click Upload PDF / DOCX */}
+          <button
+            onClick={() => directFileInputRef.current?.click()}
+            className="btn-secondary text-xs flex items-center gap-1.5"
+            title="Upload PDF or Word resume directly"
+          >
+            <Upload size={14} className="text-cyan-400" />
+            <span>Quick Upload (PDF / DOCX)</span>
+          </button>
+          <input
+            ref={directFileInputRef}
+            type="file"
+            accept=".pdf,.docx,.doc,.txt,.md"
+            onChange={handleDirectUpload}
+            className="hidden"
+          />
+
+          <button
+            onClick={() => {
+              setError('');
+              setShowAddModal(true);
+            }}
+            className="btn-primary text-xs"
+          >
+            <Plus size={16} />
+            <span>Add New Resume</span>
+          </button>
+        </div>
       </div>
 
       {/* Resumes Grid */}
       {loading ? (
-        <div className="text-center py-12 text-slate-500 text-sm">Loading your resumes...</div>
+        <div className="text-center py-16 space-y-3">
+          <Loader2 size={24} className="animate-spin text-indigo-400 mx-auto" />
+          <p className="text-xs text-slate-400">Loading your resumes...</p>
+        </div>
       ) : resumes.length === 0 ? (
-        <div className="glass-panel p-10 text-center space-y-3">
-          <FileText className="mx-auto text-slate-600" size={40} />
-          <h3 className="font-semibold text-slate-300 text-base">No resumes added yet</h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto">
-            Upload or paste your resume text to enable the Best-Fit Resume Matcher and Bullet Point Optimizer.
-          </p>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="btn-primary text-xs mx-auto mt-2"
-          >
-            <Plus size={14} />
-            <span>Add Your First Resume</span>
-          </button>
+        <div className="glass-panel p-12 text-center space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mx-auto border border-indigo-500/30">
+            <FileText size={28} />
+          </div>
+          <div>
+            <h3 className="font-bold text-slate-100 text-base">No resumes uploaded yet</h3>
+            <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
+              Upload your <strong>PDF</strong>, <strong>Word (.docx)</strong>, or text resumes to rank them against jobs and optimize your bullet points.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => directFileInputRef.current?.click()}
+              className="btn-primary text-xs"
+            >
+              <Upload size={14} />
+              <span>Upload PDF / Word Resume</span>
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="btn-secondary text-xs"
+            >
+              <Plus size={14} />
+              <span>Paste Text Manually</span>
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -125,7 +224,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
                   <button
                     onClick={() => handleDelete(resume.id)}
                     title="Delete resume"
-                    className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
+                    className="text-slate-400 hover:text-rose-400 p-1 transition-colors"
                   >
                     <Trash2 size={15} />
                   </button>
@@ -133,12 +232,12 @@ export default function ResumeLibrary({ onResumesUpdated }) {
                 <p className="text-[11px] text-slate-400">
                   Added: {new Date(resume.created_at).toLocaleDateString()}
                 </p>
-                <div className="mt-3 bg-slate-950/60 p-3 rounded-lg border border-slate-800/80 font-mono text-[11px] text-slate-400 h-28 overflow-hidden line-clamp-5 leading-relaxed">
+                <div className="mt-3 bg-slate-950/70 p-3 rounded-lg border border-slate-800 font-mono text-[11px] text-slate-300 h-32 overflow-hidden line-clamp-6 leading-relaxed">
                   {resume.content}
                 </div>
               </div>
               <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                <span className="flex items-center gap-1 text-emerald-400">
+                <span className="flex items-center gap-1 text-emerald-400 font-semibold">
                   <CheckCircle size={13} /> Ready for matching
                 </span>
                 <span>{resume.content.split(/\s+/).length} words</span>
@@ -150,16 +249,18 @@ export default function ResumeLibrary({ onResumesUpdated }) {
 
       {/* Add Resume Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel bg-slate-900 border border-slate-700 w-full max-w-2xl p-6 rounded-2xl space-y-4 animate-fade-in shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="glass-panel bg-slate-900 border border-slate-700 w-full max-w-2xl my-8 p-6 rounded-2xl space-y-4 animate-fade-in shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <FileText size={18} className="text-indigo-400" />
-                <span>Add Resume Profile</span>
-              </h3>
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400">
+                  <FileText size={18} />
+                </div>
+                <h3 className="text-base font-bold text-white">Add Resume Profile</h3>
+              </div>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-slate-400 hover:text-white text-lg font-bold"
+                className="text-slate-400 hover:text-white text-lg font-bold p-1"
               >
                 ✕
               </button>
@@ -172,17 +273,59 @@ export default function ResumeLibrary({ onResumesUpdated }) {
               </div>
             )}
 
+            {/* Document Drag & Drop Dropzone */}
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
+                dragOver
+                  ? 'border-indigo-400 bg-indigo-950/40'
+                  : 'border-slate-700 hover:border-slate-600 bg-slate-950/40 hover:bg-slate-950/60'
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,.doc,.txt,.md"
+                onChange={(e) => handleProcessFile(e.target.files[0])}
+                className="hidden"
+              />
+              {uploadingDoc ? (
+                <div className="space-y-2">
+                  <Loader2 size={24} className="animate-spin text-indigo-400 mx-auto" />
+                  <p className="text-xs text-indigo-300 font-semibold">
+                    Extracting text from document...
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-center gap-2 text-slate-300 text-xs font-semibold">
+                    <Upload size={16} className="text-cyan-400" />
+                    <span>Drop your resume here or click to browse</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Supports <strong>.PDF</strong>, <strong>.DOCX (Word)</strong>, <strong>.TXT</strong>, <strong>.MD</strong>
+                  </p>
+                </div>
+              )}
+            </div>
+
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Resume Name / Target Domain
+                  Resume Title / Target Domain
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Backend Engineer (Python/FastAPI) or Full Stack Dev"
+                  placeholder="e.g. Senior Backend Engineer (Python/PostgreSQL) or Product Manager"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  className="input-field"
+                  className="input-field text-xs"
                   required
                 />
               </div>
@@ -190,22 +333,15 @@ export default function ResumeLibrary({ onResumesUpdated }) {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-semibold text-slate-300">
-                    Resume Content (Text, Markdown, or pasted CV)
+                    Extracted Resume Content
                   </label>
-                  <label className="text-[11px] text-indigo-400 hover:text-indigo-300 cursor-pointer flex items-center gap-1 font-medium">
-                    <Upload size={12} />
-                    <span>Upload .txt/.md file</span>
-                    <input
-                      type="file"
-                      accept=".txt,.md"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    {newContent ? `${newContent.split(/\s+/).length} words extracted` : 'Paste or upload file'}
+                  </span>
                 </div>
                 <textarea
-                  placeholder="Paste your work history, skills, and project bullet points here..."
-                  rows={9}
+                  placeholder="Extracted or pasted resume text will appear here. You can edit or tweak bullet points as needed..."
+                  rows={8}
                   value={newContent}
                   onChange={(e) => setNewContent(e.target.value)}
                   className="input-field font-mono text-xs"
@@ -223,7 +359,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || uploadingDoc}
                   className="btn-primary text-xs"
                 >
                   {submitting ? 'Saving...' : 'Save to Library'}
