@@ -92,9 +92,21 @@
      - Computes match score (0–100%) for each resume based on required skills & keywords.
      - Selects the `#1 Best-Fit Resume` with clear rationale.
      - For the selected resume: lists `matched_keywords` and `missing_keywords`.
-  3. **Resume Bullet Point Optimizer:**
-     - Input: Target missing keyword + user's existing resume bullet point (or relevant experience context).
-     - Output: 2–3 rewritten bullet points highlighting the missing keyword with strong action verbs and quantified impact metrics.
+  3. **Resume Bullet Point Optimizer (powered by Bulletskill.md):**
+     - Implements the **Resume Guide 2.0** framework: `Keyword / What + HOW it was used + RESULT and/or REASON`.
+     - Strict Claim Classification:
+       - `VERIFIED`: Direct/equivalent evidence exists in the resume.
+       - `UNVERIFIED_SKILL`: Missing target skill suggested with clear disclaimer and confirmation gate ("Confirm that [Skill] was actually used before adding").
+       - `UNVERIFIED_METRIC`: Metric-enhanced alternative using placeholders (`[X%]`, `[N users]`), never fabricating fake numbers.
+       - `VERIFIED_DERIVED_METRIC`: Calculated from user inputs.
+     - Work History & Project Rules:
+       - Work History: Bullet 1 is Job Summary (simple, 3 core keywords, past tense, 1 period max); remaining bullets follow What + How + Result/Reason (3-8 bullets total).
+       - Projects: Max 3 bullets (1: What built + purpose, 2: Technical depth, 3: Infra/testing/cloud), no dates.
+     - Generates 2-3 tailored alternatives for the same selected bullet:
+       - Candidate A: ATS-focused
+       - Candidate B: Concise
+       - Candidate C: Technical/result-focused
+     - UI confirmation flow: Unverified suggestion -> user clicks "Yes, I used this" -> status updates to `VERIFIED` -> eligible for export.
   4. **Tailored Outreach / Cover Letter Generator:**
      - Generates a concise, highly relevant 3-paragraph pitch connecting the candidate's matched skills to the job description.
 - **Offline / Heuristic Fallback (`backend/services/heuristic_parser.py`):**
