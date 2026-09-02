@@ -91,12 +91,12 @@ def analyze_job(req: JobAnalyzeRequest):
     ai = get_ai_engine()
     analysis = ai.analyze_job(job_text, source_url=source_url)
 
-    # Prefer scraped title/company if AI couldn't detect them
-    if (not analysis.title or analysis.title == "Open Position") and scraped_title:
+    # Prefer scraped title/company if AI/heuristic couldn't detect specific ones
+    if (not analysis.title or analysis.title in ["Open Position", "Detected Role"]) and scraped_title and scraped_title not in ["Open Position", "Detected Role", "Unknown Role"]:
         analysis.title = scraped_title
-    if (not analysis.company or analysis.company == "Unknown Company") and scraped_company:
+    if (not analysis.company or analysis.company in ["Unknown Company", "Company"]) and scraped_company and scraped_company not in ["Unknown Company"]:
         analysis.company = scraped_company
-    if (not analysis.location or analysis.location == "Unknown") and scraped_location:
+    if (not analysis.location or analysis.location == "Unknown") and scraped_location and scraped_location not in ["Unknown"]:
         analysis.location = scraped_location
 
     return {

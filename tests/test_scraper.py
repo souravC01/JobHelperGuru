@@ -66,3 +66,43 @@ def test_extract_greenhouse_lever_style():
     assert "Backend Infrastructure Engineer" in job.title
     assert "Datadog" in job.company or "Datadog" in job.raw_text
     assert "Kafka" in job.raw_text
+
+def test_extract_embedded_greenhouse_ats(monkeypatch):
+    scraper = ScraperService()
+    portal_html = r"""
+    <html>
+      <head><title>Careers - Acme</title></head>
+      <body>
+        <div id="grnhse_app"></div>
+        <script>
+          window.__RETRIEVE_A_JOB_ENDPOINT__ = 'https:\/\/boards-api.greenhouse.io\/v1\/boards\/acme\/jobs\/12345';
+        </script>
+      </body>
+    </html>
+    """
+
+    class MockResponse:
+        ok = True
+        status_code = 200
+        text = portal_html
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {
+                "title": "Full Stack Engineer",
+                "company_name": "Acme Corp",
+                "location": {"name": "Remote, US"},
+                "content": "&lt;p&gt;Looking for a Full Stack Engineer with React, Python, and PostgreSQL experience.&lt;/p&gt;",
+            }
+
+    def mock_get(url, *args, **kwargs):
+        return MockResponse()
+
+    monkeypatch.setattr(scraper.session, "get", mock_get)
+
+    job = scraper.scrape_url("https://www.acme.com/careers?gh_jid=12345")
+    assert job.title == "Full Stack Engineer"
+    assert job.company == "Acme Corp"
+    assert job.location == "Remote, US"
+    assert "React" in job.raw_text
+    assert "PostgreSQL" in job.raw_text

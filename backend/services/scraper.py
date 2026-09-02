@@ -34,6 +34,12 @@ class ScraperService:
             response = self.session.get(clean_url, timeout=timeout, allow_redirects=True)
             response.raise_for_status()
             html = response.text
+
+            # Check if page embeds an external ATS widget (Greenhouse, Lever, Ashby, iframe)
+            embedded_job = self._try_fetch_embedded_ats(html, source_url=clean_url, timeout=timeout)
+            if embedded_job and len(embedded_job.raw_text.strip()) > 20:
+                return embedded_job
+
             return self.extract_from_html(html, source_url=clean_url)
         except Exception as e:
             # If fetch fails (e.g. anti-bot or 403), return error info in raw_text so user knows
@@ -46,6 +52,11 @@ class ScraperService:
             )
 
     def extract_from_html(self, html: str, source_url: str = "") -> ScrapedJob:
+        if source_url:
+            embedded_job = self._try_fetch_embedded_ats(html, source_url=source_url)
+            if embedded_job and len(embedded_job.raw_text.strip()) > 20:
+                return embedded_job
+
         soup = BeautifulSoup(html, "html.parser")
 
         # 1. Title Extraction
@@ -149,3 +160,146 @@ class ScraperService:
             raw_text=text.strip(),
             source_url=source_url or "manual_paste",
         )
+
+    def _try_fetch_embedded_ats(self, html_text: str, source_url: str, timeout: int = 15) -> Optional[ScrapedJob]:
+        """
+        Detects modern ATS widgets embedded on corporate career portals
+        (e.g. Greenhouse API embed, Lever embed, Ashby embed, or embedded iframes).
+        """
+        import html as html_lib
+
+        # 1. Direct Greenhouse API Endpoint in HTML (e.g. IXL, Figma, Stripe, Airbnb)
+        gh_match = re.search(
+            r"boards-api\.greenhouse\.io[\\/]+v1[\\/]+boards[\\/]+([^\\/\"'\s]+)[\\/]+jobs[\\/]+(\d+)",
+            html_text,
+            re.IGNORECASE,
+        )
+        if gh_match:
+            board = gh_match.group(1)
+            job_id = gh_match.group(2)
+            api_job = self._fetch_greenhouse_api(board, job_id, source_url, timeout=timeout)
+            if api_job:
+                return api_job
+
+        # 2. Greenhouse query parameter `gh_jid` (e.g. https://www.ixl.com/company/careers?gh_jid=8765751002)
+        jid_match = re.search(r"[?&]gh_jid=(\d+)", source_url)
+        if jid_match:
+            job_id = jid_match.group(1)
+            # Find board token in HTML
+            board_match = (
+                re.search(r"boards\.greenhouse\.io/embed/job_board/js\?for=([^\"'\s&]+)", html_text)
+                or re.search(r"data-greenhouse-board=[\"']([^\"']+)[\"']", html_text)
+                or re.search(r"window\.__RETRIEVE_A_JOB_ENDPOINT__\s*=\s*['\"][^'\"]*boards[\\/]+([^\\/\"'\s]+)", html_text)
+                or re.search(r"boards-api\.greenhouse\.io[\\/]+v1[\\/]+boards[\\/]+([^\\/\"'\s]+)", html_text)
+            )
+            if board_match:
+                board = board_match.group(1)
+                api_job = self._fetch_greenhouse_api(board, job_id, source_url, timeout=timeout)
+                if api_job:
+                    return api_job
+
+        # 3. Direct Greenhouse board URL (e.g. boards.greenhouse.io/{board}/jobs/{id} or job-boards.greenhouse.io/{board}/jobs/{id})
+        direct_gh = re.search(r"(?:boards|job-boards)\.greenhouse\.io/([^/\"'\s]+)/jobs/(\d+)", source_url)
+        if direct_gh:
+            board = direct_gh.group(1)
+            job_id = direct_gh.group(2)
+            api_job = self._fetch_greenhouse_api(board, job_id, source_url, timeout=timeout)
+            if api_job:
+                return api_job
+
+        # 4. Lever API Endpoint (e.g. jobs.lever.co/{company}/{job_id})
+        lever_match = re.search(r"jobs\.lever\.co/([^/\"'\s]+)/([a-f0-9-]+)", source_url) or re.search(
+            r"api\.lever\.co/v0/postings/([^/\"'\s]+)/([a-f0-9-]+)", html_text
+        )
+        if lever_match:
+            company_token = lever_match.group(1)
+            posting_id = lever_match.group(2)
+            api_job = self._fetch_lever_api(company_token, posting_id, source_url, timeout=timeout)
+            if api_job:
+                return api_job
+
+        # 5. Embedded ATS Iframes in HTML (Greenhouse, Lever, Ashby, SmartRecruiters)
+        soup = BeautifulSoup(html_text, "html.parser")
+        for iframe in soup.find_all("iframe"):
+            src = iframe.get("src", "").strip()
+            if not src:
+                continue
+            if any(ats in src.lower() for ats in ["greenhouse.io", "lever.co", "ashbyhq.com", "smartrecruiters.com"]):
+                if not src.startswith("http"):
+                    src = urllib.parse.urljoin(source_url, src)
+                try:
+                    iframe_resp = self.session.get(src, timeout=timeout)
+                    if iframe_resp.ok and len(iframe_resp.text) > 300:
+                        iframe_job = self.extract_from_html(iframe_resp.text, source_url=source_url)
+                        if iframe_job and len(iframe_job.raw_text.strip()) > 150:
+                            return iframe_job
+                except Exception:
+                    pass
+
+        return None
+
+    def _fetch_greenhouse_api(self, board: str, job_id: str, source_url: str, timeout: int = 15) -> Optional[ScrapedJob]:
+        import html as html_lib
+        api_url = f"https://boards-api.greenhouse.io/v1/boards/{board}/jobs/{job_id}"
+        try:
+            resp = self.session.get(api_url, timeout=timeout)
+            if resp.ok:
+                data = resp.json()
+                title = data.get("title") or "Open Position"
+                company = data.get("company_name") or board.capitalize()
+                location = data.get("location", {}).get("name") or "Unknown"
+
+                # Check metadata for Brand name if company_name is missing
+                if company == board.capitalize():
+                    for meta in data.get("metadata", []):
+                        if meta.get("name") in ["Brand", "Company"]:
+                            company = meta.get("value") or company
+
+                raw_content = html_lib.unescape(data.get("content") or "")
+                soup = BeautifulSoup(raw_content, "html.parser")
+                text = soup.get_text(separator="\n", strip=True)
+
+                if text and len(text) > 20:
+                    return ScrapedJob(
+                        title=title.strip(),
+                        company=company.strip(),
+                        location=location.strip(),
+                        raw_text=text.strip(),
+                        source_url=source_url,
+                    )
+        except Exception:
+            pass
+        return None
+
+    def _fetch_lever_api(self, company_token: str, posting_id: str, source_url: str, timeout: int = 15) -> Optional[ScrapedJob]:
+        api_url = f"https://api.lever.co/v0/postings/{company_token}/{posting_id}"
+        try:
+            resp = self.session.get(api_url, timeout=timeout)
+            if resp.ok:
+                data = resp.json()
+                title = data.get("text") or "Open Position"
+                company = company_token.capitalize()
+                cats = data.get("categories", {})
+                location = cats.get("location") or cats.get("workplaceType") or "Unknown"
+                desc = data.get("descriptionPlain") or ""
+                if not desc and data.get("description"):
+                    soup = BeautifulSoup(data.get("description"), "html.parser")
+                    desc = soup.get_text(separator="\n", strip=True)
+
+                # Append lists if present
+                lists = data.get("lists", [])
+                for lst in lists:
+                    desc += f"\n\n{lst.get('text', '')}\n"
+                    desc += lst.get("content", "")
+
+                if desc and len(desc) > 100:
+                    return ScrapedJob(
+                        title=title.strip(),
+                        company=company.strip(),
+                        location=location.strip(),
+                        raw_text=desc.strip(),
+                        source_url=source_url,
+                    )
+        except Exception:
+            pass
+        return None
