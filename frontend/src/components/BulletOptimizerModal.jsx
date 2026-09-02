@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Wand2,
   CheckCircle2,
-  AlertTriangle,
   Copy,
   Check,
   ShieldCheck,
@@ -37,7 +36,6 @@ export default function BulletOptimizerModal({
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [copiedIndex, setCopiedIndex] = useState(null);
-  const [userConfirmed, setUserConfirmed] = useState(false);
   const [showBulletPicker, setShowBulletPicker] = useState(false);
   const [addedConfirmed, setAddedConfirmed] = useState(false);
 
@@ -83,7 +81,6 @@ export default function BulletOptimizerModal({
     }
     setLoading(true);
     setError('');
-    setUserConfirmed(false);
     setAddedConfirmed(false);
 
     const bulletToUse = overrideBullet !== null ? overrideBullet : existingBullet;
@@ -355,36 +352,6 @@ export default function BulletOptimizerModal({
                 </div>
               )}
             </div>
-
-            {/* Verification Gate / Warning */}
-            {result.requires_confirmation && (
-              <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 space-y-2">
-                <div className="flex items-start gap-2.5">
-                  <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <h5 className="font-bold text-xs uppercase tracking-wide text-amber-300">
-                      Unverified Skill Gate (Resume Guide 2.0 Compliance)
-                    </h5>
-                    <p className="text-xs text-amber-200/90 mt-0.5">
-                      {result.warning ||
-                        `Confirm you have hands-on experience with ${keywords.join(', ')} before exporting to your resume.`}
-                    </p>
-                  </div>
-                </div>
-
-                <label className="flex items-center gap-2 pt-1 text-xs cursor-pointer select-none text-slate-100 font-medium">
-                  <input
-                    type="checkbox"
-                    checked={userConfirmed}
-                    onChange={(e) => setUserConfirmed(e.target.checked)}
-                    className="rounded border-slate-700 text-indigo-600 focus:ring-0 w-4 h-4 bg-slate-900"
-                  />
-                  <span>
-                    Yes, I have worked with these technologies and verify this claim is true.
-                  </span>
-                </label>
-              </div>
-            )}
 
             {/* Header for recommended replacements */}
             <div className="flex items-center justify-between pt-1">
