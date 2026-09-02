@@ -224,6 +224,22 @@ Return strict JSON:
             warning = f"Confirm that you actually utilized {missing_str} before adding this bullet to your resume."
             assumption = f"The candidate utilized {missing_str} in this {request.section_type}."
 
+        # Parse candidate resume bullets from evidence
+        parsed_bullets = []
+        raw_evidence = "\n".join(request.evidence_context)
+        current_sec = "Projects / Experience"
+        for line in raw_evidence.splitlines():
+            sline = line.strip()
+            if not sline:
+                continue
+            if any(h in sline.lower() for h in ["project", "experience", "work history", "employment", "role"]) and len(sline) < 60 and not sline.startswith(("-", "•", "*")):
+                current_sec = sline.strip("#:- ")
+                continue
+            if sline.startswith(("-", "•", "*", "–")) or (len(sline) > 30 and sline[0].isupper() and sline.endswith(".")):
+                clean_b = re.sub(r"^[-•*–\d\.]+\s*", "", sline).strip()
+                if len(clean_b) > 15:
+                    parsed_bullets.append({"section": current_sec, "bullet": clean_b})
+
         client = self._get_client()
         if client:
             try:
@@ -237,15 +253,15 @@ Rules:
 - Section type is "{request.section_type}". If "project", frame as a technical engineering project highlighting how these technologies work together. If "work_history", frame as production employment achievements.
 - Incorporate ALL requested target keywords naturally: {primary_kw}
 - Do NOT fabricate fake numbers (use placeholders like [X%], [N users] if metric is suggested).
-- Return 2-3 alternatives of the SAME selected bullet:
-  * Candidate A: ATS-focused (natural inclusion of target keywords)
-  * Candidate B: Concise (short, tight What+How+Result)
-  * Candidate C: Technical/result-focused (emphasizing implementation depth and impact)
-Return strict JSON:
+- IDENTIFY WHICH SPECIFIC PROJECT OR WORK EXPERIENCE ENTRY from the candidate's resume should be modified, which specific existing bullet point should be replaced/upgraded, and explain the strategic rationale.
+Return strict JSON with this exact schema:
 {{
   "status": "rewritten",
   "target_keyword": "{primary_kw}",
   "claim_status": "{claim_status.value}",
+  "target_project_name": "Exact or identified project/role name from resume (e.g. 'Project: Distributed Order Processing' or 'Role: Software Engineer')",
+  "original_bullet_to_replace": "The exact or closest existing bullet point in that project/role that should be replaced or augmented with these skills. If no existing bullet fits, output 'Add as a new bullet point under this project.'",
+  "replacement_rationale": "1-2 sentence explanation of why replacing/enhancing this specific bullet point maximizes the candidate's ATS match and technical impact.",
   "alternatives": [
     {{
       "variant_name": "Candidate A (ATS-focused)",
@@ -291,8 +307,9 @@ Return strict JSON:
 Target Job Title: {request.target_job_title}
 Section Type: {request.section_type}
 Target Keywords: {primary_kw}
-Existing Bullet (if modifying): {request.existing_bullet or 'None (creating new bullet point)'}
-Evidence Context: {json.dumps(request.evidence_context)}
+Existing Bullet (if user pre-selected one): {request.existing_bullet or 'Auto-detect best project bullet to replace from Candidate Resume'}
+Candidate Resume Context & Bullets:
+{raw_evidence[:2500]}
 Claim Status: {claim_status.value}
 """
                 resp = client.chat.completions.create(
@@ -318,6 +335,10 @@ Claim Status: {claim_status.value}
                     requires_confirmation=requires_confirmation,
                     warning=warning,
                     validation=data.get("validation", {}),
+                    target_project_name=data.get("target_project_name") or (parsed_bullets[0]["section"] if parsed_bullets else "Primary Technical Project"),
+                    original_bullet_to_replace=data.get("original_bullet_to_replace") or (parsed_bullets[0]["bullet"] if parsed_bullets else "Add as a new bullet point to your technical project."),
+                    replacement_rationale=data.get("replacement_rationale") or f"Upgrading this bullet incorporates {primary_kw} where core architecture is evaluated.",
+                    available_resume_bullets=parsed_bullets,
                 )
             except Exception as e:
                 print(f"[AIEngine] LLM bullet optimization failed: {e}. Using offline BulletSkill engine.")
@@ -392,6 +413,11 @@ Claim Status: {claim_status.value}
                 assumption="Requires user to supply supported metric for [X%]",
             )
 
+        # Fallback placement
+        fallback_proj = parsed_bullets[0]["section"] if parsed_bullets else f"Recommended {request.section_type.title()}: Core Systems & Applications"
+        fallback_bullet = request.existing_bullet if request.existing_bullet else (parsed_bullets[0]["bullet"] if parsed_bullets else "Add as a new bullet point to this project.")
+        fallback_rationale = f"Upgrading this {fallback_proj} bullet provides the strongest contextual placement for {kw} to satisfy employer ATS requirements."
+
         return BulletOptimizationResponse(
             status="rewritten" if is_verified else "suggested",
             target_keyword=kw,
@@ -408,6 +434,10 @@ Claim Status: {claim_status.value}
                 "what_how_result_present": True,
                 "keyword_stuffing": False,
             },
+            target_project_name=fallback_proj,
+            original_bullet_to_replace=fallback_bullet,
+            replacement_rationale=fallback_rationale,
+            available_resume_bullets=parsed_bullets,
         )
 
     # --- 4. Tailored Outreach Generator ---

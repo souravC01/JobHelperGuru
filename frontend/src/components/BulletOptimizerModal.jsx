@@ -13,6 +13,9 @@ import {
   FolderGit2,
   X,
   Plus,
+  ArrowRight,
+  Target,
+  FileEdit,
 } from 'lucide-react';
 import { optimizeBullet } from '../api/client';
 
@@ -34,6 +37,7 @@ export default function BulletOptimizerModal({
   const [error, setError] = useState('');
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [userConfirmed, setUserConfirmed] = useState(false);
+  const [showBulletPicker, setShowBulletPicker] = useState(false);
 
   useEffect(() => {
     let kwList = [];
@@ -45,6 +49,7 @@ export default function BulletOptimizerModal({
     setKeywords(kwList);
     setSectionType(initialSectionType || 'work_history');
     setResult(null);
+    setExistingBullet('');
   }, [initialKeyword, initialKeywords, initialSectionType, isOpen]);
 
   useEffect(() => {
@@ -68,7 +73,7 @@ export default function BulletOptimizerModal({
     }
   };
 
-  const handleGenerate = async (e) => {
+  const handleGenerate = async (e, overrideBullet = null) => {
     e?.preventDefault();
     if (keywords.length === 0) {
       setError('Please add at least one target skill to incorporate.');
@@ -78,9 +83,11 @@ export default function BulletOptimizerModal({
     setError('');
     setUserConfirmed(false);
 
+    const bulletToUse = overrideBullet !== null ? overrideBullet : existingBullet;
+
     try {
       const evidenceContext = selectedResume
-        ? [selectedResume.content.slice(0, 2000)]
+        ? [selectedResume.content.slice(0, 3000)]
         : [];
 
       const res = await optimizeBullet({
@@ -88,16 +95,25 @@ export default function BulletOptimizerModal({
         section_type: sectionType,
         target_keyword: keywords.join(', '),
         target_keywords: keywords,
-        existing_bullet: existingBullet.trim() || '',
+        existing_bullet: bulletToUse.trim(),
         evidence_context: evidenceContext,
       });
 
       setResult(res);
+      if (res.original_bullet_to_replace && !existingBullet) {
+        setExistingBullet(res.original_bullet_to_replace);
+      }
     } catch (err) {
       setError(err.message || 'Failed to generate optimized bullet points.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSelectDifferentBullet = (bulletObj) => {
+    setExistingBullet(bulletObj.bullet);
+    setShowBulletPicker(false);
+    handleGenerate(null, bulletObj.bullet);
   };
 
   const handleCopy = (text, idx) => {
@@ -108,7 +124,7 @@ export default function BulletOptimizerModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-      <div className="glass-panel bg-slate-900 border border-slate-700 w-full max-w-3xl my-8 p-6 rounded-2xl space-y-5 animate-fade-in shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div className="glass-panel bg-slate-900 border border-slate-700 w-full max-w-3xl my-8 p-6 rounded-2xl space-y-5 animate-fade-in shadow-2xl max-h-[92vh] overflow-y-auto">
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
@@ -119,7 +135,7 @@ export default function BulletOptimizerModal({
               <h3 className="text-lg font-bold text-white">
                 BulletSkill 2.0 Resume Optimizer
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-300">
                 Incorporate target skills into <strong>{sectionType === 'project' ? 'Project' : 'Work History'}</strong> bullet points
               </p>
             </div>
@@ -135,11 +151,11 @@ export default function BulletOptimizerModal({
         {/* Target Skills Pill Bank */}
         <div className="space-y-2 glass-card p-4">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-slate-300">
+            <label className="text-xs font-semibold text-slate-200">
               Target Skills to Incorporate ({keywords.length})
             </label>
             <span className="text-[11px] text-slate-400">
-              Targeting: <strong>{targetJobTitle}</strong>
+              Targeting: <strong className="text-slate-200">{targetJobTitle}</strong>
             </span>
           </div>
 
@@ -147,7 +163,7 @@ export default function BulletOptimizerModal({
             {keywords.map((kw, i) => (
               <span
                 key={i}
-                className="badge-pill bg-indigo-600/20 border border-indigo-500/40 text-indigo-200 text-xs py-1 px-2.5 flex items-center gap-1.5"
+                className="badge-pill bg-indigo-600/30 border border-indigo-500/50 text-indigo-200 text-xs py-1 px-2.5 flex items-center gap-1.5"
               >
                 <span className="font-semibold">{kw}</span>
                 <button
@@ -184,20 +200,18 @@ export default function BulletOptimizerModal({
           </div>
         </div>
 
-        {/* Controls: Section Type + Optional Existing Bullet */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              Resume Section
-            </label>
-            <div className="grid grid-cols-2 gap-2 bg-slate-950/60 p-1 rounded-xl border border-slate-800">
+        {/* Section Type Switcher */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-300">Resume Section:</span>
+            <div className="flex bg-slate-950/80 p-1 rounded-xl border border-slate-800 text-xs">
               <button
                 type="button"
                 onClick={() => {
                   setSectionType('project');
                   setResult(null);
                 }}
-                className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg font-semibold transition-all ${
                   sectionType === 'project'
                     ? 'bg-indigo-600 text-white shadow-md'
                     : 'text-slate-400 hover:text-white'
@@ -212,7 +226,7 @@ export default function BulletOptimizerModal({
                   setSectionType('work_history');
                   setResult(null);
                 }}
-                className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg font-semibold transition-all ${
                   sectionType === 'work_history'
                     ? 'bg-indigo-600 text-white shadow-md'
                     : 'text-slate-400 hover:text-white'
@@ -224,36 +238,20 @@ export default function BulletOptimizerModal({
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              Existing Bullet to Tweak (Optional)
-            </label>
-            <input
-              type="text"
-              placeholder="Leave blank to generate a fresh high-impact bullet..."
-              value={existingBullet}
-              onChange={(e) => setExistingBullet(e.target.value)}
-              className="input-field text-xs py-2"
-            />
-          </div>
-        </div>
-
-        {/* Generate / Regenerate Button */}
-        <div className="flex justify-end">
           <button
-            onClick={handleGenerate}
+            onClick={(e) => handleGenerate(e)}
             disabled={loading || keywords.length === 0}
-            className="btn-primary text-xs"
+            className="btn-primary text-xs self-end sm:self-auto"
           >
             {loading ? (
               <>
                 <Loader2 size={13} className="animate-spin" />
-                <span>Generating BulletSkill Candidates...</span>
+                <span>Analyzing & Optimizing...</span>
               </>
             ) : (
               <>
                 <Sparkles size={13} />
-                <span>Generate Bullet Candidates ({keywords.length} Skills)</span>
+                <span>Regenerate Recommendations</span>
               </>
             )}
           </button>
@@ -269,6 +267,81 @@ export default function BulletOptimizerModal({
         {/* Results Container */}
         {result && (
           <div className="space-y-4 pt-2 border-t border-slate-800">
+            {/* 🎯 Target Project & Bullet Point to Change Card */}
+            <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/60 to-slate-900 border border-indigo-500/40 space-y-3 shadow-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-300">
+                    <Target size={16} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-xs uppercase tracking-wide text-indigo-300">
+                      Target Project / Experience in Resume
+                    </h4>
+                    <span className="text-xs font-semibold text-white">
+                      {result.target_project_name || 'Primary Technical Project'}
+                    </span>
+                  </div>
+                </div>
+
+                {result.available_resume_bullets && result.available_resume_bullets.length > 1 && (
+                  <button
+                    onClick={() => setShowBulletPicker(!showBulletPicker)}
+                    className="text-[11px] text-cyan-400 hover:text-cyan-300 underline font-medium"
+                  >
+                    {showBulletPicker ? 'Hide Bullets' : 'Change Target Bullet'}
+                  </button>
+                )}
+              </div>
+
+              {/* Strategic Rationale */}
+              {result.replacement_rationale && (
+                <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
+                  <strong className="text-cyan-300">Strategy: </strong>
+                  {result.replacement_rationale}
+                </p>
+              )}
+
+              {/* Current Bullet in Resume to Replace */}
+              {result.original_bullet_to_replace && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-400 uppercase tracking-wider">
+                    <span>Current Bullet Point in Resume to Replace:</span>
+                  </div>
+                  <div className="font-mono text-xs text-rose-200 bg-rose-950/30 p-2.5 rounded-lg border border-rose-500/30 leading-relaxed">
+                    • {result.original_bullet_to_replace}
+                  </div>
+                </div>
+              )}
+
+              {/* Bullet Picker Dropdown if user wants to replace a different one */}
+              {showBulletPicker && result.available_resume_bullets && (
+                <div className="p-3 bg-slate-950/90 rounded-xl border border-slate-700 space-y-2 mt-2">
+                  <span className="text-xs font-semibold text-slate-300 block">
+                    Choose which existing bullet point from your resume to upgrade:
+                  </span>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {result.available_resume_bullets.map((bObj, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => handleSelectDifferentBullet(bObj)}
+                        className={`p-2 rounded-lg cursor-pointer transition-colors text-xs font-mono border ${
+                          existingBullet === bObj.bullet
+                            ? 'bg-indigo-950/60 border-indigo-500 text-indigo-200'
+                            : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        <span className="text-[10px] font-sans font-bold text-slate-500 uppercase block">
+                          {bObj.section}
+                        </span>
+                        • {bObj.bullet}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Verification Gate / Warning */}
             {result.requires_confirmation && (
               <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 space-y-2">
@@ -299,6 +372,17 @@ export default function BulletOptimizerModal({
               </div>
             )}
 
+            {/* Header for recommended replacements */}
+            <div className="flex items-center justify-between pt-1">
+              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles size={14} className="text-cyan-400" />
+                <span>Recommended Replacement Candidates (Choose 1)</span>
+              </h4>
+              <span className="text-[11px] text-slate-400 font-medium">
+                Framework: What + How + Result
+              </span>
+            </div>
+
             {/* Alternatives Grid */}
             <div className="space-y-3">
               {result.alternatives.map((alt, idx) => (
@@ -307,7 +391,7 @@ export default function BulletOptimizerModal({
                   className="glass-card p-4 space-y-2.5 border-slate-800 hover:border-slate-700 transition-all text-xs"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-indigo-400 tracking-wide uppercase text-[11px]">
+                    <span className="font-bold text-indigo-300 tracking-wide uppercase text-[11px]">
                       {alt.variant_name}
                     </span>
                     <button
@@ -329,21 +413,21 @@ export default function BulletOptimizerModal({
                   </div>
 
                   {/* Bullet text */}
-                  <p className="font-mono text-xs text-slate-100 bg-slate-950/70 p-3 rounded-lg border border-slate-800/90 leading-relaxed">
+                  <p className="font-mono text-xs text-emerald-300 bg-slate-950/80 p-3 rounded-lg border border-emerald-500/30 leading-relaxed">
                     • {alt.bullet}
                   </p>
 
                   {/* What / How / Result Breakdown */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-1 text-[11px] text-slate-400">
-                    <div className="bg-slate-900/50 p-2 rounded border border-slate-800/60">
+                    <div className="bg-slate-900/60 p-2 rounded border border-slate-800/60">
                       <strong className="text-indigo-300 block mb-0.5">WHAT (Keyword):</strong>
                       <span className="text-slate-200">{alt.what}</span>
                     </div>
-                    <div className="bg-slate-900/50 p-2 rounded border border-slate-800/60">
+                    <div className="bg-slate-900/60 p-2 rounded border border-slate-800/60">
                       <strong className="text-indigo-300 block mb-0.5">HOW (Action):</strong>
                       <span className="text-slate-200">{alt.how}</span>
                     </div>
-                    <div className="bg-slate-900/50 p-2 rounded border border-slate-800/60">
+                    <div className="bg-slate-900/60 p-2 rounded border border-slate-800/60">
                       <strong className="text-indigo-300 block mb-0.5">RESULT / REASON:</strong>
                       <span className="text-slate-200">{alt.result_or_reason}</span>
                     </div>

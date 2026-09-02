@@ -168,6 +168,10 @@ class BulletOptimizationResponse(BaseModel):
     requires_confirmation: bool = False
     warning: Optional[str] = None
     validation: Dict[str, bool] = Field(default_factory=dict)
+    target_project_name: Optional[str] = None
+    original_bullet_to_replace: Optional[str] = None
+    replacement_rationale: Optional[str] = None
+    available_resume_bullets: List[Dict[str, str]] = Field(default_factory=list)
 
 
 class OutreachResponse(BaseModel):

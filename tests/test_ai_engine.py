@@ -55,6 +55,11 @@ def test_bulletskill_multiple_keywords_incorporation():
         assert alt.how != ""
         assert alt.result_or_reason != ""
 
+    # Check project and bullet to replace detection
+    assert res.target_project_name is not None
+    assert res.original_bullet_to_replace is not None
+    assert res.replacement_rationale is not None
+
 def test_bulletskill_verified_claim():
     engine = AIEngine(api_key=None)
     req = BulletOptimizationRequest(
