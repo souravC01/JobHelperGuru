@@ -31,7 +31,15 @@ from backend.models import (
 
 class StorageService:
     def __init__(self, db_path: str = "data/tracker.db", database_url: Optional[str] = None, force_sqlite: bool = False):
-        raw_url = None if force_sqlite else (database_url if database_url is not None else os.getenv("DATABASE_URL"))
+        if force_sqlite:
+            raw_url = None
+        elif database_url is not None:
+            raw_url = database_url
+        elif db_path != "data/tracker.db" and os.environ.get("JOB_HELPER_DB") != db_path:
+            # Caller explicitly passed a custom db_path (e.g., in unit tests)
+            raw_url = None
+        else:
+            raw_url = os.getenv("DATABASE_URL")
         if raw_url and (raw_url.startswith("postgres://") or raw_url.startswith("postgresql://")):
             if not PSYCOPG2_AVAILABLE:
                 raise RuntimeError("psycopg2 is required to connect to PostgreSQL / Neon.")
