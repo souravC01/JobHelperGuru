@@ -191,9 +191,23 @@ export default function JobAnalyzer({
 
         {/* Error Alert */}
         {error && (
-          <div className="mt-3 p-3 bg-rose-500/10 border border-rose-500/25 rounded-xl flex items-center gap-2 text-rose-300 text-xs animate-fade-in">
-            <AlertCircle size={15} className="shrink-0" />
-            <span>{error}</span>
+          <div className="mt-3 p-3 bg-rose-500/10 border border-rose-500/25 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-rose-300 text-xs animate-fade-in">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={15} className="shrink-0 text-rose-400" />
+              <span>{error}</span>
+            </div>
+            {mode === 'url' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('text');
+                  setError('');
+                }}
+                className="shrink-0 px-3 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 font-medium text-[11px] border border-rose-500/30 transition-colors"
+              >
+                Switch to Paste Job Text &rarr;
+              </button>
+            )}
           </div>
         )}
       </div>
