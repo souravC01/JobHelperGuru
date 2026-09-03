@@ -28,6 +28,8 @@ from backend.models import (
     Settings,
     SettingsUpdate,
 )
+from backend.services.encryption import encrypt_value, decrypt_value
+
 
 
 class StorageService:
@@ -593,12 +595,18 @@ class StorageService:
         use_offline_raw = str(settings_map.get("use_offline_mode", str(defaults.use_offline_mode)))
         use_offline_mode = use_offline_raw.lower() in ["true", "1", "yes"]
 
+        raw_key = settings_map.get("api_key", defaults.api_key)
+        api_key = decrypt_value(raw_key) or ""
+
+        raw_saved = settings_map.get("saved_keys", defaults.saved_keys)
+        saved_keys = decrypt_value(raw_saved) or "[]"
+
         return Settings(
             api_base_url=settings_map.get("api_base_url", defaults.api_base_url),
-            api_key=settings_map.get("api_key", defaults.api_key),
+            api_key=api_key,
             model_name=settings_map.get("model_name", defaults.model_name),
             default_follow_up_days=int(settings_map.get("default_follow_up_days", defaults.default_follow_up_days)),
-            saved_keys=settings_map.get("saved_keys", defaults.saved_keys),
+            saved_keys=saved_keys,
             use_offline_mode=use_offline_mode,
         )
 
@@ -608,9 +616,15 @@ class StorageService:
         merged = current.model_dump()
         merged.update(update_data)
 
+        to_store = dict(merged)
+        if to_store.get("api_key"):
+            to_store["api_key"] = encrypt_value(to_store["api_key"])
+        if to_store.get("saved_keys"):
+            to_store["saved_keys"] = encrypt_value(to_store["saved_keys"])
+
         with self._get_cursor() as cursor:
             if user_id:
-                for key, val in merged.items():
+                for key, val in to_store.items():
                     cursor.execute(
                         self._format_sql(
                             "INSERT INTO user_settings (user_id, key, value) VALUES (?, ?, ?) "
@@ -619,7 +633,7 @@ class StorageService:
                         (user_id, key, str(val)),
                     )
             else:
-                for key, val in merged.items():
+                for key, val in to_store.items():
                     cursor.execute(
                         self._format_sql(
                             "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
