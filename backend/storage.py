@@ -13,9 +13,11 @@ load_dotenv(override=True)
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
+    from psycopg2.pool import ThreadedConnectionPool
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
+    ThreadedConnectionPool = None
 
 from backend.models import (
     User,
@@ -33,10 +35,10 @@ from backend.services.encryption import encrypt_value, decrypt_value
 
 
 class StorageService:
-    def __init__(self, db_path: str = "data/tracker.db", database_url: Optional[str] = None, force_sqlite: bool = False):
+    def __init__(self, db_path: str = "data/tracker.db", force_sqlite: bool = False, database_url: Optional[str] = None):
         if force_sqlite:
             raw_url = None
-        elif database_url is not None:
+        elif database_url:
             raw_url = database_url
         elif db_path != "data/tracker.db" and os.environ.get("JOB_HELPER_DB") != db_path:
             # Caller explicitly passed a custom db_path (e.g., in unit tests)
@@ -52,9 +54,15 @@ class StorageService:
             self.database_url = raw_url
             self.is_postgres = True
             self.db_path = None
+            try:
+                self.pool = ThreadedConnectionPool(minconn=1, maxconn=10, dsn=self.database_url)
+            except Exception as e:
+                print(f"[WARN] Failed to initialize ThreadedConnectionPool: {e}, falling back to direct connections.")
+                self.pool = None
         else:
             self.database_url = None
             self.is_postgres = False
+            self.pool = None
             self.db_path = db_path
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -63,13 +71,22 @@ class StorageService:
     @contextmanager
     def _get_cursor(self):
         if self.is_postgres:
-            conn = psycopg2.connect(self.database_url)
-            try:
-                with conn:
-                    with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                        yield cursor
-            finally:
-                conn.close()
+            if self.pool:
+                conn = self.pool.getconn()
+                try:
+                    with conn:
+                        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                            yield cursor
+                finally:
+                    self.pool.putconn(conn)
+            else:
+                conn = psycopg2.connect(self.database_url)
+                try:
+                    with conn:
+                        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                            yield cursor
+                finally:
+                    conn.close()
         else:
             conn = sqlite3.connect(self.db_path)
             conn.row_factory = sqlite3.Row
@@ -79,6 +96,14 @@ class StorageService:
                     yield cursor
             finally:
                 conn.close()
+
+    def close(self):
+        """Closes all connections in the pool if active."""
+        if self.is_postgres and self.pool:
+            try:
+                self.pool.closeall()
+            except Exception:
+                pass
 
     def _format_sql(self, sql: str) -> str:
         if self.is_postgres:

@@ -133,3 +133,15 @@ def test_deduplicate_applications_preserves_multi_tenant_isolation(tmp_path):
     assert len(storage.get_applications(user_id="user-beta")) == 1
 
 
+def test_storage_connection_pool_lifecycle(tmp_path):
+    db_path = str(tmp_path / "pool_test.db")
+    storage = StorageService(db_path=db_path, force_sqlite=True)
+    with storage._get_cursor() as cur:
+        cur.execute("SELECT 1")
+        row = cur.fetchone()
+        assert row[0] == 1
+    # Test close is safe
+    storage.close()
+
+
+
