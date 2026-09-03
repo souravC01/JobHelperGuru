@@ -45,3 +45,23 @@ def test_auth_register_login_and_me():
         json={"email": test_email, "password": "WrongPassword!"},
     )
     assert res_bad.status_code == 401
+
+
+def test_google_auth_rejects_mismatched_audience(monkeypatch):
+    import json
+    from unittest.mock import patch, MagicMock
+
+    fake_token_data = {
+        "email": "attacker@example.com",
+        "name": "Attacker",
+        "aud": "mismatched-client-id.apps.googleusercontent.com",
+    }
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = json.dumps(fake_token_data).encode("utf-8")
+    mock_resp.__enter__.return_value = mock_resp
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        res = client.post("/api/auth/google", json={"credential": "fake-google-jwt"})
+        assert res.status_code == 401
+        assert "audience" in res.json()["detail"].lower()
+

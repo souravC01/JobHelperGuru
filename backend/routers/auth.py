@@ -150,6 +150,19 @@ def google_auth(req: GoogleAuthRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Google token verification failed: {e}")
 
+    # Verify audience matches our Google OAuth Client ID
+    expected_aud = (
+        os.getenv("GOOGLE_CLIENT_ID")
+        or os.getenv("VITE_GOOGLE_CLIENT_ID")
+        or "999060759573-45b5m9cn9v7g6birnj9d8j65cqn72mfq.apps.googleusercontent.com"
+    ).strip()
+    token_aud = token_data.get("aud", "").strip()
+    if expected_aud and token_aud != expected_aud:
+        raise HTTPException(
+            status_code=401,
+            detail="Google token audience mismatch. Token was not issued for this application.",
+        )
+
     email = token_data.get("email", "").strip().lower()
     if not email:
         raise HTTPException(status_code=400, detail="Google token does not contain a verified email.")
