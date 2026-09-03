@@ -277,12 +277,12 @@
 - Consumes: Applications database, status pipeline, Excel export.
 - Produces: Table View with 7 columns, Kanban board with 5 columns, Follow-up urgency banner.
 
-- [ ] **Step 1: Refactor `FollowUpBanner.jsx`**
+- [x] **Step 1: Refactor `FollowUpBanner.jsx`**
   - White container with 1px border `#e0e0e0`, rounded-lg.
   - Rust alert badge: `bg-[#b24020]/10 text-[#b24020] border border-[#b24020]/30 px-2 py-0.5 rounded-full font-bold text-xs`.
   - Text: `text-sm font-medium text-[#000000]`.
 
-- [ ] **Step 2: Refactor Controls & Action Bar in `ApplicationsTracker.jsx`**
+- [x] **Step 2: Refactor Controls & Action Bar in `ApplicationsTracker.jsx`**
   - View switcher:
     - Table View button vs. Kanban Board button.
     - Active view: `bg-[#0a66c2] text-white rounded-full px-4 py-1.5 font-semibold text-xs`.
@@ -291,7 +291,7 @@
   - Primary button: "+ Add Application" (`btn-primary-corporate`).
   - Excel button: "Export to Excel (.xlsx)" (`btn-secondary-corporate`).
 
-- [ ] **Step 3: Implement High-Density Data Table View**
+- [x] **Step 3: Implement High-Density Data Table View**
   - Clean `<table>` with white background `#ffffff` and `border border-[#e0e0e0] rounded-lg overflow-hidden`.
   - Header `<thead>`: `bg-[#f3f6f8] text-[#000000] font-semibold text-xs border-b border-[#e0e0e0] py-3 px-4`.
   - Rows `<tr>`: `border-b border-[#e0e0e0] hover:bg-[#f9fafb] transition-colors py-3 px-4 text-sm text-[#000000]`.
@@ -303,16 +303,16 @@
   - Follow-up date cell: Highlight "Today" and "Overdue" with rust badge (`bg-[#b24020]/10 text-[#b24020]`).
   - Table Footer: Left shows item counts and pipeline valuation; right shows pagination buttons.
 
-- [ ] **Step 4: Refactor `KanbanBoard.jsx`**
+- [x] **Step 4: Refactor `KanbanBoard.jsx`**
   - 5 Columns: `Wishlist`, `Applied`, `Interviewing`, `Offer Received`, `Archived`.
   - Column background: `#f3f6f8` with 1px border `#e0e0e0`, rounded-lg.
   - Kanban Cards: Pure white `#ffffff`, 1px border `#e0e0e0`, rounded-lg, 0px shadow.
 
-- [ ] **Step 5: Run Vite build**
+- [x] **Step 5: Run Vite build**
   Command: `cd frontend && npm run build`
   Expected: Build succeeds with 0 errors.
 
-- [ ] **Step 6: Commit changes**
+- [x] **Step 6: Commit changes**
   ```bash
   git add frontend/src/components/ApplicationsTracker.jsx frontend/src/components/KanbanBoard.jsx frontend/src/components/FollowUpBanner.jsx
   git commit -m "feat(ui): implement LinkedIn Corporate Modern Table View and Kanban Board"
