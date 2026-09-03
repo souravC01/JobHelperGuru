@@ -5,15 +5,23 @@ from typing import Optional
 from cryptography.fernet import Fernet, InvalidToken
 
 
-def _get_fernet_key() -> bytes:
+_cached_fernet: Optional[Fernet] = None
+_cached_key_fingerprint: Optional[str] = None
+
+
+def _get_fernet() -> Fernet:
+    global _cached_fernet, _cached_key_fingerprint
     raw = (
         os.environ.get("SETTINGS_ENCRYPTION_KEY")
         or os.environ.get("SECRET_KEY")
         or "jobhelperguru-default-secret-salt-2026"
     )
-    # Generate 32-byte digest via SHA-256 and base64 urlsafe encode for Fernet
-    digest = hashlib.sha256(raw.strip().encode("utf-8")).digest()
-    return base64.urlsafe_b64encode(digest)
+    if _cached_fernet is None or _cached_key_fingerprint != raw:
+        digest = hashlib.sha256(raw.strip().encode("utf-8")).digest()
+        key = base64.urlsafe_b64encode(digest)
+        _cached_fernet = Fernet(key)
+        _cached_key_fingerprint = raw
+    return _cached_fernet
 
 
 def encrypt_value(value: Optional[str]) -> Optional[str]:
@@ -23,8 +31,7 @@ def encrypt_value(value: Optional[str]) -> Optional[str]:
     """
     if not value or not value.strip():
         return value
-    fernet = Fernet(_get_fernet_key())
-    return fernet.encrypt(value.encode("utf-8")).decode("utf-8")
+    return _get_fernet().encrypt(value.encode("utf-8")).decode("utf-8")
 
 
 def decrypt_value(value: Optional[str]) -> Optional[str]:
@@ -35,8 +42,8 @@ def decrypt_value(value: Optional[str]) -> Optional[str]:
     if not value or not value.strip():
         return value
     try:
-        fernet = Fernet(_get_fernet_key())
-        return fernet.decrypt(value.encode("utf-8")).decode("utf-8")
+        return _get_fernet().decrypt(value.encode("utf-8")).decode("utf-8")
     except (InvalidToken, Exception):
         # Fallback for unencrypted legacy keys
         return value
+
