@@ -187,14 +187,31 @@ def add_resume(req: ResumeCreate, current_user: User = Depends(get_current_user)
     return storage.add_resume(name=req.name, content=req.content, file_key=req.file_key, user_id=current_user.id)
 
 
+ALLOWED_RESUME_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".rtf"}
+MAX_RESUME_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
 @app.post("/api/resumes/upload", response_model=Resume)
-async def upload_resume_file(
+def upload_resume_file(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
 ):
     try:
-        content_bytes = await file.read()
+        ext = Path(file.filename).suffix.lower()
+        if ext not in ALLOWED_RESUME_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type '{ext}'. Allowed formats: .pdf, .docx, .doc, .txt, .rtf",
+            )
+
+        content_bytes = file.file.read(MAX_RESUME_SIZE_BYTES + 1)
+        if len(content_bytes) > MAX_RESUME_SIZE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail="File exceeds maximum allowed size of 10MB.",
+            )
+
         extracted_text = extract_text_from_file(content_bytes, file.filename)
         if not extracted_text.strip():
             raise HTTPException(status_code=400, detail="No readable text could be extracted from this document.")
@@ -212,10 +229,13 @@ async def upload_resume_file(
         if file_key:
             resume.download_url = object_storage.generate_download_url(file_key)
         return resume
+    except HTTPException:
+        raise
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+
 
 
 @app.delete("/api/resumes/{resume_id}")

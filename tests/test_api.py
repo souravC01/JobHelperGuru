@@ -106,6 +106,25 @@ def test_upload_resume_file_endpoint():
     client.delete(f"/api/resumes/{res_data['id']}", headers=headers)
 
 
+def test_upload_rejects_disallowed_extension():
+    headers = get_auth_headers()
+    files = {"file": ("malicious.exe", b"\x4d\x5a\x90\x00", "application/x-msdownload")}
+    res = client.post("/api/resumes/upload", files=files, headers=headers)
+    assert res.status_code == 400
+    assert "unsupported file type" in res.json()["detail"].lower()
+
+
+def test_upload_rejects_oversized_file():
+    headers = get_auth_headers()
+    # 10MB + 1KB dummy content
+    large_bytes = b"0" * (10 * 1024 * 1024 + 1024)
+    files = {"file": ("huge_resume.pdf", large_bytes, "application/pdf")}
+    res = client.post("/api/resumes/upload", files=files, headers=headers)
+    assert res.status_code == 413
+    assert "maximum allowed size" in res.json()["detail"].lower()
+
+
+
 def test_applications_crud_and_excel_export():
     headers = get_auth_headers()
     # 1. Create Application
