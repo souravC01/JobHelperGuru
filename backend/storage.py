@@ -275,6 +275,7 @@ class StorageService:
             api_key=settings_map.get("api_key", defaults.api_key),
             model_name=settings_map.get("model_name", defaults.model_name),
             default_follow_up_days=int(settings_map.get("default_follow_up_days", defaults.default_follow_up_days)),
+            saved_keys=settings_map.get("saved_keys", defaults.saved_keys),
         )
 
     def update_settings(self, updates: SettingsUpdate) -> Settings:

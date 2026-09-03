@@ -76,10 +76,11 @@ class ResumeCreate(BaseModel):
 
 
 class Settings(BaseModel):
-    api_base_url: str = "https://integrate.api.nvidia.com/v1"
+    api_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: str = ""
-    model_name: str = "nvidia/nemotron-4-340b-instruct"
+    model_name: str = "gemini-2.0-flash"
     default_follow_up_days: int = 7
+    saved_keys: Optional[str] = "[]"
 
 
 class SettingsUpdate(BaseModel):
@@ -87,6 +88,7 @@ class SettingsUpdate(BaseModel):
     api_key: Optional[str] = None
     model_name: Optional[str] = None
     default_follow_up_days: Optional[int] = None
+    saved_keys: Optional[str] = None
 
 
 class ScrapedJob(BaseModel):
