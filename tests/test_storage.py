@@ -41,10 +41,15 @@ def test_storage_crud(tmp_path):
     assert updated.notes == "Got screen call"
     
     # Settings
-    storage.update_settings(SettingsUpdate(api_base_url="https://api.minimax.chat/v1", model_name="minimax-01"))
+    storage.update_settings(SettingsUpdate(api_base_url="https://api.minimax.chat/v1", model_name="minimax-01", use_offline_mode=True))
     settings = storage.get_settings()
     assert settings.api_base_url == "https://api.minimax.chat/v1"
     assert settings.model_name == "minimax-01"
+    assert settings.use_offline_mode is True
+
+    storage.update_settings(SettingsUpdate(use_offline_mode=False))
+    settings = storage.get_settings()
+    assert settings.use_offline_mode is False
 
     # Delete
     assert storage.delete_application(app.id) is True

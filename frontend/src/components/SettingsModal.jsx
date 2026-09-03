@@ -12,8 +12,8 @@ import {
   Edit2,
   PlusCircle,
   ShieldCheck,
-  CheckCircle2,
   Tag,
+  Zap,
 } from 'lucide-react';
 import { getSettings, updateSettings, testAISettings } from '../api/client';
 
@@ -25,9 +25,10 @@ export default function SettingsModal({ isOpen, onClose }) {
   const [apiKey, setApiKey] = useState('');
   const [editingId, setEditingId] = useState(null);
 
-  // Saved Keys List
+  // Saved Keys List & Offline Status
   const [savedKeys, setSavedKeys] = useState([]);
   const [activeKeyId, setActiveKeyId] = useState(null);
+  const [isOfflineActive, setIsOfflineActive] = useState(false);
 
   // UI States
   const [showKey, setShowKey] = useState(false);
@@ -46,6 +47,8 @@ export default function SettingsModal({ isOpen, onClose }) {
     try {
       const data = await getSettings();
       let parsedSavedKeys = [];
+
+      setIsOfflineActive(Boolean(data.use_offline_mode));
 
       if (data.saved_keys) {
         try {
@@ -83,21 +86,25 @@ export default function SettingsModal({ isOpen, onClose }) {
       setSavedKeys(parsedSavedKeys);
 
       // Find active key
-      const activeMatch = parsedSavedKeys.find(
-        (k) =>
-          k.api_base_url === data.api_base_url &&
-          k.model_name === data.model_name &&
-          k.api_key === data.api_key
-      );
+      if (!data.use_offline_mode) {
+        const activeMatch = parsedSavedKeys.find(
+          (k) =>
+            k.api_base_url === data.api_base_url &&
+            k.model_name === data.model_name &&
+            k.api_key === data.api_key
+        );
 
-      if (activeMatch) {
-        setActiveKeyId(activeMatch.id);
-      } else if (parsedSavedKeys.length > 0) {
-        setActiveKeyId(parsedSavedKeys[0].id);
+        if (activeMatch) {
+          setActiveKeyId(activeMatch.id);
+        } else if (parsedSavedKeys.length > 0) {
+          setActiveKeyId(parsedSavedKeys[0].id);
+        }
+      } else {
+        setActiveKeyId(null);
       }
 
       // Populate form with current active or first profile
-      const target = activeMatch || parsedSavedKeys[0];
+      const target = parsedSavedKeys.find((k) => k.id === activeKeyId) || parsedSavedKeys[0];
       if (target) {
         setKeyName(target.name || '');
         setBaseUrl(target.api_base_url || '');
@@ -124,6 +131,25 @@ export default function SettingsModal({ isOpen, onClose }) {
     return `${key.slice(0, 4)}••••••••${key.slice(-4)}`;
   };
 
+  const handleSwitchToOffline = async () => {
+    setSaving(true);
+    try {
+      await updateSettings({
+        use_offline_mode: true,
+      });
+      setIsOfflineActive(true);
+      setActiveKeyId(null);
+      setTestResult({
+        success: true,
+        message: 'Active engine switched to Built-in Offline Heuristic. Zero API keys used.',
+      });
+    } catch (err) {
+      alert('Failed to switch to offline engine: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleActivateKey = async (profile) => {
     setSaving(true);
     try {
@@ -131,16 +157,21 @@ export default function SettingsModal({ isOpen, onClose }) {
         api_base_url: profile.api_base_url.trim(),
         api_key: profile.api_key.trim(),
         model_name: profile.model_name.trim(),
+        use_offline_mode: false,
         saved_keys: JSON.stringify(savedKeys),
       });
 
+      setIsOfflineActive(false);
       setActiveKeyId(profile.id);
       setKeyName(profile.name);
       setBaseUrl(profile.api_base_url);
       setModelName(profile.model_name);
       setApiKey(profile.api_key);
       setEditingId(null);
-      setTestResult({ success: true, message: `Active provider switched to ${profile.name} (${profile.model_name})!` });
+      setTestResult({
+        success: true,
+        message: `Active provider switched to ${profile.name} (${profile.model_name})!`,
+      });
     } catch (err) {
       alert('Failed to activate key: ' + err.message);
     } finally {
@@ -229,16 +260,18 @@ export default function SettingsModal({ isOpen, onClose }) {
     localStorage.setItem('jobhelperguru_saved_keys', JSON.stringify(updatedList));
 
     try {
-      // Save to backend and set as active
+      // Save to backend, disable offline mode, and set as active
       await updateSettings({
         api_base_url: trimmedUrl,
         api_key: trimmedKey,
         model_name: trimmedModel,
+        use_offline_mode: false,
         saved_keys: JSON.stringify(updatedList),
       });
 
       const activeId = editingId || updatedList[0].id;
       setActiveKeyId(activeId);
+      setIsOfflineActive(false);
       setSaveSuccess(true);
       setEditingId(null);
       setTimeout(() => setSaveSuccess(false), 2000);
@@ -281,9 +314,9 @@ export default function SettingsModal({ isOpen, onClose }) {
               <SettingsIcon size={20} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">AI API Keys & Configuration</h3>
+              <h3 className="text-lg font-bold text-white">AI Engine & API Keys</h3>
               <p className="text-xs text-slate-300">
-                Save and manage your custom API Endpoint URLs, Model Names, and Keys
+                Choose a saved API key or switch to the built-in offline engine
               </p>
             </div>
           </div>
@@ -295,12 +328,53 @@ export default function SettingsModal({ isOpen, onClose }) {
           </button>
         </div>
 
-        {/* Saved Keys Section */}
+        {/* 1. Built-in Offline Heuristic Engine Option */}
+        <div
+          className={`p-3.5 rounded-xl border transition-all text-xs flex items-center justify-between gap-3 ${
+            isOfflineActive
+              ? 'bg-emerald-950/40 border-emerald-500/80 shadow-md shadow-emerald-950/40'
+              : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+          }`}
+        >
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex items-center gap-2">
+              <Zap size={16} className={isOfflineActive ? 'text-emerald-400' : 'text-slate-400'} />
+              <span className="font-bold text-slate-100 text-sm">Built-in Offline Heuristic Engine</span>
+              {isOfflineActive && (
+                <span className="badge-pill bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] py-0.2 px-1.5 font-bold flex items-center gap-1">
+                  <Check size={10} className="stroke-[3]" />
+                  <span>Active</span>
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Zero API keys required, zero network dependencies. Runs locally on your machine with high accuracy rule-based ATS matching and BulletSkill templates.
+            </p>
+          </div>
+
+          {!isOfflineActive ? (
+            <button
+              type="button"
+              onClick={handleSwitchToOffline}
+              disabled={saving}
+              className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold shrink-0 transition-all shadow-sm flex items-center gap-1.5"
+            >
+              <Zap size={13} />
+              <span>Use Offline</span>
+            </button>
+          ) : (
+            <div className="text-[11px] font-bold text-emerald-400 shrink-0">
+              Currently Selected ✓
+            </div>
+          )}
+        </div>
+
+        {/* 2. Saved Keys Section */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
               <ShieldCheck size={14} className="text-indigo-400" />
-              <span>Saved Keys ({savedKeys.length})</span>
+              <span>Saved API Keys ({savedKeys.length})</span>
             </label>
             {editingId && (
               <button
@@ -321,7 +395,7 @@ export default function SettingsModal({ isOpen, onClose }) {
           ) : (
             <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
               {savedKeys.map((item) => {
-                const isActive = activeKeyId === item.id;
+                const isActive = !isOfflineActive && activeKeyId === item.id;
                 const isBeingEdited = editingId === item.id;
 
                 return (
@@ -400,7 +474,7 @@ export default function SettingsModal({ isOpen, onClose }) {
           )}
         </div>
 
-        {/* Input Form */}
+        {/* 3. Input Form */}
         <form onSubmit={handleSaveForm} className="space-y-4 pt-3 border-t border-slate-800">
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">

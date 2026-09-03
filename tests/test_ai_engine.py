@@ -145,3 +145,50 @@ def test_generate_outreach_offline():
     assert "Stripe" in outreach.subject_line or "Software Engineer" in outreach.subject_line
     assert len(outreach.cover_letter_pitch) > 100
     assert len(outreach.connection_note) > 30
+
+def test_ai_engine_raises_error_when_api_fails_instead_of_silent_fallback(monkeypatch):
+    engine = AIEngine(api_base_url="https://api.openai.com/v1", api_key="sk-test-fail-key", model_name="gpt-4o-mini")
+
+    class MockFailingCompletions:
+        def create(self, *args, **kwargs):
+            raise ConnectionError("Upstream AI Provider Quota Exceeded (429)")
+
+    class MockClient:
+        chat = type("Chat", (), {"completions": MockFailingCompletions()})()
+
+    monkeypatch.setattr(engine, "_get_client", lambda: MockClient())
+
+    # 1. analyze_job must raise RuntimeError, NOT silently return heuristic
+    with pytest.raises(RuntimeError) as excinfo:
+        engine.analyze_job("Software Engineer with Python experience")
+    assert "AI API Provider Failed" in str(excinfo.value)
+    assert "Quota Exceeded" in str(excinfo.value)
+
+    # 2. rank_resumes must raise RuntimeError
+    with pytest.raises(RuntimeError) as excinfo:
+        engine.rank_resumes(
+            [Resume(id="1", name="Test", content="Python")],
+            JobAnalysisResult(title="SE", company="Co", required_skills=["Python"])
+        )
+    assert "AI API Provider Failed" in str(excinfo.value)
+
+    # 3. optimize_bullet must raise RuntimeError
+    with pytest.raises(RuntimeError) as excinfo:
+        engine.optimize_bullet(
+            BulletOptimizationRequest(
+                target_job_title="Engineer",
+                section_type="project",
+                target_keyword="Python",
+                existing_bullet="Built backend.",
+            )
+        )
+    assert "AI API Provider Failed" in str(excinfo.value)
+
+def test_ai_engine_offline_heuristic_mode_bypasses_api():
+    # When model_name is "offline-heuristic", it must not initialize an online client
+    engine = AIEngine(api_base_url="https://invalid.endpoint", api_key="sk-some-key", model_name="offline-heuristic")
+    assert engine._get_client() is None
+
+    # Must succeed cleanly offline
+    job = engine.analyze_job("Software Engineer at Google. Requirements: Python, Go, Docker.")
+    assert "Python" in job.required_skills or "Python" in job.tech_stack

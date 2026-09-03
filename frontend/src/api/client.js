@@ -1,5 +1,32 @@
 const API_BASE = '/api';
 
+async function parseApiError(res, defaultMsg) {
+  let errorMsg = defaultMsg;
+  let canSwitchOffline = res.status === 502;
+  let modelName = '';
+
+  try {
+    const data = await res.json();
+    if (data?.detail) {
+      if (typeof data.detail === 'object') {
+        errorMsg = data.detail.message || defaultMsg;
+        canSwitchOffline = data.detail.can_switch_offline ?? canSwitchOffline;
+        modelName = data.detail.model_name || '';
+      } else {
+        errorMsg = data.detail;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  const err = new Error(errorMsg);
+  err.canSwitchOffline = canSwitchOffline;
+  err.modelName = modelName;
+  err.status = res.status;
+  return err;
+}
+
 export async function fetchHealth() {
   const res = await fetch(`${API_BASE}/health`);
   return res.json();
@@ -12,8 +39,7 @@ export async function analyzeJob({ url, text }) {
     body: JSON.stringify({ url, text }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Analysis failed' }));
-    throw new Error(err.detail || 'Failed to analyze job');
+    throw await parseApiError(res, 'Failed to analyze job');
   }
   return res.json();
 }
@@ -64,9 +90,7 @@ export async function matchResumes(payload) {
     body: JSON.stringify({ job, resumes }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    console.error('Match error details:', err);
-    throw new Error(err.detail || 'Failed to rank resumes');
+    throw await parseApiError(res, 'Failed to rank resumes');
   }
   return res.json();
 }
@@ -84,7 +108,9 @@ export async function optimizeBullet({ target_job_title, section_type, target_ke
       evidence_context,
     }),
   });
-  if (!res.ok) throw new Error('Failed to optimize bullet');
+  if (!res.ok) {
+    throw await parseApiError(res, 'Failed to optimize bullet');
+  }
   return res.json();
 }
 
@@ -94,7 +120,9 @@ export async function generateOutreach({ job, resume_id, resume_content }) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ job, resume_id, resume_content }),
   });
-  if (!res.ok) throw new Error('Failed to generate outreach');
+  if (!res.ok) {
+    throw await parseApiError(res, 'Failed to generate outreach');
+  }
   return res.json();
 }
 

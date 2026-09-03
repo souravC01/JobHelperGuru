@@ -45,6 +45,12 @@ excel_exporter = ExcelExporter()
 
 def get_ai_engine() -> AIEngine:
     settings = storage.get_settings()
+    if settings.use_offline_mode:
+        return AIEngine(
+            api_base_url=settings.api_base_url,
+            api_key="",
+            model_name="offline-heuristic",
+        )
     return AIEngine(
         api_base_url=settings.api_base_url,
         api_key=settings.api_key,
@@ -89,7 +95,18 @@ def analyze_job(req: JobAnalyzeRequest):
         job_text = parsed.raw_text
 
     ai = get_ai_engine()
-    analysis = ai.analyze_job(job_text, source_url=source_url)
+    try:
+        analysis = ai.analyze_job(job_text, source_url=source_url)
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": str(e),
+                "can_switch_offline": True,
+                "error_type": "ai_api_error",
+                "model_name": ai.model_name,
+            },
+        )
 
     # Prefer scraped title/company if AI/heuristic couldn't detect specific ones
     if (not analysis.title or analysis.title in ["Open Position", "Detected Role"]) and scraped_title and scraped_title not in ["Open Position", "Detected Role", "Unknown Role"]:
@@ -170,14 +187,36 @@ class MatchResumesRequest(BaseModel):
 def match_resumes(req: MatchResumesRequest):
     resumes = req.resumes or storage.get_resumes()
     ai = get_ai_engine()
-    return ai.rank_resumes(resumes, req.job)
+    try:
+        return ai.rank_resumes(resumes, req.job)
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": str(e),
+                "can_switch_offline": True,
+                "error_type": "ai_api_error",
+                "model_name": ai.model_name,
+            },
+        )
 
 
 # --- Bulletskill Optimizer ---
 @app.post("/api/resumes/optimize-bullet", response_model=BulletOptimizationResponse)
 def optimize_bullet(req: BulletOptimizationRequest):
     ai = get_ai_engine()
-    return ai.optimize_bullet(req)
+    try:
+        return ai.optimize_bullet(req)
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": str(e),
+                "can_switch_offline": True,
+                "error_type": "ai_api_error",
+                "model_name": ai.model_name,
+            },
+        )
 
 
 # --- Tailored Outreach Pitch ---
@@ -199,7 +238,18 @@ def generate_outreach(req: OutreachRequest):
         resume = resumes[0] if resumes else Resume(id="temp", name="Candidate", content="")
 
     ai = get_ai_engine()
-    return ai.generate_outreach(req.job, resume)
+    try:
+        return ai.generate_outreach(req.job, resume)
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": str(e),
+                "can_switch_offline": True,
+                "error_type": "ai_api_error",
+                "model_name": ai.model_name,
+            },
+        )
 
 
 # --- Applications Tracker CRUD ---

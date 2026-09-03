@@ -25,6 +25,7 @@ export default function ResumeFitRanker({
   onRemoveAdoptedSkill = null,
   onSelectKeywordForOptimization,
   onBestResumeSelected,
+  onAiError,
 }) {
   const [rankedResumes, setRankedResumes] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -47,6 +48,9 @@ export default function ResumeFitRanker({
       }
     } catch (err) {
       console.error('Failed to rank resumes:', err);
+      if (onAiError && (err.canSwitchOffline || err.status === 502)) {
+        onAiError(err, () => runRanking());
+      }
     } finally {
       setLoading(false);
     }

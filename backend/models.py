@@ -81,6 +81,7 @@ class Settings(BaseModel):
     model_name: str = "gemini-2.0-flash"
     default_follow_up_days: int = 7
     saved_keys: Optional[str] = "[]"
+    use_offline_mode: bool = False
 
 
 class SettingsUpdate(BaseModel):
@@ -89,6 +90,7 @@ class SettingsUpdate(BaseModel):
     model_name: Optional[str] = None
     default_follow_up_days: Optional[int] = None
     saved_keys: Optional[str] = None
+    use_offline_mode: Optional[bool] = None
 
 
 class ScrapedJob(BaseModel):

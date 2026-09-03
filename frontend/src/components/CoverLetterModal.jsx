@@ -7,6 +7,7 @@ export default function CoverLetterModal({
   onClose,
   currentJob,
   selectedResume,
+  onAiError,
 }) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
@@ -34,6 +35,9 @@ export default function CoverLetterModal({
       setData(res);
     } catch (err) {
       setError(err.message || 'Failed to generate tailored outreach.');
+      if (onAiError && (err.canSwitchOffline || err.status === 502)) {
+        onAiError(err, () => handleGenerate());
+      }
     } finally {
       setLoading(false);
     }

@@ -17,6 +17,7 @@ import ApplicationsTracker from './components/ApplicationsTracker';
 import BulletOptimizerModal from './components/BulletOptimizerModal';
 import CoverLetterModal from './components/CoverLetterModal';
 import SettingsModal from './components/SettingsModal';
+import OfflineSwitchModal from './components/OfflineSwitchModal';
 import { getResumes, getApplications, getExcelExportUrl } from './api/client';
 
 export default function App() {
@@ -35,6 +36,23 @@ export default function App() {
   const [selectedResumeForJob, setSelectedResumeForJob] = useState(null);
   // Potentially added skills: { [resumeId]: string[] }
   const [adoptedSkillsMap, setAdoptedSkillsMap] = useState({});
+
+  // Offline / AI Error Popup State
+  const [aiErrorState, setAiErrorState] = useState({
+    isOpen: false,
+    errorMsg: '',
+    modelName: '',
+    retryAction: null,
+  });
+
+  const handleAiError = (err, retryFn = null) => {
+    setAiErrorState({
+      isOpen: true,
+      errorMsg: err.message || 'The configured AI model failed to respond.',
+      modelName: err.modelName || '',
+      retryAction: retryFn,
+    });
+  };
 
   const handleAdoptSkills = (skills, resumeId = null) => {
     const targetId = resumeId || selectedResumeForJob?.id;
@@ -259,6 +277,7 @@ export default function App() {
               onOpenBulletOptimizer={(kw) => handleOpenOptimizer(kw)}
               onOpenCoverLetter={() => setIsCoverLetterOpen(true)}
               onApplicationSaved={handleApplicationSaved}
+              onAiError={handleAiError}
             />
 
             {/* Resume Best Fit Ranker */}
@@ -277,6 +296,7 @@ export default function App() {
                   const matchingResume = resumes.find((r) => r.id === best.resume_id);
                   if (matchingResume) setSelectedResumeForJob(matchingResume);
                 }}
+                onAiError={handleAiError}
               />
             )}
           </div>
@@ -302,6 +322,7 @@ export default function App() {
         targetJobTitle={currentJob?.title || 'Software Engineer'}
         selectedResume={selectedResumeForJob}
         onMarkSkillsAdded={(skills) => handleAdoptSkills(skills, selectedResumeForJob?.id)}
+        onAiError={handleAiError}
       />
 
       <CoverLetterModal
@@ -309,11 +330,25 @@ export default function App() {
         onClose={() => setIsCoverLetterOpen(false)}
         currentJob={currentJob}
         selectedResume={selectedResumeForJob}
+        onAiError={handleAiError}
       />
 
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+      />
+
+      <OfflineSwitchModal
+        isOpen={aiErrorState.isOpen}
+        onClose={() => setAiErrorState((prev) => ({ ...prev, isOpen: false }))}
+        errorMessage={aiErrorState.errorMsg}
+        modelName={aiErrorState.modelName}
+        onSwitchToOffline={async () => {
+          if (aiErrorState.retryAction) {
+            await aiErrorState.retryAction();
+          }
+        }}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {/* Footer */}

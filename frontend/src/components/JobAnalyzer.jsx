@@ -25,6 +25,7 @@ export default function JobAnalyzer({
   onOpenBulletOptimizer,
   onOpenCoverLetter,
   onApplicationSaved,
+  onAiError,
 }) {
   const [mode, setMode] = useState('url'); // 'url' or 'text'
   const [urlInput, setUrlInput] = useState('');
@@ -58,6 +59,9 @@ export default function JobAnalyzer({
       }
     } catch (err) {
       setError(err.message || 'Error parsing job description.');
+      if (onAiError && (err.canSwitchOffline || err.status === 502)) {
+        onAiError(err, () => handleAnalyze());
+      }
     } finally {
       setLoading(false);
     }

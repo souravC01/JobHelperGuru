@@ -30,12 +30,12 @@ class AIEngine:
         self.heuristic = HeuristicParser()
 
     def _get_client(self) -> Optional[OpenAI]:
-        if not self.api_key:
+        if not self.api_key or not self.api_key.strip() or self.model_name in ["offline-heuristic", "offline"]:
             return None
         try:
             return OpenAI(base_url=self.api_base_url, api_key=self.api_key, timeout=30.0)
-        except Exception:
-            return None
+        except Exception as e:
+            raise RuntimeError(f"Could not initialize AI Client for {self.model_name}: {str(e)}") from e
 
     # --- 1. Job Analysis ---
     def analyze_job(self, text: str, source_url: str = "") -> JobAnalysisResult:
@@ -88,8 +88,8 @@ Do not wrap in markdown quotes. Return only raw JSON.
 
                 return JobAnalysisResult(**data)
             except Exception as e:
-                # Log and fallback to heuristic
-                print(f"[AIEngine] LLM analysis failed: {e}. Falling back to heuristic.")
+                # Do NOT automatically fallback when user explicitly configured an API key!
+                raise RuntimeError(f"AI API Provider Failed ({self.model_name}): {str(e)}") from e
 
         # Heuristic fallback
         return self.heuristic.analyze_job_text(text)
@@ -169,8 +169,7 @@ Return strict JSON:
                         )
                     )
             except Exception as e:
-                print(f"[AIEngine] LLM resume ranking failed: {e}. Falling back to heuristic.")
-                ranked_list = []
+                raise RuntimeError(f"AI API Provider Failed ({self.model_name}): {str(e)}") from e
 
         if not ranked_list:
             # Heuristic ranking
@@ -456,7 +455,7 @@ Claim Status: {claim_status.value}
                     available_resume_bullets=target_section_bullets,
                 )
             except Exception as e:
-                print(f"[AIEngine] LLM bullet optimization failed: {e}. Using offline BulletSkill engine.")
+                raise RuntimeError(f"AI API Provider Failed ({self.model_name}): {str(e)}") from e
 
         # Offline template generation following Bulletskill.md
         kw = primary_kw
@@ -597,7 +596,7 @@ Return strict JSON:
                 data = json.loads(raw)
                 return OutreachResponse(**data)
             except Exception as e:
-                print(f"[AIEngine] LLM outreach failed: {e}. Using offline pitch.")
+                raise RuntimeError(f"AI API Provider Failed ({self.model_name}): {str(e)}") from e
 
         # Offline fallback pitch
         subject = f"Application: {job.title} — {resume.name}"

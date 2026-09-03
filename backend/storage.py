@@ -270,12 +270,16 @@ class StorageService:
             rows = cursor.fetchall()
             settings_map = {row["key"]: row["value"] for row in rows}
 
+        use_offline_raw = str(settings_map.get("use_offline_mode", str(defaults.use_offline_mode)))
+        use_offline_mode = use_offline_raw.lower() in ["true", "1", "yes"]
+
         return Settings(
             api_base_url=settings_map.get("api_base_url", defaults.api_base_url),
             api_key=settings_map.get("api_key", defaults.api_key),
             model_name=settings_map.get("model_name", defaults.model_name),
             default_follow_up_days=int(settings_map.get("default_follow_up_days", defaults.default_follow_up_days)),
             saved_keys=settings_map.get("saved_keys", defaults.saved_keys),
+            use_offline_mode=use_offline_mode,
         )
 
     def update_settings(self, updates: SettingsUpdate) -> Settings:

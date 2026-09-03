@@ -27,6 +27,7 @@ export default function BulletOptimizerModal({
   targetJobTitle = 'Software Engineer',
   selectedResume = null,
   onMarkSkillsAdded = null,
+  onAiError = null,
 }) {
   const [keywords, setKeywords] = useState([]);
   const [newSkillInput, setNewSkillInput] = useState('');
@@ -105,6 +106,9 @@ export default function BulletOptimizerModal({
       }
     } catch (err) {
       setError(err.message || 'Failed to generate optimized bullet points.');
+      if (onAiError && (err.canSwitchOffline || err.status === 502)) {
+        onAiError(err, () => handleGenerate(null, bulletToUse));
+      }
     } finally {
       setLoading(false);
     }
