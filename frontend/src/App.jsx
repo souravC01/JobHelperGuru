@@ -9,6 +9,8 @@ import {
   Layers,
   CheckCircle2,
   TrendingUp,
+  Lock,
+  User as UserIcon,
 } from 'lucide-react';
 import JobAnalyzer from './components/JobAnalyzer';
 import ResumeFitRanker from './components/ResumeFitRanker';
@@ -18,9 +20,22 @@ import BulletOptimizerModal from './components/BulletOptimizerModal';
 import CoverLetterModal from './components/CoverLetterModal';
 import SettingsModal from './components/SettingsModal';
 import OfflineSwitchModal from './components/OfflineSwitchModal';
-import { getResumes, getApplications, getExcelExportUrl } from './api/client';
+import AuthModal from './components/AuthModal';
+import UserNav from './components/UserNav';
+import {
+  getResumes,
+  getApplications,
+  downloadExcelReport,
+  getCurrentUser,
+  getMe,
+  getToken,
+} from './api/client';
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState(getCurrentUser());
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState('login');
+
   const [activeTab, setActiveTab] = useState('analyzer'); // 'analyzer', 'resumes', 'tracker'
   const [currentJob, setCurrentJob] = useState(null);
   const [resumes, setResumes] = useState([]);
@@ -73,10 +88,18 @@ export default function App() {
   };
 
   const loadInitialData = async () => {
+    if (!getToken()) {
+      setResumes([]);
+      setApplications([]);
+      return;
+    }
     try {
+      const me = await getMe().catch(() => null);
+      if (me) setCurrentUser(me);
+
       const [resumesData, appsData] = await Promise.all([
-        getResumes(),
-        getApplications(),
+        getResumes().catch(() => []),
+        getApplications().catch(() => []),
       ]);
       setResumes(resumesData);
       setApplications(appsData);
@@ -89,7 +112,30 @@ export default function App() {
   };
 
   useEffect(() => {
+    const handleUnauthorized = () => {
+      setCurrentUser(null);
+      setResumes([]);
+      setApplications([]);
+      setAuthMode('login');
+      setIsAuthOpen(true);
+    };
+
+    const handleLogout = () => {
+      setCurrentUser(null);
+      setResumes([]);
+      setApplications([]);
+      setCurrentJob(null);
+    };
+
+    window.addEventListener('jh_auth_unauthorized', handleUnauthorized);
+    window.addEventListener('jh_auth_logout', handleLogout);
+
     loadInitialData();
+
+    return () => {
+      window.removeEventListener('jh_auth_unauthorized', handleUnauthorized);
+      window.removeEventListener('jh_auth_logout', handleLogout);
+    };
   }, []);
 
   const handleJobAnalyzed = (data) => {
@@ -119,64 +165,77 @@ export default function App() {
     setApplications(updatedApps);
   };
 
-  // Stats
-  const totalCount = applications.length;
   const appliedCount = applications.filter((a) => a.status === 'Applied').length;
   const interviewCount = applications.filter((a) => a.status === 'Interviewing').length;
   const offerCount = applications.filter((a) => a.status === 'Offered').length;
+  const totalCount = applications.length;
 
   return (
-    <div className="min-h-screen flex flex-col text-slate-100">
-      {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-40 bg-[#09090b]/80 backdrop-blur-xl border-b border-white/[0.06]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          {/* Brand */}
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+      {/* Top Navbar */}
+      <header className="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur-xl border-b border-white/[0.08]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+          {/* Brand Logo */}
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('analyzer')}>
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20 ring-1 ring-white/20">
-              <Sparkles size={18} className="animate-pulse" />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 p-[1px] shadow-lg shadow-indigo-500/20">
+              <div className="w-full h-full bg-zinc-950 rounded-[15px] flex items-center justify-center">
+                <Briefcase size={20} className="text-indigo-400" />
+              </div>
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-base tracking-tight text-white">
-                  JobHelper<span className="text-indigo-400">Guru</span>
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 font-mono border border-indigo-500/20 font-semibold">
-                  v2.0
+                <span className="font-bold text-base tracking-tight text-white">JobHelperGuru</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 tracking-wide uppercase">
+                  Multi-User Cloud
                 </span>
               </div>
-              <p className="text-[11px] text-zinc-400 tracking-tight">AI & Offline Resume Optimizer</p>
+              <p className="text-[11px] text-zinc-400 hidden sm:block">
+                AI Job Tailoring, Best-Fit Resumes & Personal Pipeline
+              </p>
             </div>
           </div>
 
-          {/* Centered Pill Nav Tabs */}
-          <nav className="hidden md:flex items-center gap-1 bg-white/[0.03] p-1 rounded-full border border-white/[0.08] text-xs">
+          {/* Desktop Navigation Tabs */}
+          <nav className="hidden md:flex items-center gap-1.5 p-1 bg-white/[0.04] border border-white/[0.08] rounded-2xl">
             <button
               onClick={() => setActiveTab('analyzer')}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-medium transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
                 activeTab === 'analyzer'
                   ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
-              <Briefcase size={13} />
+              <Sparkles size={13} className={activeTab === 'analyzer' ? 'text-indigo-400' : ''} />
               <span>Job Analyzer</span>
             </button>
 
             <button
-              onClick={() => setActiveTab('resumes')}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-medium transition-all ${
+              onClick={() => {
+                if (!currentUser) {
+                  setAuthMode('login');
+                  setIsAuthOpen(true);
+                }
+                setActiveTab('resumes');
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
                 activeTab === 'resumes'
                   ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
               <FileText size={13} />
-              <span>Resume Vault ({resumes.length})</span>
+              <span>Resumes ({resumes.length})</span>
             </button>
 
             <button
-              onClick={() => setActiveTab('tracker')}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-medium transition-all ${
+              onClick={() => {
+                if (!currentUser) {
+                  setAuthMode('login');
+                  setIsAuthOpen(true);
+                }
+                setActiveTab('tracker');
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
                 activeTab === 'tracker'
                   ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
                   : 'text-zinc-400 hover:text-white'
@@ -189,23 +248,47 @@ export default function App() {
 
           {/* Right Header Actions */}
           <div className="flex items-center gap-2.5">
-            <a
-              href={getExcelExportUrl()}
-              download="job_tracker.xlsx"
-              className="btn-excel text-xs hidden sm:flex"
+            <button
+              onClick={() => {
+                if (!currentUser) {
+                  setAuthMode('login');
+                  setIsAuthOpen(true);
+                  return;
+                }
+                downloadExcelReport().catch((err) => alert(err.message));
+              }}
+              className="btn-excel text-xs hidden sm:flex items-center gap-1.5"
               title="Download full styled Excel spreadsheet tracking your jobs"
             >
               <FileSpreadsheet size={14} />
               <span>Export .xlsx</span>
-            </a>
+            </button>
 
             <button
-              onClick={() => setIsSettingsOpen(true)}
+              onClick={() => {
+                if (!currentUser) {
+                  setAuthMode('login');
+                  setIsAuthOpen(true);
+                  return;
+                }
+                setIsSettingsOpen(true);
+              }}
               className="p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.2] text-zinc-400 hover:text-white transition-all shadow-sm"
               title="AI & API Settings"
             >
               <SettingsIcon size={17} />
             </button>
+
+            <UserNav
+              user={currentUser}
+              onOpenAuth={(mode) => {
+                setAuthMode(mode);
+                setIsAuthOpen(true);
+              }}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+              applicationsCount={applications.length}
+              resumesCount={resumes.length}
+            />
           </div>
         </div>
 
@@ -220,7 +303,13 @@ export default function App() {
             Analyzer
           </button>
           <button
-            onClick={() => setActiveTab('resumes')}
+            onClick={() => {
+              if (!currentUser) {
+                setAuthMode('login');
+                setIsAuthOpen(true);
+              }
+              setActiveTab('resumes');
+            }}
             className={`px-3 py-1 rounded-full font-medium whitespace-nowrap ${
               activeTab === 'resumes' ? 'bg-indigo-600 text-white' : 'text-zinc-400'
             }`}
@@ -228,7 +317,13 @@ export default function App() {
             Resumes ({resumes.length})
           </button>
           <button
-            onClick={() => setActiveTab('tracker')}
+            onClick={() => {
+              if (!currentUser) {
+                setAuthMode('login');
+                setIsAuthOpen(true);
+              }
+              setActiveTab('tracker');
+            }}
             className={`px-3 py-1 rounded-full font-medium whitespace-nowrap ${
               activeTab === 'tracker' ? 'bg-indigo-600 text-white' : 'text-zinc-400'
             }`}
@@ -275,8 +370,22 @@ export default function App() {
               currentJob={currentJob}
               applications={applications}
               onJobAnalyzed={handleJobAnalyzed}
-              onOpenBulletOptimizer={(kw) => handleOpenOptimizer(kw)}
-              onOpenCoverLetter={() => setIsCoverLetterOpen(true)}
+              onOpenBulletOptimizer={(kw) => {
+                if (!currentUser) {
+                  setAuthMode('login');
+                  setIsAuthOpen(true);
+                  return;
+                }
+                handleOpenOptimizer(kw);
+              }}
+              onOpenCoverLetter={() => {
+                if (!currentUser) {
+                  setAuthMode('login');
+                  setIsAuthOpen(true);
+                  return;
+                }
+                setIsCoverLetterOpen(true);
+              }}
               onApplicationSaved={handleApplicationSaved}
               onAiError={handleAiError}
             />
@@ -290,6 +399,11 @@ export default function App() {
                 onAdoptSkills={handleAdoptSkills}
                 onRemoveAdoptedSkill={handleRemoveAdoptedSkill}
                 onSelectKeywordForOptimization={(skills, rank, sectionType) => {
+                  if (!currentUser) {
+                    setAuthMode('login');
+                    setIsAuthOpen(true);
+                    return;
+                  }
                   const matchingResume = resumes.find((r) => r.id === rank.resume_id);
                   handleOpenOptimizer(skills, matchingResume, sectionType);
                 }}
@@ -304,17 +418,69 @@ export default function App() {
         )}
 
         {activeTab === 'resumes' && (
-          <ResumeLibrary
-            onResumesUpdated={(updated) => setResumes(updated)}
-          />
+          currentUser ? (
+            <ResumeLibrary
+              onResumesUpdated={(updated) => setResumes(updated)}
+            />
+          ) : (
+            <div className="max-w-xl mx-auto my-12 p-8 rounded-3xl bg-white/[0.02] border border-white/10 text-center backdrop-blur-xl">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mx-auto flex items-center justify-center mb-4">
+                <Lock size={28} />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">Personal Resume Library</h3>
+              <p className="text-xs text-zinc-400 mb-6 leading-relaxed">
+                Sign in to upload, store, and manage your private resumes with encrypted Cloudflare R2 object storage.
+              </p>
+              <button
+                onClick={() => {
+                  setAuthMode('login');
+                  setIsAuthOpen(true);
+                }}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold shadow-lg shadow-indigo-500/20 transition-all"
+              >
+                Sign In to View Resumes
+              </button>
+            </div>
+          )
         )}
 
         {activeTab === 'tracker' && (
-          <ApplicationsTracker refreshTrigger={refreshTrackerTrigger} />
+          currentUser ? (
+            <ApplicationsTracker refreshTrigger={refreshTrackerTrigger} />
+          ) : (
+            <div className="max-w-xl mx-auto my-12 p-8 rounded-3xl bg-white/[0.02] border border-white/10 text-center backdrop-blur-xl">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mx-auto flex items-center justify-center mb-4">
+                <TableIcon size={28} />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">Personal Job Pipeline</h3>
+              <p className="text-xs text-zinc-400 mb-6 leading-relaxed">
+                Sign in to view and manage your private job application pipeline, interview stages, and follow-up deadlines.
+              </p>
+              <button
+                onClick={() => {
+                  setAuthMode('login');
+                  setIsAuthOpen(true);
+                }}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold shadow-lg shadow-indigo-500/20 transition-all"
+              >
+                Sign In to View Pipeline
+              </button>
+            </div>
+          )
         )}
       </main>
 
       {/* Modals */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        initialMode={authMode}
+        onSuccess={(user) => {
+          setCurrentUser(user);
+          loadInitialData();
+        }}
+      />
+
       <BulletOptimizerModal
         isOpen={isOptimizerOpen}
         onClose={() => setIsOptimizerOpen(false)}
