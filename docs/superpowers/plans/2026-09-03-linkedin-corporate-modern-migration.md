@@ -367,18 +367,18 @@
 - Consumes: Modal state, user profile, AI settings.
 - Produces: Harmonized white card dialogs, 1px borders, corporate form inputs and buttons.
 
-- [ ] **Step 1: Refactor `ResumeLibrary.jsx`**
+- [x] **Step 1: Refactor `ResumeLibrary.jsx`**
   - White cards with 1px border `#e0e0e0`, resume upload dropzone in `#f3f6f8` with dashed 1px border.
 
-- [ ] **Step 2: Refactor `SettingsModal.jsx`, `AuthModal.jsx`, `CoverLetterModal.jsx`, `OfflineSwitchModal.jsx`**
+- [x] **Step 2: Refactor `SettingsModal.jsx`, `AuthModal.jsx`, `CoverLetterModal.jsx`, `OfflineSwitchModal.jsx`**
   - White surface `#ffffff`, 1px borders `#e0e0e0`, corporate inputs, primary blue buttons `#0a66c2`.
 
-- [ ] **Step 3: Comprehensive End-to-End Build & Test Verification**
+- [x] **Step 3: Comprehensive End-to-End Build & Test Verification**
   - Command: `cd frontend && npm run build`
   - Command: `python -m pytest tests/ -v`
   - Expected: Frontend compiles with 0 errors; all automated tests pass.
 
-- [ ] **Step 4: Commit changes**
+- [x] **Step 4: Commit changes**
   ```bash
   git add frontend/src/components/
   git commit -m "feat(ui): complete LinkedIn Corporate Modern migration across all modals and views"
