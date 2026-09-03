@@ -33,7 +33,7 @@
 - Consumes: Raw job text string in `HeuristicJobParser.parse_job_description()`.
 - Produces: `JobAnalysisResult.experience_required` containing exact years, "New Grad", or "Not specified".
 
-- [ ] **Step 1: Write failing tests for experience extraction in `tests/test_heuristic_parser.py`**
+- [x] **Step 1: Write failing tests for experience extraction in `tests/test_heuristic_parser.py`**
 
 ```python
 # tests/test_heuristic_parser.py
@@ -63,12 +63,12 @@ def test_heuristic_experience_required_not_specified():
     assert res.experience_required == "Not specified"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `python -m pytest tests/test_heuristic_parser.py::test_heuristic_experience_required_range -v`  
 Expected: FAIL (`AttributeError: 'JobAnalysisResult' object has no attribute 'experience_required'`).
 
-- [ ] **Step 3: Update `backend/models.py` and `backend/services/heuristic_parser.py`**
+- [x] **Step 3: Update `backend/models.py` and `backend/services/heuristic_parser.py`**
 
 In `backend/models.py`:
 ```python
@@ -112,12 +112,12 @@ def extract_experience_required(text: str, is_new_grad: bool = False) -> str:
 ```
 Call `extract_experience_required(text, is_new_grad=is_new_grad)` in `parse_job_description` and pass `experience_required` to `JobAnalysisResult`.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python -m pytest tests/test_heuristic_parser.py -v`  
 Expected: PASS (all heuristic tests green).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/models.py backend/services/heuristic_parser.py tests/test_heuristic_parser.py
@@ -136,7 +136,7 @@ git commit -m "feat(models): add experience_required extraction and model field"
 - Consumes: LLM output and raw job description.
 - Produces: Normalized `experience_required` field in `JobAnalysisResult`.
 
-- [ ] **Step 1: Write test for AI Engine experience extraction in `tests/test_ai_engine.py`**
+- [x] **Step 1: Write test for AI Engine experience extraction in `tests/test_ai_engine.py`**
 
 ```python
 # tests/test_ai_engine.py
@@ -147,24 +147,24 @@ def test_ai_engine_extracts_experience_required_offline(ai_engine):
     assert res.experience_required in ("3-5 years", "3-5 years")
 ```
 
-- [ ] **Step 2: Run test to verify it fails or needs implementation**
+- [x] **Step 2: Run test to verify it fails or needs implementation**
 
 Run: `python -m pytest tests/test_ai_engine.py::test_ai_engine_extracts_experience_required_offline -v`  
 Expected: Verify behavior.
 
-- [ ] **Step 3: Update `analyze_job` in `backend/services/ai_engine.py`**
+- [x] **Step 3: Update `analyze_job` in `backend/services/ai_engine.py`**
 
 1. Add `"experience_required": "Exact years of experience requested e.g. '1-4 years', '3+ years', '5 years', or 'New Grad' if for recent graduates, or 'Not specified' if not stated",` to the system prompt JSON schema.
 2. In post-processing, import `extract_experience_required` from `backend.services.heuristic_parser`.
 3. If `data.get("experience_required") in (None, "", "Not specified")`:
    Fall back to `extract_experience_required(text, is_new_grad=data.get("is_new_grad_role", False))`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_ai_engine.py -v`  
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/services/ai_engine.py tests/test_ai_engine.py
@@ -183,7 +183,7 @@ git commit -m "feat(ai): support experience_required in AI engine prompt and fal
 - Consumes: `currentJob.experience_required` and `currentJob.experience_level`.
 - Produces: Prominent visual badge in the Job Analyzer top header card with contextual styling (New Grad, Exact Years, Not specified).
 
-- [ ] **Step 1: Update `JobAnalyzer.jsx` to render the experience badge**
+- [x] **Step 1: Update `JobAnalyzer.jsx` to render the experience badge**
 
 Import `Clock` icon from `lucide-react`.
 Underneath the job title, in the metadata flex row:
@@ -213,12 +213,12 @@ Underneath the job title, in the metadata flex row:
 </div>
 ```
 
-- [ ] **Step 2: Build the frontend to verify compilation**
+- [x] **Step 2: Build the frontend to verify compilation**
 
 Run: `cd frontend && npm run build`  
 Expected: Clean build, 0 errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/components/JobAnalyzer.jsx
@@ -229,13 +229,13 @@ git commit -m "feat(ui): display professional work experience badge in JobAnalyz
 
 ### Task 4: End-to-End Regression & Verification
 
-- [ ] **Step 1: Run full pytest test suite**
+- [x] **Step 1: Run full pytest test suite**
 
 Run: `python -m pytest -v`  
 Expected: All 56+ tests PASS.
 
-- [ ] **Step 2: Live test with Indeed URL and custom text**
+- [x] **Step 2: Live test with Indeed URL and custom text**
 
 Verify Indeed URL `https://ca.indeed.com/viewjob?jk=d721d1b5ad371161&from=shareddesktop_copy` extracts and renders `experience_required`.
 
-- [ ] **Step 3: Update walkthrough artifact with screenshots/results**
+- [x] **Step 3: Update walkthrough artifact with screenshots/results**
