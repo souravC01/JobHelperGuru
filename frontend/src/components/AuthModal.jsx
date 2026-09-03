@@ -16,9 +16,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
   const googleBtnRef = useRef(null);
 
   // Read Google Client ID with fallback to configured client ID
-  const googleClientId =
-    import.meta.env.VITE_GOOGLE_CLIENT_ID ||
-    '999060759573-45b5m9cn9v7g6birnj9d8j65cqn72mfq.apps.googleusercontent.com';
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
   useEffect(() => {
     setMode(initialMode);

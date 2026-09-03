@@ -51,10 +51,11 @@ storage = StorageService(db_path=os.environ.get("JOB_HELPER_DB", "data/tracker.d
 set_storage_service(storage)
 if storage.is_postgres:
     print("[INFO] Connected to Neon PostgreSQL database.")
-    try:
-        storage.migrate_from_sqlite("data/tracker.db")
-    except Exception as e:
-        print(f"[INFO] SQLite migration note: {e}")
+    if os.getenv("RUN_SQLITE_MIGRATION", "false").lower() in ("true", "1", "yes"):
+        try:
+            storage.migrate_from_sqlite("data/tracker.db")
+        except Exception as e:
+            print(f"[INFO] SQLite migration note: {e}")
 else:
     print("[INFO] Using local SQLite storage (data/tracker.db).")
 

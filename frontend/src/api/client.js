@@ -268,6 +268,7 @@ export async function deleteApplication(id) {
   return res.json();
 }
 
+/** @deprecated Use downloadExcelReport() which sends authenticated JWT Bearer headers */
 export function getExcelExportUrl() {
   return `${API_BASE}/export/excel`;
 }
