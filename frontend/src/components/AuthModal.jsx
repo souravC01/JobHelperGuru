@@ -15,8 +15,21 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
 
   const googleBtnRef = useRef(null);
 
-  // Read Google Client ID with fallback to configured client ID
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+  // Read Google Client ID with dynamic backend fallback
+  const [googleClientId, setGoogleClientId] = useState(import.meta.env.VITE_GOOGLE_CLIENT_ID || '');
+
+  useEffect(() => {
+    if (!googleClientId) {
+      fetch('/api/auth/config')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.google_client_id) {
+            setGoogleClientId(data.google_client_id);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [googleClientId]);
 
   useEffect(() => {
     setMode(initialMode);

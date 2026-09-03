@@ -65,3 +65,11 @@ def test_google_auth_rejects_mismatched_audience(monkeypatch):
         assert res.status_code == 401
         assert "audience" in res.json()["detail"].lower()
 
+
+def test_auth_config_returns_client_id():
+    res = client.get("/api/auth/config")
+    assert res.status_code == 200
+    data = res.json()
+    assert "google_client_id" in data
+    assert len(data["google_client_id"]) > 0
+

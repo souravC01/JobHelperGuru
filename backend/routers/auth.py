@@ -191,3 +191,13 @@ def google_auth(req: GoogleAuthRequest):
 @router.get("/me", response_model=User)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.get("/config")
+def get_auth_config():
+    client_id = (
+        os.getenv("GOOGLE_CLIENT_ID")
+        or os.getenv("VITE_GOOGLE_CLIENT_ID")
+        or "999060759573-45b5m9cn9v7g6birnj9d8j65cqn72mfq.apps.googleusercontent.com"
+    ).strip()
+    return {"google_client_id": client_id}

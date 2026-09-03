@@ -52,18 +52,18 @@
 - Consumes: `frontend/` package.json, `requirements.txt`, `backend/main.py`
 - Produces: Production Docker container and Render Blueprint for 1-click deployment
 
-- [ ] **Step 1: Create multi-stage `Dockerfile`**
+- [x] **Step 1: Create multi-stage `Dockerfile`**
   - Stage 1 (`frontend-builder`): `node:20-alpine`, installs frontend dependencies and runs `npm run build`.
   - Stage 2 (`production`): `python:3.11-slim`, installs Python build tools, copies `requirements.txt` and installs wheels, copies `backend/`, `data/`, and copies built `frontend/dist` into `frontend/dist`.
   - Exposes port `$PORT` (default 8000) and starts with `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`.
 
-- [ ] **Step 2: Create `.dockerignore`**
+- [x] **Step 2: Create `.dockerignore`**
   Ignore `.git`, `node_modules`, `frontend/node_modules`, `__pycache__`, `.pytest_cache`, `tests`, `scratch`, `.env`.
 
-- [ ] **Step 3: Create `render.yaml` Blueprint**
+- [x] **Step 3: Create `render.yaml` Blueprint**
   Define service `jobhelperguru` as type `web`, env `docker` (or native with `build.sh`), plan `free`, healthCheckPath `/api/health`.
 
-- [ ] **Step 4: Create native fallback `build.sh`**
+- [x] **Step 4: Create native fallback `build.sh`**
   Add `build.sh` for users choosing Render native Python runtime:
   ```bash
   #!/usr/bin/env bash
@@ -72,10 +72,10 @@
   cd frontend && npm install && npm run build && cd ..
   ```
 
-- [ ] **Step 5: Test local production build**
+- [x] **Step 5: Test local production build**
   Run `cd frontend && npm run build` and run a quick test curl against `backend.main:app` to confirm `frontend/dist` is mounted at root `/`.
 
-- [ ] **Step 6: Commit Task 2 changes**
+- [x] **Step 6: Commit Task 2 changes**
   Run `git add Dockerfile .dockerignore render.yaml build.sh && git commit -m "feat(deploy): add Dockerfile, render.yaml blueprint and build script"`
 
 ---
