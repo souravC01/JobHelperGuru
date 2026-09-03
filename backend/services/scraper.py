@@ -36,6 +36,15 @@ class ScraperService:
             response.raise_for_status()
             html = response.text
 
+            # Check if page is Workday or SmartRecruiters REST API
+            workday_job = self._try_fetch_workday_cxs(clean_url, timeout=timeout)
+            if workday_job and len(workday_job.raw_text.strip()) > 50:
+                return workday_job
+
+            smartrec_job = self._try_fetch_smartrecruiters_api(clean_url, timeout=timeout)
+            if smartrec_job and len(smartrec_job.raw_text.strip()) > 50:
+                return smartrec_job
+
             # Check if page embeds an external ATS widget (Greenhouse, Lever, Ashby, iframe)
             embedded_job = self._try_fetch_embedded_ats(html, source_url=clean_url, timeout=timeout)
             if embedded_job and len(embedded_job.raw_text.strip()) > 20:
@@ -403,7 +412,7 @@ class ScraperService:
 
     def _try_extract_json_ld(self, html: str, source_url: str = "") -> Optional[ScrapedJob]:
         """
-        Extracts structured job posting data from Schema.org JobPosting JSON-LD.
+        Extracts structured job posting data from Schema.org JobPosting JSON-LD (including @graph).
         """
         soup = BeautifulSoup(html, "html.parser")
         for script in soup.find_all("script", type="application/ld+json"):
@@ -411,8 +420,16 @@ class ScraperService:
                 continue
             try:
                 data = json.loads(script.string)
-                items = data if isinstance(data, list) else [data]
-                for item in items:
+                candidates = []
+                if isinstance(data, list):
+                    candidates = data
+                elif isinstance(data, dict):
+                    if "@graph" in data and isinstance(data["@graph"], list):
+                        candidates = data["@graph"]
+                    else:
+                        candidates = [data]
+
+                for item in candidates:
                     if isinstance(item, dict) and item.get("@type") in ["JobPosting", "jobPosting"]:
                         title = item.get("title", "")
                         desc_html = item.get("description", "")
@@ -443,4 +460,86 @@ class ScraperService:
             except Exception:
                 continue
 
+        return None
+
+    def _try_fetch_workday_cxs(self, url: str, timeout: int = 15) -> Optional[ScrapedJob]:
+        """
+        Extracts structured job posting from Workday's public CXS REST API
+        Example URL: https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Senior-Engineer_JR1234
+        CXS API: https://nvidia.wd5.myworkdayjobs.com/wday/cxs/nvidia/NVIDIAExternalCareerSite/job/Senior-Engineer_JR1234
+        """
+        if "myworkdayjobs.com" not in url.lower():
+            return None
+
+        match = re.search(r"https?://([^/]+)/([^/]+)/([^/]+)/job/(.*)", url, re.I)
+        if not match:
+            return None
+
+        host, locale, portal, job_path = match.group(1), match.group(2), match.group(3), match.group(4)
+        tenant = host.split(".")[0]
+        job_slug = job_path.split("?")[0]
+        if "/" in job_slug:
+            job_slug = job_slug.split("/")[-1]
+
+        cxs_url = f"https://{host}/wday/cxs/{tenant}/{portal}/job/{job_slug}"
+        try:
+            resp = self.session.get(cxs_url, headers={"Accept": "application/json"}, timeout=timeout)
+            if resp.ok:
+                data = resp.json()
+                info = data.get("jobPostingInfo", {})
+                title = info.get("title", "")
+                desc_html = info.get("jobDescription", "")
+                loc = info.get("location", "") or info.get("workplaceType", "")
+                company = tenant.capitalize()
+                soup = BeautifulSoup(desc_html, "html.parser")
+                clean_text = soup.get_text(separator="\n", strip=True)
+                if clean_text and len(clean_text) > 50:
+                    return ScrapedJob(
+                        title=title.strip() or "Open Position",
+                        company=company,
+                        location=loc.strip() or "Unknown",
+                        raw_text=clean_text.strip(),
+                        source_url=url,
+                    )
+        except Exception:
+            pass
+        return None
+
+    def _try_fetch_smartrecruiters_api(self, url: str, timeout: int = 15) -> Optional[ScrapedJob]:
+        """
+        Extracts structured job posting from SmartRecruiters REST API
+        Example URL: https://jobs.smartrecruiters.com/AcmeCorp/12345-software-engineer
+        """
+        match = re.search(r"jobs\.smartrecruiters\.com/([^/]+)/([a-zA-Z0-9_-]+)", url, re.I)
+        if not match:
+            return None
+
+        company, posting_id = match.group(1), match.group(2)
+        posting_key = posting_id.split("-")[0] if "-" in posting_id and posting_id.split("-")[0].isdigit() else posting_id
+        api_url = f"https://api.smartrecruiters.com/v1/companies/{company}/postings/{posting_key}"
+        try:
+            resp = self.session.get(api_url, timeout=timeout)
+            if resp.ok:
+                data = resp.json()
+                title = data.get("name", "")
+                sections = data.get("jobAd", {}).get("sections", {})
+                desc_parts = []
+                for s_key in ["jobDescription", "qualifications", "additionalInformation"]:
+                    if s_key in sections:
+                        txt = sections[s_key].get("text", "")
+                        if txt:
+                            desc_parts.append(BeautifulSoup(txt, "html.parser").get_text(separator="\n", strip=True))
+                full_text = "\n\n".join(desc_parts)
+                loc_dict = data.get("location", {})
+                loc = ", ".join(filter(None, [loc_dict.get("city"), loc_dict.get("region"), loc_dict.get("country")]))
+                if full_text and len(full_text) > 50:
+                    return ScrapedJob(
+                        title=title.strip() or "Open Position",
+                        company=company.capitalize(),
+                        location=loc.strip() or "Unknown",
+                        raw_text=full_text.strip(),
+                        source_url=url,
+                    )
+        except Exception:
+            pass
         return None
