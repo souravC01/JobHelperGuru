@@ -26,8 +26,10 @@ from backend.services.scraper import ScraperService
 from backend.services.ai_engine import AIEngine
 from backend.services.excel_exporter import ExcelExporter
 from backend.services.object_storage import ObjectStorageService
+from backend.routers.auth import router as auth_router, get_current_user, set_storage_service
 
 app = FastAPI(title="JobHelperGuru API", version="1.0.0")
+app.include_router(auth_router)
 
 # CORS Setup
 app.add_middleware(
@@ -40,6 +42,7 @@ app.add_middleware(
 
 # Services
 storage = StorageService(db_path=os.environ.get("JOB_HELPER_DB", "data/tracker.db"))
+set_storage_service(storage)
 if storage.is_postgres:
     print("[INFO] Connected to Neon PostgreSQL database.")
     try:
@@ -58,8 +61,8 @@ else:
     print("[INFO] Cloudflare R2 not configured. Using local file storage fallback.")
 
 
-def get_ai_engine() -> AIEngine:
-    settings = storage.get_settings()
+def get_ai_engine(user_id: Optional[str] = None) -> AIEngine:
+    settings = storage.get_settings(user_id=user_id)
     if settings.use_offline_mode:
         return AIEngine(
             api_base_url=settings.api_base_url,
@@ -159,8 +162,8 @@ from backend.services.document_parser import extract_text_from_file
 
 # --- Resumes ---
 @app.get("/api/resumes", response_model=List[Resume])
-def get_resumes():
-    resumes = storage.get_resumes()
+def get_resumes(current_user: User = Depends(get_current_user)):
+    resumes = storage.get_resumes(user_id=current_user.id)
     for r in resumes:
         if r.file_key:
             r.download_url = object_storage.generate_download_url(r.file_key)
@@ -168,16 +171,17 @@ def get_resumes():
 
 
 @app.post("/api/resumes", response_model=Resume)
-def add_resume(req: ResumeCreate):
+def add_resume(req: ResumeCreate, current_user: User = Depends(get_current_user)):
     if not req.name.strip() or not req.content.strip():
         raise HTTPException(status_code=400, detail="Resume name and content are required.")
-    return storage.add_resume(name=req.name, content=req.content, file_key=req.file_key)
+    return storage.add_resume(name=req.name, content=req.content, file_key=req.file_key, user_id=current_user.id)
 
 
 @app.post("/api/resumes/upload", response_model=Resume)
 async def upload_resume_file(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
+    current_user: User = Depends(get_current_user),
 ):
     try:
         content_bytes = await file.read()
@@ -185,15 +189,16 @@ async def upload_resume_file(
         if not extracted_text.strip():
             raise HTTPException(status_code=400, detail="No readable text could be extracted from this document.")
 
-        # Upload raw binary (.pdf / .docx) to Cloudflare R2 or local uploads
+        # Upload raw binary (.pdf / .docx) to Cloudflare R2 or local uploads scoped by user_id
         file_key = object_storage.upload_file(
             content_bytes=content_bytes,
             filename=file.filename,
             content_type=file.content_type,
+            user_id=current_user.id,
         )
 
         resume_name = name.strip() if (name and name.strip()) else Path(file.filename).stem
-        resume = storage.add_resume(name=resume_name, content=extracted_text, file_key=file_key)
+        resume = storage.add_resume(name=resume_name, content=extracted_text, file_key=file_key, user_id=current_user.id)
         if file_key:
             resume.download_url = object_storage.generate_download_url(file_key)
         return resume
@@ -204,13 +209,13 @@ async def upload_resume_file(
 
 
 @app.delete("/api/resumes/{resume_id}")
-def delete_resume(resume_id: str):
-    resume = storage.get_resume(resume_id)
+def delete_resume(resume_id: str, current_user: User = Depends(get_current_user)):
+    resume = storage.get_resume(resume_id, user_id=current_user.id)
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found.")
     if resume.file_key:
         object_storage.delete_file(resume.file_key)
-    success = storage.delete_resume(resume_id)
+    success = storage.delete_resume(resume_id, user_id=current_user.id)
     return {"success": True}
 
 
@@ -220,9 +225,9 @@ class MatchResumesRequest(BaseModel):
 
 
 @app.post("/api/resumes/match", response_model=List[RankedResume])
-def match_resumes(req: MatchResumesRequest):
-    resumes = req.resumes or storage.get_resumes()
-    ai = get_ai_engine()
+def match_resumes(req: MatchResumesRequest, current_user: User = Depends(get_current_user)):
+    resumes = req.resumes or storage.get_resumes(user_id=current_user.id)
+    ai = get_ai_engine(user_id=current_user.id)
     try:
         return ai.rank_resumes(resumes, req.job)
     except Exception as e:
@@ -239,8 +244,8 @@ def match_resumes(req: MatchResumesRequest):
 
 # --- Bulletskill Optimizer ---
 @app.post("/api/resumes/optimize-bullet", response_model=BulletOptimizationResponse)
-def optimize_bullet(req: BulletOptimizationRequest):
-    ai = get_ai_engine()
+def optimize_bullet(req: BulletOptimizationRequest, current_user: User = Depends(get_current_user)):
+    ai = get_ai_engine(user_id=current_user.id)
     try:
         return ai.optimize_bullet(req)
     except Exception as e:
@@ -263,17 +268,17 @@ class OutreachRequest(BaseModel):
 
 
 @app.post("/api/resumes/generate-outreach", response_model=OutreachResponse)
-def generate_outreach(req: OutreachRequest):
+def generate_outreach(req: OutreachRequest, current_user: User = Depends(get_current_user)):
     resume = None
     if req.resume_id:
-        resume = storage.get_resume(req.resume_id)
+        resume = storage.get_resume(req.resume_id, user_id=current_user.id)
     if not resume and req.resume_content:
         resume = Resume(id="temp", name="Candidate", content=req.resume_content)
     if not resume:
-        resumes = storage.get_resumes()
+        resumes = storage.get_resumes(user_id=current_user.id)
         resume = resumes[0] if resumes else Resume(id="temp", name="Candidate", content="")
 
-    ai = get_ai_engine()
+    ai = get_ai_engine(user_id=current_user.id)
     try:
         return ai.generate_outreach(req.job, resume)
     except Exception as e:
@@ -290,17 +295,17 @@ def generate_outreach(req: OutreachRequest):
 
 # --- Applications Tracker CRUD ---
 @app.get("/api/applications", response_model=List[Application])
-def get_applications():
-    return storage.get_applications()
+def get_applications(current_user: User = Depends(get_current_user)):
+    return storage.get_applications(user_id=current_user.id)
 
 
 @app.post("/api/applications", response_model=Application)
-def add_application(req: ApplicationCreate):
-    return storage.add_application(req)
+def add_application(req: ApplicationCreate, current_user: User = Depends(get_current_user)):
+    return storage.add_application(req, user_id=current_user.id)
 
 
 @app.patch("/api/applications/{app_id}", response_model=Application)
-def update_application(app_id: str, req: ApplicationUpdate):
+def update_application(app_id: str, req: ApplicationUpdate, current_user: User = Depends(get_current_user)):
     updated = storage.update_application(app_id, req)
     if not updated:
         raise HTTPException(status_code=404, detail="Application not found.")
@@ -308,8 +313,8 @@ def update_application(app_id: str, req: ApplicationUpdate):
 
 
 @app.delete("/api/applications/{app_id}")
-def delete_application(app_id: str):
-    success = storage.delete_application(app_id)
+def delete_application(app_id: str, current_user: User = Depends(get_current_user)):
+    success = storage.delete_application(app_id, user_id=current_user.id)
     if not success:
         raise HTTPException(status_code=404, detail="Application not found.")
     return {"success": True}
@@ -317,8 +322,8 @@ def delete_application(app_id: str):
 
 # --- Excel Export ---
 @app.get("/api/export/excel")
-def export_excel():
-    apps = storage.get_applications()
+def export_excel(current_user: User = Depends(get_current_user)):
+    apps = storage.get_applications(user_id=current_user.id)
     excel_bytes = excel_exporter.export_workbook(apps)
     return Response(
         content=excel_bytes,
@@ -329,13 +334,13 @@ def export_excel():
 
 # --- Settings ---
 @app.get("/api/settings", response_model=Settings)
-def get_settings():
-    return storage.get_settings()
+def get_settings(current_user: User = Depends(get_current_user)):
+    return storage.get_settings(user_id=current_user.id)
 
 
 @app.post("/api/settings", response_model=Settings)
-def update_settings(req: SettingsUpdate):
-    return storage.update_settings(req)
+def update_settings(req: SettingsUpdate, current_user: User = Depends(get_current_user)):
+    return storage.update_settings(req, user_id=current_user.id)
 
 
 @app.post("/api/settings/test-ai")
