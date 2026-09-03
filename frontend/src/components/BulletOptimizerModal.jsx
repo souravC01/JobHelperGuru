@@ -1,20 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   Wand2,
-  CheckCircle2,
   Copy,
   Check,
-  ShieldCheck,
-  HelpCircle,
   Sparkles,
   Loader2,
   Briefcase,
   FolderGit2,
   X,
   Plus,
-  ArrowRight,
-  Target,
-  FileEdit,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
 import { optimizeBullet } from '../api/client';
 
@@ -134,39 +130,39 @@ export default function BulletOptimizerModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-      <div className="glass-panel bg-[#0e0e11] border border-white/[0.12] w-full max-w-3xl my-8 p-6 rounded-2xl space-y-5 animate-fade-in shadow-2xl max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+      <div className="card-corporate bg-white border border-[#e0e0e0] w-full max-w-4xl my-8 p-6 rounded-xl space-y-5 animate-fade-in shadow-xl max-h-[92vh] overflow-y-auto text-[#000000]">
         {/* Modal Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between pb-3 border-b border-[#e0e0e0]">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+            <div className="p-2 rounded-full bg-[#0a66c2]/10 text-[#0a66c2]">
               <Wand2 size={18} />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white tracking-tight">
-                BulletSkill 2.0 Resume Optimizer
+              <h3 className="text-base font-bold text-[#000000] tracking-tight">
+                BulletSkill 2.0 Resume Bullet Optimizer
               </h3>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-[#666666]">
                 Incorporate target skills into <strong>{sectionType === 'project' ? 'Project' : 'Work History'}</strong> bullet points
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-zinc-500 hover:text-white p-1 transition-colors"
+            className="text-[#666666] hover:text-[#000000] p-1 transition-colors"
           >
             <X size={18} />
           </button>
         </div>
 
         {/* Target Skills Pill Bank */}
-        <div className="space-y-2 glass-card p-4">
+        <div className="space-y-2 p-4 bg-[#f3f6f8] border border-[#e0e0e0] rounded-lg">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-slate-200">
+            <label className="text-xs font-bold text-[#000000]">
               Target Skills to Incorporate ({keywords.length})
             </label>
-            <span className="text-[11px] text-slate-400">
-              Targeting: <strong className="text-slate-200">{targetJobTitle}</strong>
+            <span className="text-[11px] text-[#666666]">
+              Targeting: <strong className="text-[#000000]">{targetJobTitle}</strong>
             </span>
           </div>
 
@@ -174,13 +170,13 @@ export default function BulletOptimizerModal({
             {keywords.map((kw, i) => (
               <span
                 key={i}
-                className="badge-pill bg-indigo-600/30 border border-indigo-500/50 text-indigo-200 text-xs py-1 px-2.5 flex items-center gap-1.5"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#b24020]/10 text-[#b24020] border border-[#b24020]/25"
               >
-                <span className="font-semibold">{kw}</span>
+                <span>{kw}</span>
                 <button
                   type="button"
                   onClick={() => handleRemoveSkill(kw)}
-                  className="hover:text-rose-400 text-slate-400"
+                  className="hover:text-[#b24020] text-[#666666] transition-colors"
                   title="Remove skill"
                 >
                   <X size={12} />
@@ -196,13 +192,13 @@ export default function BulletOptimizerModal({
                 onChange={(e) => setNewSkillInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddSkill(e)}
                 placeholder="+ Add skill..."
-                className="bg-slate-950/70 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-500 outline-none w-28 focus:w-36 transition-all"
+                className="input-corporate px-2.5 py-1 text-xs w-28 focus:w-36 transition-all"
               />
               {newSkillInput && (
                 <button
                   type="button"
                   onClick={handleAddSkill}
-                  className="p-1 rounded bg-indigo-600 text-white text-xs hover:bg-indigo-500"
+                  className="p-1 rounded-full bg-[#0a66c2] text-white text-xs hover:bg-[#004e99]"
                 >
                   <Plus size={12} />
                 </button>
@@ -214,18 +210,18 @@ export default function BulletOptimizerModal({
         {/* Section Type Switcher */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-300">Resume Section:</span>
-            <div className="flex bg-slate-950/80 p-1 rounded-xl border border-slate-800 text-xs">
+            <span className="text-xs font-semibold text-[#000000]">Resume Section:</span>
+            <div className="flex bg-[#f3f6f8] p-1 rounded-full border border-[#e0e0e0] text-xs">
               <button
                 type="button"
                 onClick={() => {
                   setSectionType('project');
                   setResult(null);
                 }}
-                className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg font-semibold transition-all ${
+                className={`flex items-center gap-1.5 py-1 px-3.5 rounded-full font-semibold transition-all ${
                   sectionType === 'project'
-                    ? 'bg-indigo-600 text-white shadow-md'
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-[#0a66c2] text-white shadow-sm'
+                    : 'text-[#666666] hover:text-[#000000]'
                 }`}
               >
                 <FolderGit2 size={13} />
@@ -237,10 +233,10 @@ export default function BulletOptimizerModal({
                   setSectionType('work_history');
                   setResult(null);
                 }}
-                className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg font-semibold transition-all ${
+                className={`flex items-center gap-1.5 py-1 px-3.5 rounded-full font-semibold transition-all ${
                   sectionType === 'work_history'
-                    ? 'bg-indigo-600 text-white shadow-md'
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-[#0a66c2] text-white shadow-sm'
+                    : 'text-[#666666] hover:text-[#000000]'
                 }`}
               >
                 <Briefcase size={13} />
@@ -252,7 +248,7 @@ export default function BulletOptimizerModal({
           <button
             onClick={(e) => handleGenerate(e)}
             disabled={loading || keywords.length === 0}
-            className="btn-primary text-xs self-end sm:self-auto"
+            className="btn-primary-corporate text-xs self-end sm:self-auto"
           >
             {loading ? (
               <>
@@ -269,7 +265,7 @@ export default function BulletOptimizerModal({
         </div>
 
         {error && (
-          <div className="p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+          <div className="p-3 bg-[#b24020]/10 border border-[#b24020]/25 rounded-lg text-[#b24020] text-xs flex items-center gap-2">
             <AlertTriangle size={15} />
             <span>{error}</span>
           </div>
@@ -277,19 +273,19 @@ export default function BulletOptimizerModal({
 
         {/* Results Container */}
         {result && (
-          <div className="space-y-4 pt-2 border-t border-slate-800">
-            {/* 🎯 Target Project & Bullet Point to Change Card */}
-            <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/60 to-slate-900 border border-indigo-500/40 space-y-3 shadow-lg">
+          <div className="space-y-4 pt-2 border-t border-[#e0e0e0]">
+            {/* Target Role & Current Bullet Card */}
+            <div className="p-4 rounded-lg bg-[#f3f6f8] border border-[#e0e0e0] space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-300">
+                  <div className="p-1.5 rounded-full bg-[#0a66c2]/10 text-[#0a66c2]">
                     {sectionType === 'project' ? <FolderGit2 size={16} /> : <Briefcase size={16} />}
                   </div>
                   <div>
-                    <h4 className="font-bold text-xs uppercase tracking-wide text-indigo-300">
+                    <h4 className="font-bold text-xs uppercase tracking-wide text-[#0a66c2]">
                       {sectionType === 'project' ? 'Target Project in Resume' : 'Target Role / Employment in Resume'}
                     </h4>
-                    <span className="text-xs font-semibold text-white">
+                    <span className="text-xs font-semibold text-[#000000]">
                       {result.target_project_name || (sectionType === 'project' ? 'Primary Technical Project' : 'Professional Work Experience')}
                     </span>
                   </div>
@@ -298,7 +294,7 @@ export default function BulletOptimizerModal({
                 {result.available_resume_bullets && result.available_resume_bullets.length > 1 && (
                   <button
                     onClick={() => setShowBulletPicker(!showBulletPicker)}
-                    className="text-[11px] text-cyan-400 hover:text-cyan-300 underline font-medium"
+                    className="text-[11px] text-[#0a66c2] hover:underline font-semibold"
                   >
                     {showBulletPicker ? 'Hide Bullets' : `Change Target ${sectionType === 'project' ? 'Project' : 'Job'} Bullet`}
                   </button>
@@ -307,8 +303,8 @@ export default function BulletOptimizerModal({
 
               {/* Strategic Rationale */}
               {result.replacement_rationale && (
-                <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
-                  <strong className="text-cyan-300">Strategy: </strong>
+                <p className="text-xs text-[#000000] leading-relaxed bg-white p-3 rounded-lg border border-[#e0e0e0]">
+                  <strong className="text-[#0a66c2]">Strategy: </strong>
                   {result.replacement_rationale}
                 </p>
               )}
@@ -316,23 +312,23 @@ export default function BulletOptimizerModal({
               {/* Current Bullet in Resume to Replace */}
               {result.original_bullet_to_replace && (
                 <div className="space-y-1.5 pt-1">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-400 uppercase tracking-wider">
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#b24020] uppercase tracking-wider">
                     <span>
                       {sectionType === 'project'
                         ? 'Current Project Bullet in Resume to Replace:'
                         : 'Current Work History Bullet in Resume to Replace:'}
                     </span>
                   </div>
-                  <div className="font-mono text-xs text-rose-200 bg-rose-950/30 p-2.5 rounded-lg border border-rose-500/30 leading-relaxed">
-                    • {result.original_bullet_to_replace}
+                  <div className="font-mono text-xs text-[#b24020] bg-[#b24020]/5 p-2.5 rounded border border-[#b24020]/25 leading-relaxed">
+                    &bull; {result.original_bullet_to_replace}
                   </div>
                 </div>
               )}
 
               {/* Bullet Picker Dropdown */}
               {showBulletPicker && result.available_resume_bullets && (
-                <div className="p-3 bg-slate-950/90 rounded-xl border border-slate-700 space-y-2 mt-2">
-                  <span className="text-xs font-semibold text-slate-300 block">
+                <div className="p-3 bg-white rounded-lg border border-[#e0e0e0] space-y-2 mt-2">
+                  <span className="text-xs font-semibold text-[#000000] block">
                     Choose which existing {sectionType === 'project' ? 'project' : 'work history'} bullet to upgrade:
                   </span>
                   <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
@@ -340,16 +336,16 @@ export default function BulletOptimizerModal({
                       <div
                         key={idx}
                         onClick={() => handleSelectDifferentBullet(bObj)}
-                        className={`p-2 rounded-lg cursor-pointer transition-colors text-xs font-mono border ${
+                        className={`p-2 rounded cursor-pointer transition-colors text-xs font-mono border ${
                           existingBullet === bObj.bullet
-                            ? 'bg-indigo-950/60 border-indigo-500 text-indigo-200'
-                            : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                            ? 'bg-[#0a66c2]/10 border-[#0a66c2] text-[#0a66c2] font-semibold'
+                            : 'bg-[#f3f6f8] border-[#e0e0e0] text-[#666666] hover:bg-[#eef3f8] hover:text-[#000000]'
                         }`}
                       >
-                        <span className="text-[10px] font-sans font-bold text-slate-500 uppercase block">
+                        <span className="text-[10px] font-sans font-bold text-[#666666] uppercase block">
                           {bObj.section}
                         </span>
-                        • {bObj.bullet}
+                        &bull; {bObj.bullet}
                       </div>
                     ))}
                   </div>
@@ -359,11 +355,11 @@ export default function BulletOptimizerModal({
 
             {/* Header for recommended replacements */}
             <div className="flex items-center justify-between pt-1">
-              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles size={14} className="text-cyan-400" />
+              <h4 className="text-xs font-bold text-[#000000] uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles size={14} className="text-[#0a66c2]" />
                 <span>Recommended Replacement Candidates (Choose 1)</span>
               </h4>
-              <span className="text-[11px] text-slate-400 font-medium">
+              <span className="text-[11px] text-[#666666] font-medium">
                 Framework: What + How + Result
               </span>
             </div>
@@ -373,21 +369,21 @@ export default function BulletOptimizerModal({
               {result.alternatives.map((alt, idx) => (
                 <div
                   key={idx}
-                  className="glass-card p-4 space-y-2.5 border-slate-800 hover:border-slate-700 transition-all text-xs"
+                  className="card-corporate p-4 space-y-2.5 bg-white border border-[#e0e0e0] hover:border-[#c1c6d4] transition-all text-xs rounded-lg shadow-none"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-indigo-300 tracking-wide uppercase text-[11px]">
+                    <span className="font-bold text-[#0a66c2] tracking-wide uppercase text-[11px]">
                       {alt.variant_name}
                     </span>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleCopy(alt.bullet, idx)}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition-colors"
+                        className="btn-secondary-corporate text-xs py-1 px-3"
                       >
                         {copiedIndex === idx ? (
                           <>
-                            <Check size={12} className="text-emerald-400" />
-                            <span className="text-emerald-400 font-semibold">Copied!</span>
+                            <Check size={12} className="text-[#057642]" />
+                            <span className="text-[#057642] font-semibold">Copied!</span>
                           </>
                         ) : (
                           <>
@@ -400,38 +396,38 @@ export default function BulletOptimizerModal({
                       {onMarkSkillsAdded && (
                         <button
                           onClick={handleMarkAdded}
-                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold transition-all ${
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
                             addedConfirmed
-                              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30 font-bold'
-                              : 'bg-blue-950/70 border border-blue-500/50 text-blue-300 hover:bg-blue-900/60 hover:text-white'
+                              ? 'bg-[#057642] text-white'
+                              : 'btn-primary-corporate text-xs py-1 px-3'
                           }`}
-                          title="Marks these skills as adopted into your resume, moving them to Matched Technical Skills (Blue) and recalculating your match score!"
+                          title="Marks these skills as adopted into your resume, moving them to Matched Technical Skills and recalculating your match score!"
                         >
-                          <CheckCircle2 size={12} className={addedConfirmed ? 'text-white' : 'text-blue-400'} />
-                          <span>{addedConfirmed ? '✓ Added to Resume' : 'Mark Skills Added'}</span>
+                          <CheckCircle2 size={12} className="text-white" />
+                          <span>{addedConfirmed ? 'Added to Resume' : 'Mark Skills Added'}</span>
                         </button>
                       )}
                     </div>
                   </div>
 
                   {/* Bullet text */}
-                  <p className="font-mono text-xs text-emerald-300 bg-slate-950/80 p-3 rounded-lg border border-emerald-500/30 leading-relaxed">
-                    • {alt.bullet}
+                  <p className="font-mono text-xs text-[#000000] bg-[#f3f6f8] p-3 rounded-lg border border-[#e0e0e0] leading-relaxed">
+                    &bull; {alt.bullet}
                   </p>
 
                   {/* What / How / Result Breakdown */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-1 text-[11px] text-slate-400">
-                    <div className="bg-slate-900/60 p-2 rounded border border-slate-800/60">
-                      <strong className="text-indigo-300 block mb-0.5">WHAT (Keyword):</strong>
-                      <span className="text-slate-200">{alt.what}</span>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-1 text-[11px]">
+                    <div className="bg-white p-2.5 rounded border border-[#e0e0e0]">
+                      <strong className="text-[#0a66c2] block mb-0.5 font-bold">WHAT (Keyword):</strong>
+                      <span className="text-[#000000]">{alt.what}</span>
                     </div>
-                    <div className="bg-slate-900/60 p-2 rounded border border-slate-800/60">
-                      <strong className="text-indigo-300 block mb-0.5">HOW (Action):</strong>
-                      <span className="text-slate-200">{alt.how}</span>
+                    <div className="bg-white p-2.5 rounded border border-[#e0e0e0]">
+                      <strong className="text-[#0a66c2] block mb-0.5 font-bold">HOW (Action):</strong>
+                      <span className="text-[#000000]">{alt.how}</span>
                     </div>
-                    <div className="bg-slate-900/60 p-2 rounded border border-slate-800/60">
-                      <strong className="text-indigo-300 block mb-0.5">RESULT / REASON:</strong>
-                      <span className="text-slate-200">{alt.result_or_reason}</span>
+                    <div className="bg-white p-2.5 rounded border border-[#e0e0e0]">
+                      <strong className="text-[#0a66c2] block mb-0.5 font-bold">RESULT / REASON:</strong>
+                      <span className="text-[#000000]">{alt.result_or_reason}</span>
                     </div>
                   </div>
                 </div>
@@ -440,32 +436,32 @@ export default function BulletOptimizerModal({
 
             {/* Added Confirmation & Recalculate Callout */}
             {addedConfirmed ? (
-              <div className="p-3.5 bg-blue-950/70 border border-blue-500/50 rounded-xl flex items-center justify-between gap-3 text-xs animate-fade-in shadow-lg shadow-blue-950/50">
-                <div className="flex items-center gap-2.5 text-blue-200">
-                  <CheckCircle2 size={18} className="text-blue-400 shrink-0" />
+              <div className="p-3.5 bg-[#057642]/10 border border-[#057642]/25 rounded-lg flex items-center justify-between gap-3 text-xs animate-fade-in text-[#057642]">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 size={18} className="text-[#057642] shrink-0" />
                   <div>
-                    <span className="font-bold text-white">Skills Adopted! </span>
+                    <span className="font-bold">Skills Adopted! </span>
                     <span>
-                      <strong className="text-cyan-300 font-mono">{keywords.join(', ')}</strong> moved to <strong>Matched Technical Skills (Blue)</strong> in your comparison card. Your projected ATS score has been boosted!
+                      <strong className="font-mono">{keywords.join(', ')}</strong> moved to <strong>Matched Technical Skills</strong> in your comparison card. Your projected ATS score has been boosted!
                     </span>
                   </div>
                 </div>
               </div>
             ) : (
               onMarkSkillsAdded && (
-                <div className="p-3.5 bg-slate-900/90 border border-blue-500/30 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2 text-slate-300">
-                    <Sparkles size={16} className="text-blue-400 shrink-0" />
+                <div className="p-3.5 bg-[#f3f6f8] border border-[#e0e0e0] rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-[#000000]">
+                    <Sparkles size={16} className="text-[#0a66c2] shrink-0" />
                     <span>
-                      Put this bullet into your resume? Move these skills to Matched (Blue) to re-evaluate your match score.
+                      Put this bullet into your resume? Move these skills to Matched to re-evaluate your match score.
                     </span>
                   </div>
                   <button
                     onClick={handleMarkAdded}
-                    className="btn-primary bg-blue-600 hover:bg-blue-500 border-blue-400 text-xs py-1.5 px-3 flex items-center gap-1.5 self-start sm:self-auto shrink-0 shadow-md shadow-blue-600/30 font-semibold"
+                    className="btn-primary-corporate text-xs py-1.5 px-3 flex items-center gap-1.5 self-start sm:self-auto shrink-0"
                   >
                     <CheckCircle2 size={13} />
-                    <span>Move {keywords.length} Skill{keywords.length > 1 ? 's' : ''} to Matched (Blue)</span>
+                    <span>Move {keywords.length} Skill{keywords.length > 1 ? 's' : ''} to Matched</span>
                   </button>
                 </div>
               )
@@ -473,8 +469,8 @@ export default function BulletOptimizerModal({
           </div>
         )}
 
-        <div className="flex justify-end pt-3 border-t border-slate-800">
-          <button onClick={onClose} className="btn-secondary text-xs">
+        <div className="flex justify-end pt-3 border-t border-[#e0e0e0]">
+          <button onClick={onClose} className="btn-secondary-corporate text-xs py-1 px-4">
             Done
           </button>
         </div>

@@ -245,13 +245,11 @@ export default function SettingsModal({ isOpen, onClose }) {
 
     let updatedList = [...savedKeys];
 
-    // Check if we are updating by editingId OR if this exact key combination already exists
     let targetIndex = -1;
     if (editingId) {
       targetIndex = updatedList.findIndex((item) => item.id === editingId);
     }
 
-    // If not found by ID, look for existing entry with identical credentials to prevent duplicate!
     if (targetIndex === -1) {
       targetIndex = updatedList.findIndex(
         (item) =>
@@ -263,7 +261,6 @@ export default function SettingsModal({ isOpen, onClose }) {
 
     let savedId;
     if (targetIndex !== -1) {
-      // UPDATE existing key without duplicating
       savedId = updatedList[targetIndex].id;
       updatedList[targetIndex] = {
         ...updatedList[targetIndex],
@@ -274,7 +271,6 @@ export default function SettingsModal({ isOpen, onClose }) {
         updated_at: new Date().toISOString(),
       };
     } else {
-      // Create genuinely new key profile
       savedId = 'key-' + Date.now();
       const newProfile = {
         id: savedId,
@@ -287,14 +283,11 @@ export default function SettingsModal({ isOpen, onClose }) {
       updatedList.unshift(newProfile);
     }
 
-    // Deduplicate entire list by signature to ensure zero duplicates
     updatedList = deduplicateKeys(updatedList);
-
     setSavedKeys(updatedList);
     localStorage.setItem('jobhelperguru_saved_keys', JSON.stringify(updatedList));
 
     try {
-      // Save to backend, disable offline mode, and set as active
       await updateSettings({
         api_base_url: trimmedUrl,
         api_key: trimmedKey,
@@ -340,24 +333,24 @@ export default function SettingsModal({ isOpen, onClose }) {
   const isEditingExisting = editingId && savedKeys.some((k) => k.id === editingId);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-      <div className="glass-panel bg-[#0e0e11] border border-white/[0.12] w-full max-w-xl my-8 p-6 rounded-2xl space-y-5 animate-fade-in shadow-2xl max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+      <div className="card-corporate bg-white border border-[#e0e0e0] w-full max-w-xl my-8 p-6 rounded-xl space-y-5 animate-fade-in shadow-xl max-h-[92vh] overflow-y-auto text-[#000000]">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between pb-3 border-b border-[#e0e0e0]">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+            <div className="p-2 rounded-full bg-[#0a66c2]/10 text-[#0a66c2]">
               <SettingsIcon size={18} />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white tracking-tight">AI Engine & API Keys</h3>
-              <p className="text-xs text-zinc-400">
+              <h3 className="text-base font-bold text-[#000000] tracking-tight">AI Engine & API Keys</h3>
+              <p className="text-xs text-[#666666]">
                 Choose a saved API key profile or switch to the built-in offline heuristic
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-zinc-500 hover:text-white p-1 transition-colors"
+            className="text-[#666666] hover:text-[#000000] p-1 transition-colors text-base"
           >
             ✕
           </button>
@@ -365,24 +358,24 @@ export default function SettingsModal({ isOpen, onClose }) {
 
         {/* 1. Built-in Offline Heuristic Engine Option */}
         <div
-          className={`p-3.5 rounded-xl border transition-all text-xs flex items-center justify-between gap-3 ${
+          className={`p-3.5 rounded-lg border transition-all text-xs flex items-center justify-between gap-3 ${
             isOfflineActive
-              ? 'bg-emerald-950/40 border-emerald-500/80 shadow-md shadow-emerald-950/40'
-              : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+              ? 'bg-[#057642]/10 border-2 border-[#057642]'
+              : 'bg-[#f3f6f8] border border-[#e0e0e0] hover:border-[#c1c6d4]'
           }`}
         >
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center gap-2">
-              <Zap size={16} className={isOfflineActive ? 'text-emerald-400' : 'text-slate-400'} />
-              <span className="font-bold text-slate-100 text-sm">Built-in Offline Heuristic Engine</span>
+              <Zap size={16} className={isOfflineActive ? 'text-[#057642]' : 'text-[#666666]'} />
+              <span className="font-bold text-[#000000] text-sm">Built-in Offline Heuristic Engine</span>
               {isOfflineActive && (
-                <span className="badge-pill bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] py-0.2 px-1.5 font-bold flex items-center gap-1">
+                <span className="badge-corporate bg-[#057642]/10 border border-[#057642]/25 text-[#057642] text-[10px] py-0.2 px-1.5 font-bold flex items-center gap-1">
                   <Check size={10} className="stroke-[3]" />
                   <span>Active</span>
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-[#666666]">
               Zero API keys required, zero network dependencies. Runs locally on your machine with high accuracy rule-based ATS matching and BulletSkill templates.
             </p>
           </div>
@@ -392,13 +385,13 @@ export default function SettingsModal({ isOpen, onClose }) {
               type="button"
               onClick={handleSwitchToOffline}
               disabled={saving}
-              className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold shrink-0 transition-all shadow-sm flex items-center gap-1.5"
+              className="btn-secondary-corporate text-xs py-1 px-3 shrink-0 flex items-center gap-1.5"
             >
               <Zap size={13} />
               <span>Use Offline</span>
             </button>
           ) : (
-            <div className="text-[11px] font-bold text-emerald-400 shrink-0">
+            <div className="text-[11px] font-bold text-[#057642] shrink-0">
               Currently Selected ✓
             </div>
           )}
@@ -407,14 +400,14 @@ export default function SettingsModal({ isOpen, onClose }) {
         {/* 2. Saved Keys Section */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-              <ShieldCheck size={14} className="text-indigo-400" />
+            <label className="text-xs font-bold text-[#000000] uppercase tracking-wider flex items-center gap-1.5">
+              <ShieldCheck size={14} className="text-[#0a66c2]" />
               <span>Saved API Keys ({savedKeys.length})</span>
             </label>
             <button
               type="button"
               onClick={handleAddNewKey}
-              className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium"
+              className="text-[11px] text-[#0a66c2] hover:underline flex items-center gap-1 font-semibold"
             >
               <PlusCircle size={12} />
               <span>+ Add New Key</span>
@@ -422,7 +415,7 @@ export default function SettingsModal({ isOpen, onClose }) {
           </div>
 
           {savedKeys.length === 0 ? (
-            <div className="p-4 rounded-xl border border-dashed border-slate-800 text-center text-xs text-slate-400">
+            <div className="p-4 rounded-lg border border-dashed border-[#e0e0e0] bg-[#f3f6f8] text-center text-xs text-[#666666]">
               No saved keys yet. Enter your API URL, Model Name, and API Key below to save your first profile.
             </div>
           ) : (
@@ -434,37 +427,37 @@ export default function SettingsModal({ isOpen, onClose }) {
                 return (
                   <div
                     key={item.id}
-                    className={`p-3 rounded-xl border transition-all text-xs flex items-center justify-between gap-3 ${
+                    className={`p-3 rounded-lg border transition-all text-xs flex items-center justify-between gap-3 ${
                       isActive
-                        ? 'bg-indigo-950/50 border-indigo-500/80 shadow-md shadow-indigo-950/40'
+                        ? 'bg-[#0a66c2]/5 border-2 border-[#0a66c2]'
                         : isBeingEdited
-                        ? 'bg-slate-800/80 border-cyan-500/60'
-                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                        ? 'bg-[#f3f6f8] border border-[#0a66c2]'
+                        : 'bg-[#f3f6f8] border border-[#e0e0e0] hover:border-[#c1c6d4]'
                     }`}
                   >
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-100 truncate">{item.name}</span>
+                        <span className="font-bold text-[#000000] truncate">{item.name}</span>
                         {isActive && (
-                          <span className="badge-pill bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] py-0.2 px-1.5 font-bold flex items-center gap-1">
+                          <span className="badge-corporate bg-[#057642]/10 border border-[#057642]/25 text-[#057642] text-[10px] py-0.2 px-1.5 font-bold flex items-center gap-1">
                             <Check size={10} className="stroke-[3]" />
                             <span>Active</span>
                           </span>
                         )}
                         {isBeingEdited && (
-                          <span className="badge-pill bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-[10px] py-0.2 px-1.5 font-semibold">
+                          <span className="badge-corporate bg-[#0a66c2]/10 border border-[#0a66c2]/25 text-[#0a66c2] text-[10px] py-0.2 px-1.5 font-semibold">
                             Loaded in Form
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2 text-[11px] text-slate-400 truncate">
-                        <span className="font-mono text-cyan-300">{item.model_name}</span>
-                        <span>•</span>
-                        <span className="font-mono text-slate-400 truncate">{item.api_base_url}</span>
+                      <div className="flex items-center gap-2 text-[11px] text-[#666666] truncate">
+                        <span className="font-mono text-[#0a66c2] font-semibold">{item.model_name}</span>
+                        <span>-</span>
+                        <span className="font-mono text-[#666666] truncate">{item.api_base_url}</span>
                       </div>
 
-                      <div className="font-mono text-[10px] text-slate-500">
+                      <div className="font-mono text-[10px] text-[#666666]">
                         Key: {maskKey(item.api_key)}
                       </div>
                     </div>
@@ -475,7 +468,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                         <button
                           type="button"
                           onClick={() => handleActivateKey(item)}
-                          className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-all"
+                          className="btn-primary-corporate text-xs py-1 px-3"
                           title="Use this saved key as active AI provider"
                         >
                           Activate
@@ -485,7 +478,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                       <button
                         type="button"
                         onClick={() => handleEditKey(item)}
-                        className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+                        className="p-1.5 rounded hover:bg-white text-[#666666] hover:text-[#000000] transition-colors"
                         title="Edit this saved key in form"
                       >
                         <Edit2 size={13} />
@@ -494,7 +487,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                       <button
                         type="button"
                         onClick={() => handleDeleteKey(item.id)}
-                        className="p-1.5 rounded hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 transition-colors"
+                        className="p-1.5 rounded hover:bg-white text-[#666666] hover:text-[#b24020] transition-colors"
                         title="Delete this saved key"
                       >
                         <Trash2 size={13} />
@@ -508,16 +501,16 @@ export default function SettingsModal({ isOpen, onClose }) {
         </div>
 
         {/* 3. Input Form */}
-        <form onSubmit={handleSaveForm} className="space-y-4 pt-3 border-t border-slate-800">
+        <form onSubmit={handleSaveForm} className="space-y-4 pt-3 border-t border-[#e0e0e0]">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+            <h4 className="text-xs font-bold text-[#000000] uppercase tracking-wider">
               {isEditingExisting ? 'Edit Selected Key Profile' : 'Configure New Key'}
             </h4>
             {isEditingExisting && (
               <button
                 type="button"
                 onClick={handleAddNewKey}
-                className="text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1"
+                className="text-[11px] text-[#666666] hover:text-[#000000] flex items-center gap-1 font-semibold"
               >
                 <PlusCircle size={11} />
                 <span>Switch to New Key</span>
@@ -527,8 +520,8 @@ export default function SettingsModal({ isOpen, onClose }) {
 
           {/* Profile Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
-              <Tag size={13} className="text-indigo-400" />
+            <label className="block text-xs font-semibold text-[#000000] mb-1 flex items-center gap-1.5">
+              <Tag size={13} className="text-[#0a66c2]" />
               <span>Profile Name (Optional)</span>
             </label>
             <input
@@ -536,14 +529,14 @@ export default function SettingsModal({ isOpen, onClose }) {
               value={keyName}
               onChange={(e) => setKeyName(e.target.value)}
               placeholder="e.g. My Google Gemini, OpenAI Work, Groq Fast"
-              className="input-field text-xs"
+              className="input-corporate w-full text-xs"
             />
           </div>
 
           {/* API Base URL */}
           <div>
-            <label className="block text-xs font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
-              <Globe size={13} className="text-indigo-400" />
+            <label className="block text-xs font-semibold text-[#000000] mb-1 flex items-center gap-1.5">
+              <Globe size={13} className="text-[#0a66c2]" />
               <span>API Base URL</span>
             </label>
             <input
@@ -551,15 +544,15 @@ export default function SettingsModal({ isOpen, onClose }) {
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               placeholder="e.g. https://generativelanguage.googleapis.com/v1beta/openai/ or https://api.openai.com/v1"
-              className="input-field font-mono text-xs"
+              className="input-corporate w-full font-mono text-xs"
               required
             />
           </div>
 
           {/* Model Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
-              <Cpu size={13} className="text-indigo-400" />
+            <label className="block text-xs font-semibold text-[#000000] mb-1 flex items-center gap-1.5">
+              <Cpu size={13} className="text-[#0a66c2]" />
               <span>Model Name</span>
             </label>
             <input
@@ -567,7 +560,7 @@ export default function SettingsModal({ isOpen, onClose }) {
               value={modelName}
               onChange={(e) => setModelName(e.target.value)}
               placeholder="e.g. gemini-2.0-flash, gpt-4o-mini, or anthropic/claude-3.5-sonnet"
-              className="input-field font-mono text-xs"
+              className="input-corporate w-full font-mono text-xs"
               required
             />
           </div>
@@ -575,14 +568,14 @@ export default function SettingsModal({ isOpen, onClose }) {
           {/* API Key */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                <Key size={13} className="text-indigo-400" />
+              <label className="text-xs font-semibold text-[#000000] flex items-center gap-1.5">
+                <Key size={13} className="text-[#0a66c2]" />
                 <span>API Key</span>
               </label>
               <button
                 type="button"
                 onClick={() => setShowKey(!showKey)}
-                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold"
+                className="text-[11px] text-[#0a66c2] hover:underline font-semibold"
               >
                 {showKey ? 'Hide' : 'Reveal'}
               </button>
@@ -592,35 +585,35 @@ export default function SettingsModal({ isOpen, onClose }) {
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder="Paste your API key here (AIzaSy... or sk-...)"
-              className="input-field font-mono text-xs"
+              className="input-corporate w-full font-mono text-xs"
             />
           </div>
 
           {/* Test Connection Result */}
           {testResult && (
             <div
-              className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+              className={`p-3 rounded-lg border text-xs flex items-start gap-2 ${
                 testResult.success
-                  ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
-                  : 'bg-rose-950/40 border-rose-500/40 text-rose-300'
+                  ? 'bg-[#057642]/10 border-[#057642]/25 text-[#057642]'
+                  : 'bg-[#b24020]/10 border-[#b24020]/25 text-[#b24020]'
               }`}
             >
               {testResult.success ? (
-                <Check size={16} className="text-emerald-400 shrink-0 mt-0.5" />
+                <Check size={16} className="text-[#057642] shrink-0 mt-0.5" />
               ) : (
-                <AlertCircle size={16} className="text-rose-400 shrink-0 mt-0.5" />
+                <AlertCircle size={16} className="text-[#b24020] shrink-0 mt-0.5" />
               )}
               <span className="leading-relaxed">{testResult.message}</span>
             </div>
           )}
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+          <div className="flex items-center justify-between pt-3 border-t border-[#e0e0e0]">
             <button
               type="button"
               onClick={handleTestConnection}
               disabled={testing}
-              className="btn-secondary text-xs"
+              className="btn-secondary-corporate text-xs py-1 px-3"
             >
               {testing ? (
                 <>
@@ -639,7 +632,7 @@ export default function SettingsModal({ isOpen, onClose }) {
               <button
                 type="button"
                 onClick={onClose}
-                className="btn-secondary text-xs"
+                className="btn-secondary-corporate text-xs py-1 px-3.5"
               >
                 Close
               </button>
@@ -647,7 +640,7 @@ export default function SettingsModal({ isOpen, onClose }) {
               <button
                 type="submit"
                 disabled={saving}
-                className="btn-primary text-xs"
+                className="btn-primary-corporate text-xs py-1 px-4"
               >
                 {saving
                   ? 'Saving...'

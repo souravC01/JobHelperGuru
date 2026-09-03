@@ -7,10 +7,8 @@ import {
   Settings as SettingsIcon,
   FileSpreadsheet,
   Layers,
-  CheckCircle2,
   TrendingUp,
   Lock,
-  User as UserIcon,
 } from 'lucide-react';
 import JobAnalyzer from './components/JobAnalyzer';
 import ResumeFitRanker from './components/ResumeFitRanker';
@@ -22,6 +20,7 @@ import SettingsModal from './components/SettingsModal';
 import OfflineSwitchModal from './components/OfflineSwitchModal';
 import AuthModal from './components/AuthModal';
 import UserNav from './components/UserNav';
+import ThemeToggle from './components/ThemeToggle';
 import {
   getResumes,
   getApplications,
@@ -35,6 +34,23 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(getCurrentUser());
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
+
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('jobhelperguru_theme') || 'light';
+  });
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('jobhelperguru_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
 
   const [activeTab, setActiveTab] = useState('analyzer'); // 'analyzer', 'resumes', 'tracker'
   const [currentJob, setCurrentJob] = useState(null);
@@ -171,41 +187,39 @@ export default function App() {
   const totalCount = applications.length;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
-      {/* Top Navbar */}
-      <header className="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur-xl border-b border-white/[0.08]">
+    <div className="min-h-screen bg-[#f3f6f8] text-[#000000] flex flex-col font-sans selection:bg-[#0a66c2] selection:text-white">
+      {/* Top Corporate Navbar */}
+      <header className="sticky top-0 z-40 bg-white border-b border-[#e0e0e0]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
           {/* Brand Logo */}
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('analyzer')}>
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 p-[1px] shadow-lg shadow-indigo-500/20">
-              <div className="w-full h-full bg-zinc-950 rounded-[15px] flex items-center justify-center">
-                <Briefcase size={20} className="text-indigo-400" />
-              </div>
+            <div className="w-9 h-9 rounded-md bg-[#0a66c2] flex items-center justify-center shadow-sm">
+              <Briefcase size={20} className="text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-base tracking-tight text-white">JobHelperGuru</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 tracking-wide uppercase">
-                  Multi-User Cloud
+                <span className="font-bold text-base tracking-tight text-[#000000]">JobHelperGuru</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#f3f6f8] text-[#0a66c2] border border-[#e0e0e0] tracking-wide uppercase">
+                  Cloud
                 </span>
               </div>
-              <p className="text-[11px] text-zinc-400 hidden sm:block">
+              <p className="text-[11px] text-[#666666] hidden sm:block">
                 AI Job Tailoring, Best-Fit Resumes & Personal Pipeline
               </p>
             </div>
           </div>
 
           {/* Desktop Navigation Tabs */}
-          <nav className="hidden md:flex items-center gap-1.5 p-1 bg-white/[0.04] border border-white/[0.08] rounded-2xl">
+          <nav className="hidden md:flex items-center gap-1 h-16">
             <button
               onClick={() => setActiveTab('analyzer')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
+              className={`flex items-center gap-2 px-4 h-full text-xs transition-all border-b-2 ${
                 activeTab === 'analyzer'
-                  ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
-                  : 'text-zinc-400 hover:text-white'
+                  ? 'border-[#0a66c2] text-[#0a66c2] font-semibold'
+                  : 'border-transparent text-[#666666] hover:text-[#000000] font-medium'
               }`}
             >
-              <Sparkles size={13} className={activeTab === 'analyzer' ? 'text-indigo-400' : ''} />
+              <Sparkles size={14} className={activeTab === 'analyzer' ? 'text-[#0a66c2]' : 'text-[#666666]'} />
               <span>Job Analyzer</span>
             </button>
 
@@ -217,13 +231,13 @@ export default function App() {
                 }
                 setActiveTab('resumes');
               }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
+              className={`flex items-center gap-2 px-4 h-full text-xs transition-all border-b-2 ${
                 activeTab === 'resumes'
-                  ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
-                  : 'text-zinc-400 hover:text-white'
+                  ? 'border-[#0a66c2] text-[#0a66c2] font-semibold'
+                  : 'border-transparent text-[#666666] hover:text-[#000000] font-medium'
               }`}
             >
-              <FileText size={13} />
+              <FileText size={14} className={activeTab === 'resumes' ? 'text-[#0a66c2]' : 'text-[#666666]'} />
               <span>Resumes ({resumes.length})</span>
             </button>
 
@@ -235,13 +249,13 @@ export default function App() {
                 }
                 setActiveTab('tracker');
               }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all ${
+              className={`flex items-center gap-2 px-4 h-full text-xs transition-all border-b-2 ${
                 activeTab === 'tracker'
-                  ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
-                  : 'text-zinc-400 hover:text-white'
+                  ? 'border-[#0a66c2] text-[#0a66c2] font-semibold'
+                  : 'border-transparent text-[#666666] hover:text-[#000000] font-medium'
               }`}
             >
-              <TableIcon size={13} />
+              <TableIcon size={14} className={activeTab === 'tracker' ? 'text-[#0a66c2]' : 'text-[#666666]'} />
               <span>Application Pipeline ({totalCount})</span>
             </button>
           </nav>
@@ -264,6 +278,8 @@ export default function App() {
               <span>Export .xlsx</span>
             </button>
 
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+
             <button
               onClick={() => {
                 if (!currentUser) {
@@ -273,7 +289,7 @@ export default function App() {
                 }
                 setIsSettingsOpen(true);
               }}
-              className="p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.2] text-zinc-400 hover:text-white transition-all shadow-sm"
+              className="p-2 rounded-full bg-white hover:bg-[#f3f6f8] border border-[#e0e0e0] hover:border-[#c1c6d4] text-[#666666] hover:text-[#000000] transition-all"
               title="AI & API Settings"
             >
               <SettingsIcon size={17} />
@@ -293,11 +309,11 @@ export default function App() {
         </div>
 
         {/* Mobile Tab bar */}
-        <div className="flex md:hidden px-4 pb-2 pt-1 gap-1 border-t border-white/[0.06] overflow-x-auto text-xs">
+        <div className="flex md:hidden px-4 pb-2 pt-1 gap-1 border-t border-[#e0e0e0] bg-white overflow-x-auto text-xs">
           <button
             onClick={() => setActiveTab('analyzer')}
-            className={`px-3 py-1 rounded-full font-medium whitespace-nowrap ${
-              activeTab === 'analyzer' ? 'bg-indigo-600 text-white' : 'text-zinc-400'
+            className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-colors ${
+              activeTab === 'analyzer' ? 'bg-[#0a66c2] text-white' : 'text-[#666666] hover:text-[#000000]'
             }`}
           >
             Analyzer
@@ -310,8 +326,8 @@ export default function App() {
               }
               setActiveTab('resumes');
             }}
-            className={`px-3 py-1 rounded-full font-medium whitespace-nowrap ${
-              activeTab === 'resumes' ? 'bg-indigo-600 text-white' : 'text-zinc-400'
+            className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-colors ${
+              activeTab === 'resumes' ? 'bg-[#0a66c2] text-white' : 'text-[#666666] hover:text-[#000000]'
             }`}
           >
             Resumes ({resumes.length})
@@ -324,8 +340,8 @@ export default function App() {
               }
               setActiveTab('tracker');
             }}
-            className={`px-3 py-1 rounded-full font-medium whitespace-nowrap ${
-              activeTab === 'tracker' ? 'bg-indigo-600 text-white' : 'text-zinc-400'
+            className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-colors ${
+              activeTab === 'tracker' ? 'bg-[#0a66c2] text-white' : 'text-[#666666] hover:text-[#000000]'
             }`}
           >
             Pipeline ({totalCount})
@@ -334,29 +350,29 @@ export default function App() {
       </header>
 
       {/* Pipeline Quick Stats Bar */}
-      <section className="bg-white/[0.015] border-b border-white/[0.06] py-2.5 px-4 sm:px-6 lg:px-8">
+      <section className="bg-white border-b border-[#e0e0e0] py-2.5 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4 text-xs">
           <div className="flex items-center gap-6 flex-wrap">
-            <div className="flex items-center gap-2 text-zinc-400">
-              <Layers size={13} className="text-zinc-500" />
-              <span>Tracked: <strong className="text-white font-mono">{totalCount}</strong></span>
+            <div className="flex items-center gap-2 text-[#666666]">
+              <Layers size={14} className="text-[#666666]" />
+              <span>Tracked: <strong className="text-[#000000] font-mono">{totalCount}</strong></span>
             </div>
-            <div className="flex items-center gap-2 text-zinc-400">
-              <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-              <span>Applied: <strong className="text-indigo-300 font-mono">{appliedCount}</strong></span>
+            <div className="flex items-center gap-2 text-[#666666]">
+              <div className="w-2 h-2 rounded-full bg-[#0a66c2]" />
+              <span>Applied: <strong className="text-[#0a66c2] font-mono">{appliedCount}</strong></span>
             </div>
-            <div className="flex items-center gap-2 text-zinc-400">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span>Interviewing: <strong className="text-emerald-300 font-mono">{interviewCount}</strong></span>
+            <div className="flex items-center gap-2 text-[#666666]">
+              <div className="w-2 h-2 rounded-full bg-[#004e99]" />
+              <span>Interviewing: <strong className="text-[#004e99] font-mono">{interviewCount}</strong></span>
             </div>
-            <div className="flex items-center gap-2 text-zinc-400">
-              <div className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-              <span>Offers: <strong className="text-cyan-300 font-mono">{offerCount}</strong></span>
+            <div className="flex items-center gap-2 text-[#666666]">
+              <div className="w-2 h-2 rounded-full bg-[#057642]" />
+              <span>Offers: <strong className="text-[#057642] font-mono">{offerCount}</strong></span>
             </div>
           </div>
 
-          <div className="text-[11px] text-zinc-400 flex items-center gap-1.5">
-            <TrendingUp size={12} className="text-indigo-400" />
+          <div className="text-[11px] text-[#666666] flex items-center gap-1.5">
+            <TrendingUp size={12} className="text-[#0a66c2]" />
             <span>Targeting high-match roles accelerates interview conversion</span>
           </div>
         </div>
@@ -423,12 +439,12 @@ export default function App() {
               onResumesUpdated={(updated) => setResumes(updated)}
             />
           ) : (
-            <div className="max-w-xl mx-auto my-12 p-8 rounded-3xl bg-white/[0.02] border border-white/10 text-center backdrop-blur-xl">
-              <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mx-auto flex items-center justify-center mb-4">
-                <Lock size={28} />
+            <div className="max-w-xl mx-auto my-12 p-8 rounded-lg bg-white border border-[#e0e0e0] text-center">
+              <div className="w-14 h-14 rounded-full bg-[#0a66c2]/10 border border-[#0a66c2]/20 text-[#0a66c2] mx-auto flex items-center justify-center mb-4">
+                <Lock size={24} />
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">Personal Resume Library</h3>
-              <p className="text-xs text-zinc-400 mb-6 leading-relaxed">
+              <h3 className="text-xl font-bold text-[#000000] mb-2">Personal Resume Library</h3>
+              <p className="text-xs text-[#666666] mb-6 leading-relaxed">
                 Sign in to upload, store, and manage your private resumes with encrypted Cloudflare R2 object storage.
               </p>
               <button
@@ -436,7 +452,7 @@ export default function App() {
                   setAuthMode('login');
                   setIsAuthOpen(true);
                 }}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold shadow-lg shadow-indigo-500/20 transition-all"
+                className="btn-primary-corporate"
               >
                 Sign In to View Resumes
               </button>
@@ -448,12 +464,12 @@ export default function App() {
           currentUser ? (
             <ApplicationsTracker refreshTrigger={refreshTrackerTrigger} />
           ) : (
-            <div className="max-w-xl mx-auto my-12 p-8 rounded-3xl bg-white/[0.02] border border-white/10 text-center backdrop-blur-xl">
-              <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mx-auto flex items-center justify-center mb-4">
-                <TableIcon size={28} />
+            <div className="max-w-xl mx-auto my-12 p-8 rounded-lg bg-white border border-[#e0e0e0] text-center">
+              <div className="w-14 h-14 rounded-full bg-[#0a66c2]/10 border border-[#0a66c2]/20 text-[#0a66c2] mx-auto flex items-center justify-center mb-4">
+                <TableIcon size={24} />
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">Personal Job Pipeline</h3>
-              <p className="text-xs text-zinc-400 mb-6 leading-relaxed">
+              <h3 className="text-xl font-bold text-[#000000] mb-2">Personal Job Pipeline</h3>
+              <p className="text-xs text-[#666666] mb-6 leading-relaxed">
                 Sign in to view and manage your private job application pipeline, interview stages, and follow-up deadlines.
               </p>
               <button
@@ -461,7 +477,7 @@ export default function App() {
                   setAuthMode('login');
                   setIsAuthOpen(true);
                 }}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold shadow-lg shadow-indigo-500/20 transition-all"
+                className="btn-primary-corporate"
               >
                 Sign In to View Pipeline
               </button>
@@ -518,9 +534,9 @@ export default function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
-      {/* Footer */}
-      <footer className="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500">
-        <p>JobHelperGuru — Built for smarter, tailored job applications & ATS optimization.</p>
+      {/* Corporate Footer (Zero Em-Dash) */}
+      <footer className="border-t border-[#e0e0e0] bg-white py-6 text-center text-xs text-[#666666]">
+        <p>JobHelperGuru - Built for smarter, tailored job applications & ATS optimization.</p>
       </footer>
     </div>
   );

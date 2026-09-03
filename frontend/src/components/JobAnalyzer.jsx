@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   Link2,
   FileText,
-  Sparkles,
   Building2,
   MapPin,
   DollarSign,
@@ -117,26 +116,26 @@ export default function JobAnalyzer({
 
   return (
     <div className="space-y-6">
-      {/* Floating Raycast-Style Command Bar */}
+      {/* Corporate Ingestion Card */}
       <div className="max-w-4xl mx-auto w-full">
-        <form onSubmit={handleAnalyze} className="glass-command-bar p-2 pl-4 flex items-center gap-3">
-          <div className="text-indigo-400 shrink-0">
-            <Sparkles size={18} className="animate-pulse" />
+        <form onSubmit={handleAnalyze} className="card-corporate p-3 sm:p-4 bg-white border border-[#e0e0e0] rounded-lg shadow-none flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="text-[#0a66c2] pl-2 hidden sm:block shrink-0">
+            <Link2 size={18} />
           </div>
 
           <input
             type="url"
-            placeholder="Paste LinkedIn, Workday, Dayforce, or Greenhouse job URL..."
+            placeholder="Paste LinkedIn, Greenhouse, Workday, Dayforce, or Lever job URL..."
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
             disabled={loading}
-            className="bg-transparent border-none outline-none text-sm text-white placeholder:text-zinc-500 font-mono tracking-tight flex-1"
+            className="input-corporate flex-1 text-sm text-[#000000] placeholder:text-[#666666] h-11"
           />
 
           <button
             type="submit"
             disabled={loading}
-            className="btn-gradient whitespace-nowrap text-xs px-4 py-2 flex items-center gap-1.5 shrink-0"
+            className="btn-primary-corporate whitespace-nowrap h-11 px-6 shrink-0"
           >
             {loading ? (
               <>
@@ -144,44 +143,42 @@ export default function JobAnalyzer({
                 <span>Analyzing...</span>
               </>
             ) : (
-              <>
-                <span>⚡ Analyze Role</span>
-              </>
+              <span>Analyze Job</span>
             )}
           </button>
         </form>
 
         {/* Toggle for manual paste */}
-        <div className="flex items-center justify-between px-3 mt-2 text-xs text-zinc-500">
+        <div className="flex items-center justify-between px-3 mt-2 text-xs text-[#666666]">
           <span>Supported: LinkedIn, Greenhouse, Workday, Dayforce, Lever, Indeed</span>
           <button
             type="button"
             onClick={() => setShowPasteText(!showPasteText)}
-            className="text-zinc-400 hover:text-indigo-400 flex items-center gap-1 transition-colors font-medium"
+            className="text-[#0a66c2] hover:underline flex items-center gap-1 font-semibold transition-colors"
           >
             <FileText size={12} />
-            <span>{showPasteText ? 'Hide Text Area' : 'Or Paste Text Directly'}</span>
+            <span>{showPasteText ? 'Hide Text Area' : 'Or Paste Job Text Directly'}</span>
             {showPasteText ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </button>
         </div>
 
         {/* Expandable Text Paste Drawer */}
         {showPasteText && (
-          <div className="glass-panel p-4 mt-3 space-y-3 animate-fade-in border-white/10">
+          <div className="card-corporate p-4 mt-3 space-y-3 bg-white border border-[#e0e0e0] rounded-lg animate-fade-in">
             <textarea
               placeholder="Paste full job description text here..."
-              rows={5}
+              rows={6}
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
               disabled={loading}
-              className="input-field text-xs font-mono resize-y"
+              className="input-corporate w-full text-xs font-mono resize-y"
             />
             <div className="flex justify-end">
               <button
                 type="button"
                 onClick={handleAnalyze}
                 disabled={loading}
-                className="btn-primary text-xs"
+                className="btn-primary-corporate text-xs"
               >
                 {loading ? 'Analyzing Text...' : 'Analyze Raw Text'}
               </button>
@@ -191,9 +188,9 @@ export default function JobAnalyzer({
 
         {/* Error Alert */}
         {error && (
-          <div className="mt-3 p-3 bg-rose-500/10 border border-rose-500/25 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-rose-300 text-xs animate-fade-in">
+          <div className="mt-3 p-3 bg-[#b24020]/10 border border-[#b24020]/25 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-[#b24020] text-xs animate-fade-in">
             <div className="flex items-center gap-2">
-              <AlertCircle size={15} className="shrink-0 text-rose-400" />
+              <AlertCircle size={15} className="shrink-0 text-[#b24020]" />
               <span>{error}</span>
             </div>
             {mode === 'url' && (
@@ -201,9 +198,10 @@ export default function JobAnalyzer({
                 type="button"
                 onClick={() => {
                   setMode('text');
+                  setShowPasteText(true);
                   setError('');
                 }}
-                className="shrink-0 px-3 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 font-medium text-[11px] border border-rose-500/30 transition-colors"
+                className="btn-secondary-corporate text-[11px] py-1 px-3 border-[#b24020] text-[#b24020] hover:bg-[#b24020]/10 shrink-0"
               >
                 Switch to Paste Job Text &rarr;
               </button>
@@ -216,35 +214,33 @@ export default function JobAnalyzer({
       {currentJob && (
         <div className="space-y-6 animate-fade-in">
           {/* Header Card */}
-          <div className="glass-panel p-6 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/[0.07] rounded-full blur-3xl pointer-events-none" />
-
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-white/[0.06]">
-              <div className="space-y-1.5">
+          <div className="card-corporate p-6 bg-white border border-[#e0e0e0] rounded-lg">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-[#e0e0e0]">
+              <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="badge-pill bg-indigo-500/10 text-indigo-300 border border-indigo-500/25 font-mono text-[11px]">
-                    <Building2 size={12} />
+                  <span className="badge-corporate bg-[#f3f6f8] text-[#000000] border border-[#e0e0e0] font-semibold text-xs">
+                    <Building2 size={13} className="text-[#0a66c2]" />
                     <span>{currentJob.company || 'Unknown Company'}</span>
                   </span>
                   {currentJob.work_mode && (
-                    <span className="badge-pill bg-white/[0.04] text-zinc-300 border border-white/10 text-[11px]">
+                    <span className="badge-corporate bg-[#f3f6f8] text-[#666666] border border-[#e0e0e0] text-xs">
                       {currentJob.work_mode}
                     </span>
                   )}
                 </div>
 
-                <h1 className="text-2xl font-bold text-white tracking-tight">
+                <h1 className="text-2xl font-bold text-[#000000] tracking-tight">
                   {currentJob.title || 'Open Position'}
                 </h1>
 
-                <div className="flex flex-wrap items-center gap-2.5 pt-1 text-xs text-zinc-300">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.08]">
-                    <MapPin size={13} className="text-zinc-400" />
+                <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-[#000000]">
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f3f6f8] border border-[#e0e0e0]">
+                    <MapPin size={13} className="text-[#666666]" />
                     <span>{currentJob.location || 'Unknown'}</span>
                   </div>
 
                   {currentJob.salary_range && currentJob.salary_range !== 'Not specified' && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-mono font-medium">
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#057642]/10 border border-[#057642]/20 text-[#057642] font-mono font-semibold">
                       <DollarSign size={13} />
                       <span>{currentJob.salary_range}</span>
                     </div>
@@ -252,12 +248,12 @@ export default function JobAnalyzer({
 
                   {/* Required Professional Work Experience Badge */}
                   <div
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium border text-xs transition-colors ${
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-medium border text-xs transition-colors ${
                       (currentJob.experience_required === 'New Grad' || currentJob.is_new_grad_role)
-                        ? 'bg-cyan-500/10 border-cyan-500/25 text-cyan-300'
+                        ? 'bg-[#0a66c2]/10 border-[#0a66c2]/25 text-[#0a66c2]'
                         : currentJob.experience_required && currentJob.experience_required !== 'Not specified'
-                        ? 'bg-amber-500/10 border-amber-500/25 text-amber-300 font-mono'
-                        : 'bg-white/[0.03] border-white/[0.08] text-zinc-400'
+                        ? 'bg-[#b24020]/10 border-[#b24020]/25 text-[#b24020] font-mono font-semibold'
+                        : 'bg-[#f3f6f8] border-[#e0e0e0] text-[#666666]'
                     }`}
                     title="Required Professional Work Experience"
                   >
@@ -265,10 +261,10 @@ export default function JobAnalyzer({
                       size={13}
                       className={
                         (currentJob.experience_required === 'New Grad' || currentJob.is_new_grad_role)
-                          ? 'text-cyan-400'
+                          ? 'text-[#0a66c2]'
                           : currentJob.experience_required && currentJob.experience_required !== 'Not specified'
-                          ? 'text-amber-400'
-                          : 'text-zinc-500'
+                          ? 'text-[#b24020]'
+                          : 'text-[#666666]'
                       }
                     />
                     <span>
@@ -277,15 +273,15 @@ export default function JobAnalyzer({
                   </div>
 
                   {currentJob.experience_level && currentJob.experience_level !== 'Not specified' && currentJob.experience_level !== currentJob.experience_required && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-300 font-medium">
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#004e99]/10 border border-[#004e99]/20 text-[#004e99] font-medium">
                       <Briefcase size={13} />
                       <span>{currentJob.experience_level}</span>
                     </div>
                   )}
 
                   {currentJob.is_new_grad_role && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 font-medium">
-                      <GraduationCap size={13} className="text-cyan-400" />
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0a66c2]/10 border border-[#0a66c2]/20 text-[#0a66c2] font-medium">
+                      <GraduationCap size={13} className="text-[#0a66c2]" />
                       <span>New Grad Eligibility</span>
                     </div>
                   )}
@@ -295,7 +291,7 @@ export default function JobAnalyzer({
                       href={currentJob.source_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors ml-1 font-medium"
+                      className="flex items-center gap-1 text-[#0a66c2] hover:underline transition-colors ml-1 font-semibold"
                     >
                       <ExternalLink size={12} />
                       <span>Original Link</span>
@@ -308,17 +304,17 @@ export default function JobAnalyzer({
               <div className="flex flex-wrap items-center gap-2 pt-2 lg:pt-0">
                 <button
                   onClick={() => onOpenBulletOptimizer && onOpenBulletOptimizer(currentJob.required_skills?.[0] || 'Target Skill')}
-                  className="btn-secondary text-xs"
+                  className="btn-secondary-corporate text-xs"
                 >
-                  <Wand2 size={13} className="text-indigo-400" />
+                  <Wand2 size={13} />
                   <span>Bullet Optimizer</span>
                 </button>
 
                 <button
                   onClick={() => onOpenCoverLetter && onOpenCoverLetter()}
-                  className="btn-secondary text-xs"
+                  className="btn-secondary-corporate text-xs"
                 >
-                  <Mail size={13} className="text-cyan-400" />
+                  <Mail size={13} />
                   <span>Cover Letter</span>
                 </button>
 
@@ -326,19 +322,19 @@ export default function JobAnalyzer({
                   onClick={() => handleSaveToTracker('Wishlist')}
                   className={`text-xs flex items-center gap-1.5 transition-all ${
                     isAlreadyInPipeline
-                      ? 'btn-secondary text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/10'
-                      : 'btn-gradient'
+                      ? 'btn-secondary-corporate text-[#057642] border-[#057642] hover:bg-[#057642]/10'
+                      : 'btn-primary-corporate'
                   }`}
                   title={isAlreadyInPipeline ? 'Job is already in your application pipeline. Click to refresh details.' : 'Save to your application pipeline'}
                 >
                   {saveSuccess ? (
                     <>
-                      <Check size={13} className="text-emerald-400 stroke-[3]" />
-                      <span>{isAlreadyInPipeline ? 'Updated in Pipeline! ✓' : 'Saved to Pipeline! ✓'}</span>
+                      <Check size={13} className="stroke-[3]" />
+                      <span>{isAlreadyInPipeline ? 'Updated in Pipeline!' : 'Saved to Pipeline!'}</span>
                     </>
                   ) : isAlreadyInPipeline ? (
                     <>
-                      <Check size={13} className="text-emerald-400 stroke-[2.5]" />
+                      <Check size={13} className="stroke-[2.5]" />
                       <span>In Pipeline (Update)</span>
                     </>
                   ) : (
@@ -353,8 +349,8 @@ export default function JobAnalyzer({
 
             {/* Role Executive Summary */}
             {currentJob.summary && (
-              <div className="mt-4 pt-3 text-xs text-zinc-300 leading-relaxed bg-white/[0.02] p-3.5 rounded-xl border border-white/[0.06]">
-                <span className="font-semibold text-indigo-300">Executive Summary: </span>
+              <div className="mt-4 pt-3 text-xs text-[#000000] leading-relaxed bg-[#f3f6f8] p-3.5 rounded-lg border border-[#e0e0e0]">
+                <span className="font-bold text-[#0a66c2]">Executive Summary: </span>
                 {currentJob.summary}
               </div>
             )}
@@ -362,9 +358,9 @@ export default function JobAnalyzer({
 
           {/* Grid: Skills Matrix + ATS Keyword Bank */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 glass-panel p-6">
-              <h3 className="text-sm font-bold text-zinc-100 mb-4 flex items-center gap-2 tracking-tight">
-                <Briefcase size={16} className="text-indigo-400" />
+            <div className="lg:col-span-2 card-corporate p-6 bg-white border border-[#e0e0e0] rounded-lg">
+              <h3 className="text-sm font-bold text-[#000000] mb-4 flex items-center gap-2 tracking-tight">
+                <Briefcase size={16} className="text-[#0a66c2]" />
                 <span>Skills & Requirements Matrix</span>
               </h3>
               <SkillsMatrix
