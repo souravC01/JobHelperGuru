@@ -87,6 +87,18 @@ python -m pytest tests/ -v
 
 ---
 
+## Production Deployment (Render Free Tier)
+
+JobHelperGuru is configured for 1-click zero-cost deployment on Render Free Tier with automated 24/7 keep-alive monitoring via UptimeRobot.
+
+For complete step-by-step instructions on environment variables, Google OAuth configuration, and keep-alive setup, see:
+- **[Render Deployment & Keep-Alive Guide](docs/RENDER_DEPLOYMENT_GUIDE.md)**
+- **[Render Blueprint Specification](render.yaml)**
+- **[Production Environment Template](.env.production.example)**
+
+---
+
 ## Tech Stack
-- **Backend:** Python 3.14, FastAPI, trafilatura, BeautifulSoup4, openpyxl, OpenAI SDK, SQLite
-- **Frontend:** React 18, Vite, Lucide-React, Modern CSS Tokens & Glassmorphism Design
+- **Backend:** Python, FastAPI, Neon PostgreSQL / SQLite, Cloudflare R2 / Local Storage, OpenAI SDK, cryptography
+- **Frontend:** React 18, Vite, Tailwind CSS v4, Lucide Icons, Google Identity Services (OAuth 2.0)
+- **Deployment:** Render Web Service, Multi-stage Docker, UptimeRobot (Keep-Alive)
