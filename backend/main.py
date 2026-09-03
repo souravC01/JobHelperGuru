@@ -39,6 +39,15 @@ app.add_middleware(
 
 # Services
 storage = StorageService(db_path=os.environ.get("JOB_HELPER_DB", "data/tracker.db"))
+if storage.is_postgres:
+    print("[INFO] Connected to Neon PostgreSQL database.")
+    try:
+        storage.migrate_from_sqlite("data/tracker.db")
+    except Exception as e:
+        print(f"[INFO] SQLite migration note: {e}")
+else:
+    print("[INFO] Using local SQLite storage (data/tracker.db).")
+
 scraper = ScraperService()
 excel_exporter = ExcelExporter()
 
@@ -61,7 +70,11 @@ def get_ai_engine() -> AIEngine:
 # --- Health ---
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "app": "JobHelperGuru"}
+    return {
+        "status": "ok",
+        "app": "JobHelperGuru",
+        "database": "postgresql" if storage.is_postgres else "sqlite",
+    }
 
 
 # --- Job Analysis & Scraping ---

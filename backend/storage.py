@@ -1,9 +1,21 @@
 import json
+import os
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
+from dotenv import load_dotenv
+
+load_dotenv()
+
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    PSYCOPG2_AVAILABLE = True
+except ImportError:
+    PSYCOPG2_AVAILABLE = False
 
 from backend.models import (
     Application,
@@ -18,19 +30,53 @@ from backend.models import (
 
 
 class StorageService:
-    def __init__(self, db_path: str = "data/tracker.db"):
-        self.db_path = db_path
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, db_path: str = "data/tracker.db", database_url: Optional[str] = None, force_sqlite: bool = False):
+        raw_url = None if force_sqlite else (database_url if database_url is not None else os.getenv("DATABASE_URL"))
+        if raw_url and (raw_url.startswith("postgres://") or raw_url.startswith("postgresql://")):
+            if not PSYCOPG2_AVAILABLE:
+                raise RuntimeError("psycopg2 is required to connect to PostgreSQL / Neon.")
+            # Normalize postgres:// to postgresql://
+            if raw_url.startswith("postgres://"):
+                raw_url = raw_url.replace("postgres://", "postgresql://", 1)
+            self.database_url = raw_url
+            self.is_postgres = True
+            self.db_path = None
+        else:
+            self.database_url = None
+            self.is_postgres = False
+            self.db_path = db_path
+            Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+
         self._init_db()
 
-    def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    @contextmanager
+    def _get_cursor(self):
+        if self.is_postgres:
+            conn = psycopg2.connect(self.database_url)
+            try:
+                with conn:
+                    with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                        yield cursor
+            finally:
+                conn.close()
+        else:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            try:
+                with conn:
+                    cursor = conn.cursor()
+                    yield cursor
+            finally:
+                conn.close()
+
+    def _format_sql(self, sql: str) -> str:
+        if self.is_postgres:
+            # Escape literal '%' to '%%' for psycopg2, and replace '?' with '%s'
+            return sql.replace("%", "%%").replace("?", "%s")
+        return sql
 
     def _init_db(self):
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self._get_cursor() as cursor:
             # Applications table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS applications (
@@ -69,28 +115,23 @@ class StorageService:
                     value TEXT NOT NULL
                 )
             """)
-            conn.commit()
         self.deduplicate_existing_applications()
 
     # --- Resumes CRUD ---
     def add_resume(self, name: str, content: str) -> Resume:
         now = datetime.now().isoformat()
         resume_id = str(uuid.uuid4())
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self._get_cursor() as cursor:
             cursor.execute(
-                """
-                INSERT INTO resumes (id, name, content, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
+                self._format_sql(
+                    "INSERT INTO resumes (id, name, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+                ),
                 (resume_id, name, content, now, now),
             )
-            conn.commit()
         return Resume(id=resume_id, name=name, content=content, created_at=now, updated_at=now)
 
     def get_resumes(self) -> List[Resume]:
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self._get_cursor() as cursor:
             cursor.execute("SELECT * FROM resumes ORDER BY created_at DESC")
             rows = cursor.fetchall()
             return [
@@ -105,9 +146,8 @@ class StorageService:
             ]
 
     def get_resume(self, resume_id: str) -> Optional[Resume]:
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM resumes WHERE id = ?", (resume_id,))
+        with self._get_cursor() as cursor:
+            cursor.execute(self._format_sql("SELECT * FROM resumes WHERE id = ?"), (resume_id,))
             row = cursor.fetchone()
             if not row:
                 return None
@@ -120,21 +160,20 @@ class StorageService:
             )
 
     def delete_resume(self, resume_id: str) -> bool:
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM resumes WHERE id = ?", (resume_id,))
-            conn.commit()
+        with self._get_cursor() as cursor:
+            cursor.execute(self._format_sql("DELETE FROM resumes WHERE id = ?"), (resume_id,))
             return cursor.rowcount > 0
 
     # --- Applications CRUD ---
     def find_existing_application(self, url: Optional[str], company: str, role: str) -> Optional[Application]:
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self._get_cursor() as cursor:
             # 1. Match by exact or normalized URL (excluding blank and manual_paste)
             clean_url = (url or "").strip().rstrip("/")
             if clean_url and clean_url != "manual_paste":
                 cursor.execute(
-                    "SELECT * FROM applications WHERE TRIM(RTRIM(url, '/')) = ? AND url != '' AND url != 'manual_paste'",
+                    self._format_sql(
+                        "SELECT * FROM applications WHERE TRIM(RTRIM(url, '/')) = ? AND url != '' AND url != 'manual_paste'"
+                    ),
                     (clean_url,),
                 )
                 row = cursor.fetchone()
@@ -146,7 +185,9 @@ class StorageService:
             clean_r = (role or "").strip().lower()
             if clean_comp and clean_r:
                 cursor.execute(
-                    "SELECT * FROM applications WHERE LOWER(TRIM(company)) = ? AND LOWER(TRIM(role)) = ?",
+                    self._format_sql(
+                        "SELECT * FROM applications WHERE LOWER(TRIM(company)) = ? AND LOWER(TRIM(role)) = ?"
+                    ),
                     (clean_comp, clean_r),
                 )
                 row = cursor.fetchone()
@@ -156,14 +197,16 @@ class StorageService:
                 # 3. Match if company is a prefix or contains the other (e.g. 'MindBridge' vs 'MindBridge Analytics Inc.')
                 if len(clean_comp) >= 4:
                     cursor.execute(
-                        """
-                        SELECT * FROM applications 
-                        WHERE LOWER(TRIM(role)) = ? 
-                          AND (
-                              LOWER(TRIM(company)) LIKE ? || '%' 
-                              OR ? LIKE LOWER(TRIM(company)) || '%'
-                          )
-                        """,
+                        self._format_sql(
+                            """
+                            SELECT * FROM applications 
+                            WHERE LOWER(TRIM(role)) = ? 
+                              AND (
+                                  LOWER(TRIM(company)) LIKE ? || '%' 
+                                  OR ? LIKE LOWER(TRIM(company)) || '%'
+                              )
+                            """
+                        ),
                         (clean_r, clean_comp, clean_comp),
                     )
                     row = cursor.fetchone()
@@ -174,8 +217,7 @@ class StorageService:
 
     def deduplicate_existing_applications(self):
         """Removes existing duplicate applications, preserving the most recently updated record."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self._get_cursor() as cursor:
             cursor.execute("SELECT id, company, role, url, updated_at FROM applications ORDER BY updated_at DESC")
             rows = cursor.fetchall()
             seen_urls = set()
@@ -201,8 +243,10 @@ class StorageService:
 
             if ids_to_delete:
                 placeholders = ",".join("?" for _ in ids_to_delete)
-                cursor.execute(f"DELETE FROM applications WHERE id IN ({placeholders})", ids_to_delete)
-                conn.commit()
+                cursor.execute(
+                    self._format_sql(f"DELETE FROM applications WHERE id IN ({placeholders})"),
+                    ids_to_delete,
+                )
 
     def add_application(self, app_data: ApplicationCreate) -> Application:
         # Check if this application already exists in the pipeline
@@ -238,16 +282,17 @@ class StorageService:
         req_skills_json = json.dumps(app_data.required_skills or [])
         ats_keywords_json = json.dumps(app_data.ats_keywords or [])
 
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self._get_cursor() as cursor:
             cursor.execute(
-                """
-                INSERT INTO applications (
-                    id, company, role, status, location, salary, url,
-                    required_skills, ats_keywords, date_added, application_date,
-                    follow_up_date, notes, best_resume_id, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                self._format_sql(
+                    """
+                    INSERT INTO applications (
+                        id, company, role, status, location, salary, url,
+                        required_skills, ats_keywords, date_added, application_date,
+                        follow_up_date, notes, best_resume_id, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """
+                ),
                 (
                     app_id,
                     app_data.company,
@@ -267,7 +312,6 @@ class StorageService:
                     now,
                 ),
             )
-            conn.commit()
 
         return Application(
             id=app_id,
@@ -289,16 +333,14 @@ class StorageService:
         )
 
     def get_applications(self) -> List[Application]:
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self._get_cursor() as cursor:
             cursor.execute("SELECT * FROM applications ORDER BY date_added DESC, created_at DESC")
             rows = cursor.fetchall()
             return [self._row_to_application(row) for row in rows]
 
     def get_application(self, app_id: str) -> Optional[Application]:
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM applications WHERE id = ?", (app_id,))
+        with self._get_cursor() as cursor:
+            cursor.execute(self._format_sql("SELECT * FROM applications WHERE id = ?"), (app_id,))
             row = cursor.fetchone()
             if not row:
                 return None
@@ -329,23 +371,17 @@ class StorageService:
         values.append(app_id)
         query = f"UPDATE applications SET {', '.join(fields)} WHERE id = ?"
 
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, tuple(values))
-            conn.commit()
-            if cursor.rowcount == 0:
-                return None
+        with self._get_cursor() as cursor:
+            cursor.execute(self._format_sql(query), values)
 
         return self.get_application(app_id)
 
     def delete_application(self, app_id: str) -> bool:
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM applications WHERE id = ?", (app_id,))
-            conn.commit()
+        with self._get_cursor() as cursor:
+            cursor.execute(self._format_sql("DELETE FROM applications WHERE id = ?"), (app_id,))
             return cursor.rowcount > 0
 
-    def _row_to_application(self, row: sqlite3.Row) -> Application:
+    def _row_to_application(self, row: Any) -> Application:
         return Application(
             id=row["id"],
             company=row["company"],
@@ -368,8 +404,7 @@ class StorageService:
     # --- Settings ---
     def get_settings(self) -> Settings:
         defaults = Settings()
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self._get_cursor() as cursor:
             cursor.execute("SELECT key, value FROM settings")
             rows = cursor.fetchall()
             settings_map = {row["key"]: row["value"] for row in rows}
@@ -392,13 +427,59 @@ class StorageService:
         merged = current.model_dump()
         merged.update(update_data)
 
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        with self._get_cursor() as cursor:
             for key, val in merged.items():
                 cursor.execute(
-                    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    self._format_sql(
+                        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+                    ),
                     (key, str(val)),
                 )
-            conn.commit()
 
         return self.get_settings()
+
+    def migrate_from_sqlite(self, sqlite_path: str = "data/tracker.db"):
+        """Migrates records from a local SQLite database into the current PostgreSQL database."""
+        if not self.is_postgres or not Path(sqlite_path).exists():
+            return
+        local_sqlite = StorageService(db_path=sqlite_path, force_sqlite=True)
+        # 1. Migrate resumes
+        for r in local_sqlite.get_resumes():
+            if not self.get_resume(r.id):
+                with self._get_cursor() as cursor:
+                    cursor.execute(
+                        self._format_sql(
+                            "INSERT INTO resumes (id, name, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+                        ),
+                        (r.id, r.name, r.content, r.created_at, r.updated_at),
+                    )
+
+        # 2. Migrate applications
+        for app in local_sqlite.get_applications():
+            if not self.get_application(app.id):
+                app_create = ApplicationCreate(
+                    company=app.company,
+                    role=app.role,
+                    status=app.status,
+                    location=app.location,
+                    salary=app.salary,
+                    url=app.url,
+                    required_skills=app.required_skills,
+                    ats_keywords=app.ats_keywords,
+                    application_date=app.application_date,
+                    follow_up_date=app.follow_up_date,
+                    notes=app.notes,
+                    best_resume_id=app.best_resume_id,
+                )
+                self.add_application(app_create)
+
+        # 3. Migrate settings
+        local_settings = local_sqlite.get_settings()
+        self.update_settings(SettingsUpdate(
+            api_base_url=local_settings.api_base_url,
+            api_key=local_settings.api_key,
+            model_name=local_settings.model_name,
+            default_follow_up_days=local_settings.default_follow_up_days,
+            saved_keys=local_settings.saved_keys,
+            use_offline_mode=local_settings.use_offline_mode,
+        ))
