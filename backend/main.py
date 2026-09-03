@@ -26,7 +26,7 @@ from backend.services.scraper import ScraperService
 from backend.services.ai_engine import AIEngine
 from backend.services.excel_exporter import ExcelExporter
 from backend.services.object_storage import ObjectStorageService
-from backend.routers.auth import router as auth_router, get_current_user, set_storage_service
+from backend.routers.auth import router as auth_router, get_current_user, get_optional_user, set_storage_service
 
 app = FastAPI(title="JobHelperGuru API", version="1.0.0")
 app.include_router(auth_router)
@@ -94,7 +94,7 @@ class JobAnalyzeRequest(BaseModel):
 
 
 @app.post("/api/jobs/analyze")
-def analyze_job(req: JobAnalyzeRequest):
+def analyze_job(req: JobAnalyzeRequest, current_user: Optional[User] = Depends(get_optional_user)):
     if not req.url and not req.text:
         raise HTTPException(status_code=400, detail="Either a URL or job text must be provided.")
 
@@ -117,7 +117,17 @@ def analyze_job(req: JobAnalyzeRequest):
         scraped_location = parsed.location
         job_text = parsed.raw_text
 
-    ai = get_ai_engine()
+    if not job_text or len(job_text.strip()) < 30:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Could not extract readable text from this job URL (it may require login or block automated scraping). "
+                "Please copy and paste the job description text directly into the 'Paste Job Text' tab."
+            ),
+        )
+
+    user_id = current_user.id if current_user else None
+    ai = get_ai_engine(user_id=user_id)
     try:
         analysis = ai.analyze_job(job_text, source_url=source_url)
     except Exception as e:

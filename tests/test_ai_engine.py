@@ -1,11 +1,17 @@
 import pytest
-from backend.services.ai_engine import AIEngine
+from backend.services.ai_engine import AIEngine, extract_json_from_llm_response
 from backend.models import (
     BulletOptimizationRequest,
     ClaimStatus,
     Resume,
     JobAnalysisResult,
 )
+
+def test_extract_json_from_llm_response_with_think_tags():
+    raw_llm = "<think>Analyzing candidates skills...</think>\n```json\n{\"company\": \"Google\", \"title\": \"SWE\"}\n```"
+    parsed = extract_json_from_llm_response(raw_llm)
+    assert parsed["company"] == "Google"
+    assert parsed["title"] == "SWE"
 
 def test_bulletskill_optimization_fallback():
     # When no API key is provided, AIEngine must use Bulletskill.md rules offline

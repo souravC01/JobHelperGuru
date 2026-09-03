@@ -17,6 +17,35 @@ from backend.models import (
 from backend.services.heuristic_parser import HeuristicParser, filter_skills
 
 
+def extract_json_from_llm_response(text: str) -> Any:
+    """Robustly extracts JSON from an LLM response, stripping reasoning tags (<think>...</think>) and code fences."""
+    # 1. Remove <think>...</think> reasoning tags
+    text = re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.DOTALL).strip()
+
+    # 2. Extract ```json ... ``` markdown codeblocks
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
+    if match:
+        candidate = match.group(1).strip()
+        try:
+            return json.loads(candidate)
+        except Exception:
+            pass
+
+    # 3. Extract outermost JSON object or array
+    brace_match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
+    if brace_match:
+        try:
+            return json.loads(brace_match.group(1).strip())
+        except Exception:
+            pass
+
+    # 4. Fallback directly to json.loads
+    clean_text = re.sub(r"^```json\s*", "", text)
+    clean_text = re.sub(r"^```\s*", "", clean_text)
+    clean_text = re.sub(r"\s*```$", "", clean_text)
+    return json.loads(clean_text)
+
+
 class AIEngine:
     def __init__(
         self,
@@ -70,11 +99,7 @@ Do not wrap in markdown quotes. Return only raw JSON.
                     temperature=0.1,
                 )
                 raw_content = resp.choices[0].message.content.strip()
-                # Strip markdown codeblocks if model included them
-                raw_content = re.sub(r"^```json\s*", "", raw_content)
-                raw_content = re.sub(r"^```\s*", "", raw_content)
-                raw_content = re.sub(r"\s*```$", "", raw_content)
-                data = json.loads(raw_content)
+                data = extract_json_from_llm_response(raw_content)
                 # Sanitize skills from non-skills (e.g. New Grad, Degree, etc.)
                 data["required_skills"] = filter_skills(data.get("required_skills", []))
                 data["preferred_skills"] = filter_skills(data.get("preferred_skills", []))
@@ -141,10 +166,7 @@ Return strict JSON:
                     temperature=0.2,
                 )
                 raw_content = resp.choices[0].message.content.strip()
-                raw_content = re.sub(r"^```json\s*", "", raw_content)
-                raw_content = re.sub(r"^```\s*", "", raw_content)
-                raw_content = re.sub(r"\s*```$", "", raw_content)
-                ai_evals = json.loads(raw_content)
+                ai_evals = extract_json_from_llm_response(raw_content)
 
                 eval_map = {item["resume_id"]: item for item in ai_evals}
                 for r in resumes:
@@ -431,10 +453,7 @@ Claim Status: {claim_status.value}
                     temperature=0.3,
                 )
                 raw_content = resp.choices[0].message.content.strip()
-                raw_content = re.sub(r"^```json\s*", "", raw_content)
-                raw_content = re.sub(r"^```\s*", "", raw_content)
-                raw_content = re.sub(r"\s*```$", "", raw_content)
-                data = json.loads(raw_content)
+                data = extract_json_from_llm_response(raw_content)
 
                 def_proj = target_section_bullets[0]["section"] if target_section_bullets else (f"Recommended New {'Project' if is_project else 'Role'}: {request.target_job_title}")
                 def_bullet = target_section_bullets[0]["bullet"] if target_section_bullets else f"Add as a new bullet point under your {'Projects' if is_project else 'Work History'} section."
@@ -590,10 +609,7 @@ Return strict JSON:
                     temperature=0.4,
                 )
                 raw = resp.choices[0].message.content.strip()
-                raw = re.sub(r"^```json\s*", "", raw)
-                raw = re.sub(r"^```\s*", "", raw)
-                raw = re.sub(r"\s*```$", "", raw)
-                data = json.loads(raw)
+                data = extract_json_from_llm_response(raw)
                 return OutreachResponse(**data)
             except Exception as e:
                 raise RuntimeError(f"AI API Provider Failed ({self.model_name}): {str(e)}") from e

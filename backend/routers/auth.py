@@ -64,6 +64,20 @@ async def get_current_user(
     return user
 
 
+async def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(oauth2_scheme),
+) -> Optional[User]:
+    if not credentials:
+        return None
+    token = credentials.credentials
+    payload = decode_access_token(token)
+    if not payload or "sub" not in payload:
+        return None
+    user_id = payload["sub"]
+    storage = get_storage()
+    return storage.get_user_by_id(user_id)
+
+
 class GoogleAuthRequest(BaseModel):
     credential: str
 
