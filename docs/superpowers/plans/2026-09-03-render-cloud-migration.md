@@ -90,7 +90,7 @@
 - Consumes: Environment requirements from `backend/main.py`, `backend/storage.py`, `backend/routers/auth.py`
 - Produces: Complete, step-by-step deployment and credential configuration documentation
 
-- [ ] **Step 1: Create `.env.production.example`**
+- [x] **Step 1: Create `.env.production.example`**
   Document each required key with sample placeholders:
   - `DATABASE_URL` (Neon PostgreSQL)
   - `SETTINGS_ENCRYPTION_KEY` (Fernet 32-byte key)
@@ -99,7 +99,7 @@
   - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`
   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 
-- [ ] **Step 2: Write `docs/RENDER_DEPLOYMENT_GUIDE.md`**
+- [x] **Step 2: Write `docs/RENDER_DEPLOYMENT_GUIDE.md`**
   Include:
   - Step 1: Connecting Render to the GitHub repository (`souravC01/JobHelperGuru`).
   - Step 2: Selecting Docker runtime or Native Python runtime via `render.yaml`.
@@ -108,7 +108,7 @@
     - Adding `https://<service-name>.onrender.com` to **Authorized JavaScript origins**.
     - Adding `https://<service-name>.onrender.com` to **Authorized redirect URIs**.
 
-- [ ] **Step 3: Commit Task 3 changes**
+- [x] **Step 3: Commit Task 3 changes**
   Run `git add .env.production.example docs/RENDER_DEPLOYMENT_GUIDE.md && git commit -m "docs(deploy): add production environment template and Render deployment guide"`
 
 ---
@@ -123,16 +123,16 @@
 - Consumes: `/api/health` endpoint
 - Produces: Automated keep-alive instructions to prevent Render free-tier idle spin-down
 
-- [ ] **Step 1: Document UptimeRobot monitor setup**
+- [x] **Step 1: Document UptimeRobot monitor setup**
   - Monitor Type: `HTTP(s)`
   - Friendly Name: `JobHelperGuru Keep-Alive`
   - URL: `https://<your-app>.onrender.com/api/health`
   - Monitoring Interval: `Every 10 minutes` (keeps service alive before Render's 15-minute idle limit)
   - Expected Status: `200 - OK`
 
-- [ ] **Step 2: Test `/api/health` endpoint behavior**
+- [x] **Step 2: Test `/api/health` endpoint behavior**
   Verify that `/api/health` executes fast (<50ms), does not perform heavy database queries or auth checks, and returns JSON:
   `{"status": "ok", "app": "JobHelperGuru", "database": "postgresql", "object_storage": "cloudflare_r2"}`.
 
-- [ ] **Step 3: Commit Task 4 changes**
+- [x] **Step 3: Commit Task 4 changes**
   Run `git add docs/RENDER_DEPLOYMENT_GUIDE.md && git commit -m "docs(deploy): add UptimeRobot keep-alive monitoring instructions"`
