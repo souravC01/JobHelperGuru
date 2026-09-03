@@ -209,7 +209,7 @@
 - Consumes: Categorized skills list, frequency counts.
 - Produces: Scannable 4-tab qualification matrix, copyable ATS keyword pills with count metrics.
 
-- [ ] **Step 1: Refactor `SkillsMatrix.jsx`**
+- [x] **Step 1: Refactor `SkillsMatrix.jsx`**
   - Card container: `card-corporate p-6 bg-white border border-[#e0e0e0] rounded-lg`.
   - Tab header: 4 tabs ('Must-Haves', 'Preferred', 'Tech Stack', 'Soft Skills').
     - Active tab: `text-[#0a66c2] border-b-2 border-[#0a66c2] font-semibold`.
@@ -218,17 +218,17 @@
     - Verified items: Green check icon (`#057642`), text `#000000`.
     - Missing items: Rust alert icon (`#b24020`), text `#b24020`, with an interactive "+ Add" or "Optimize" button.
 
-- [ ] **Step 2: Refactor `ATSKeywordBank.jsx`**
+- [x] **Step 2: Refactor `ATSKeywordBank.jsx`**
   - Card container: `card-corporate p-6 bg-white border border-[#e0e0e0] rounded-lg`.
   - Keyword chips: `inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#f3f6f8] text-[#000000] border border-[#e0e0e0] hover:border-[#0a66c2] transition-colors`.
   - Frequency badge: `bg-[#e0e0e0] text-[#000000] px-1.5 py-0.2 rounded-full text-[10px] font-bold`.
   - "Copy All Keywords" button: `btn-secondary-corporate text-xs`.
 
-- [ ] **Step 3: Run Vite build**
+- [x] **Step 3: Run Vite build**
   Command: `cd frontend && npm run build`
   Expected: Build succeeds with 0 errors.
 
-- [ ] **Step 4: Commit changes**
+- [x] **Step 4: Commit changes**
   ```bash
   git add frontend/src/components/SkillsMatrix.jsx frontend/src/components/ATSKeywordBank.jsx
   git commit -m "feat(ui): migrate SkillsMatrix and ATSKeywordBank to corporate light theme"
