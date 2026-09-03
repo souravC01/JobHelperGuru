@@ -195,3 +195,30 @@ class OutreachResponse(BaseModel):
     subject_line: str
     cover_letter_pitch: str
     connection_note: str
+
+
+class User(BaseModel):
+    id: str
+    email: str
+    name: str
+    avatar_url: Optional[str] = None
+    provider: str = "email"
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+
+class UserRegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str
+
+
+class UserLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    token: str
+    user: User
+
