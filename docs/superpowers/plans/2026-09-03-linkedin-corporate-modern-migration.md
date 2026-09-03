@@ -138,7 +138,7 @@
 - Consumes: Corporate design tokens, auth state, tab switching.
 - Produces: 64px corporate header, active blue underline indicator, clean light application frame.
 
-- [ ] **Step 1: Refactor Header Navigation in `frontend/src/App.jsx`**
+- [x] **Step 1: Refactor Header Navigation in `frontend/src/App.jsx`**
   - Replace `bg-zinc-950/80` and `border-white/[0.08]` with `bg-white border-b border-[#e0e0e0] shadow-none`.
   - Brand Logo: 36x36px `#0a66c2` rounded square (`rounded-md`) with pure white briefcase icon. Bold black text "JobHelperGuru".
   - Tab Switcher:
@@ -150,16 +150,16 @@
     - Settings button: `border border-[#e0e0e0] text-[#666666] hover:text-[#000000] hover:bg-[#f3f6f8] rounded-full`.
   - Main container: `min-h-screen bg-[#f3f6f8] text-[#000000] flex flex-col font-sans`.
 
-- [ ] **Step 2: Update `frontend/src/components/UserNav.jsx`**
+- [x] **Step 2: Update `frontend/src/components/UserNav.jsx`**
   - Update user menu dropdown to white background `#ffffff`, 1px border `#e0e0e0`, rounded-lg (8px), no dark backgrounds.
   - Avatar button: clean circular border `border-2 border-[#0a66c2]` or neutral gray.
   - Menu item hover: `hover:bg-[#f3f6f8] text-[#000000]`.
 
-- [ ] **Step 3: Run Vite build**
+- [x] **Step 3: Run Vite build**
   Command: `cd frontend && npm run build`
   Expected: Build succeeds with 0 errors.
 
-- [ ] **Step 4: Commit changes**
+- [x] **Step 4: Commit changes**
   ```bash
   git add frontend/src/App.jsx frontend/src/components/UserNav.jsx
   git commit -m "feat(ui): migrate App shell and Top Navigation to LinkedIn Corporate Modern design"
