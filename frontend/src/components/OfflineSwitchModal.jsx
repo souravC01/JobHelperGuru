@@ -31,23 +31,23 @@ export default function OfflineSwitchModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="glass-panel bg-slate-900 border border-amber-500/50 w-full max-w-lg p-6 rounded-2xl space-y-5 animate-fade-in shadow-2xl shadow-amber-950/30">
+      <div className="glass-panel bg-[#0e0e11] border border-amber-500/30 w-full max-w-lg p-6 rounded-2xl space-y-5 animate-fade-in shadow-2xl shadow-amber-950/20">
         {/* Header */}
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between pb-3 border-b border-white/[0.06]">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 shrink-0">
-              <AlertTriangle size={24} />
+            <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0">
+              <AlertTriangle size={20} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">AI API Provider Failed</h3>
-              <p className="text-xs text-slate-300">
+              <h3 className="text-base font-bold text-white tracking-tight">AI API Provider Error</h3>
+              <p className="text-xs text-zinc-400">
                 The online model failed to respond.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 text-lg font-bold"
+            className="text-zinc-500 hover:text-white p-1 transition-colors"
           >
             <X size={18} />
           </button>

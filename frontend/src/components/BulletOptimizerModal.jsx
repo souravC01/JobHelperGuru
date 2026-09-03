@@ -135,27 +135,27 @@ export default function BulletOptimizerModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-      <div className="glass-panel bg-slate-900 border border-slate-700 w-full max-w-3xl my-8 p-6 rounded-2xl space-y-5 animate-fade-in shadow-2xl max-h-[92vh] overflow-y-auto">
+      <div className="glass-panel bg-[#0e0e11] border border-white/[0.12] w-full max-w-3xl my-8 p-6 rounded-2xl space-y-5 animate-fade-in shadow-2xl max-h-[92vh] overflow-y-auto">
         {/* Modal Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-indigo-500/20 text-indigo-400">
-              <Wand2 size={20} />
+            <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+              <Wand2 size={18} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">
+              <h3 className="text-base font-bold text-white tracking-tight">
                 BulletSkill 2.0 Resume Optimizer
               </h3>
-              <p className="text-xs text-slate-300">
+              <p className="text-xs text-zinc-400">
                 Incorporate target skills into <strong>{sectionType === 'project' ? 'Project' : 'Work History'}</strong> bullet points
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white text-lg font-bold p-1 transition-colors"
+            className="text-zinc-500 hover:text-white p-1 transition-colors"
           >
-            ✕
+            <X size={18} />
           </button>
         </div>
 

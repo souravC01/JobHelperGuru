@@ -128,139 +128,139 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col text-slate-100">
       {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/80">
+      <header className="sticky top-0 z-40 bg-[#09090b]/80 backdrop-blur-xl border-b border-white/[0.06]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Brand */}
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('analyzer')}>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25">
-              <Briefcase size={20} />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20 ring-1 ring-white/20">
+              <Sparkles size={18} className="animate-pulse" />
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-base tracking-tight text-white">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-base tracking-tight text-white">
                   JobHelper<span className="text-indigo-400">Guru</span>
                 </span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-mono border border-indigo-500/30">
-                  v1.0
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 font-mono border border-indigo-500/20 font-semibold">
+                  v2.0
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400">AI Job Parsing • Skills • ATS Optimizer • Excel Tracker</p>
+              <p className="text-[11px] text-zinc-400 tracking-tight">AI & Offline Resume Optimizer</p>
             </div>
           </div>
 
-          {/* Nav Tabs */}
-          <nav className="hidden md:flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800/90 text-xs">
+          {/* Centered Pill Nav Tabs */}
+          <nav className="hidden md:flex items-center gap-1 bg-white/[0.03] p-1 rounded-full border border-white/[0.08] text-xs">
             <button
               onClick={() => setActiveTab('analyzer')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-semibold transition-all ${
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-medium transition-all ${
                 activeTab === 'analyzer'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
+                  : 'text-zinc-400 hover:text-white'
               }`}
             >
-              <Sparkles size={14} />
+              <Briefcase size={13} />
               <span>Job Analyzer</span>
             </button>
 
             <button
               onClick={() => setActiveTab('resumes')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-semibold transition-all ${
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-medium transition-all ${
                 activeTab === 'resumes'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
+                  : 'text-zinc-400 hover:text-white'
               }`}
             >
-              <FileText size={14} />
-              <span>My Resumes ({resumes.length})</span>
+              <FileText size={13} />
+              <span>Resume Vault ({resumes.length})</span>
             </button>
 
             <button
               onClick={() => setActiveTab('tracker')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-semibold transition-all ${
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-medium transition-all ${
                 activeTab === 'tracker'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white/[0.1] text-white shadow-sm font-semibold'
+                  : 'text-zinc-400 hover:text-white'
               }`}
             >
-              <TableIcon size={14} />
-              <span>Application Tracker ({totalCount})</span>
+              <TableIcon size={13} />
+              <span>Application Pipeline ({totalCount})</span>
             </button>
           </nav>
 
           {/* Right Header Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <a
               href={getExcelExportUrl()}
               download="job_tracker.xlsx"
               className="btn-excel text-xs hidden sm:flex"
               title="Download full styled Excel spreadsheet tracking your jobs"
             >
-              <FileSpreadsheet size={15} />
-              <span>Excel Export</span>
+              <FileSpreadsheet size={14} />
+              <span>Export .xlsx</span>
             </a>
 
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white transition-colors"
+              className="p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.2] text-zinc-400 hover:text-white transition-all shadow-sm"
               title="AI & API Settings"
             >
-              <SettingsIcon size={18} />
+              <SettingsIcon size={17} />
             </button>
           </div>
         </div>
 
         {/* Mobile Tab bar */}
-        <div className="flex md:hidden px-4 pb-2 pt-1 gap-1 border-t border-slate-800/60 overflow-x-auto text-xs">
+        <div className="flex md:hidden px-4 pb-2 pt-1 gap-1 border-t border-white/[0.06] overflow-x-auto text-xs">
           <button
             onClick={() => setActiveTab('analyzer')}
-            className={`px-3 py-1 rounded-md font-medium whitespace-nowrap ${
-              activeTab === 'analyzer' ? 'bg-indigo-600 text-white' : 'text-slate-400'
+            className={`px-3 py-1 rounded-full font-medium whitespace-nowrap ${
+              activeTab === 'analyzer' ? 'bg-indigo-600 text-white' : 'text-zinc-400'
             }`}
           >
             Analyzer
           </button>
           <button
             onClick={() => setActiveTab('resumes')}
-            className={`px-3 py-1 rounded-md font-medium whitespace-nowrap ${
-              activeTab === 'resumes' ? 'bg-indigo-600 text-white' : 'text-slate-400'
+            className={`px-3 py-1 rounded-full font-medium whitespace-nowrap ${
+              activeTab === 'resumes' ? 'bg-indigo-600 text-white' : 'text-zinc-400'
             }`}
           >
             Resumes ({resumes.length})
           </button>
           <button
             onClick={() => setActiveTab('tracker')}
-            className={`px-3 py-1 rounded-md font-medium whitespace-nowrap ${
-              activeTab === 'tracker' ? 'bg-indigo-600 text-white' : 'text-slate-400'
+            className={`px-3 py-1 rounded-full font-medium whitespace-nowrap ${
+              activeTab === 'tracker' ? 'bg-indigo-600 text-white' : 'text-zinc-400'
             }`}
           >
-            Tracker ({totalCount})
+            Pipeline ({totalCount})
           </button>
         </div>
       </header>
 
       {/* Pipeline Quick Stats Bar */}
-      <section className="bg-slate-900/40 border-b border-slate-800/50 py-2.5 px-4 sm:px-6 lg:px-8">
+      <section className="bg-white/[0.015] border-b border-white/[0.06] py-2.5 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4 text-xs">
           <div className="flex items-center gap-6 flex-wrap">
-            <div className="flex items-center gap-2 text-slate-400">
-              <Layers size={14} className="text-slate-500" />
-              <span>Tracked: <strong className="text-white">{totalCount}</strong></span>
+            <div className="flex items-center gap-2 text-zinc-400">
+              <Layers size={13} className="text-zinc-500" />
+              <span>Tracked: <strong className="text-white font-mono">{totalCount}</strong></span>
             </div>
-            <div className="flex items-center gap-2 text-slate-400">
-              <div className="w-2 h-2 rounded-full bg-blue-400" />
-              <span>Applied: <strong className="text-blue-300">{appliedCount}</strong></span>
+            <div className="flex items-center gap-2 text-zinc-400">
+              <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+              <span>Applied: <strong className="text-indigo-300 font-mono">{appliedCount}</strong></span>
             </div>
-            <div className="flex items-center gap-2 text-slate-400">
-              <div className="w-2 h-2 rounded-full bg-amber-400" />
-              <span>Interviewing: <strong className="text-amber-300">{interviewCount}</strong></span>
+            <div className="flex items-center gap-2 text-zinc-400">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>Interviewing: <strong className="text-emerald-300 font-mono">{interviewCount}</strong></span>
             </div>
-            <div className="flex items-center gap-2 text-slate-400">
-              <div className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span>Offers: <strong className="text-emerald-300">{offerCount}</strong></span>
+            <div className="flex items-center gap-2 text-zinc-400">
+              <div className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+              <span>Offers: <strong className="text-cyan-300 font-mono">{offerCount}</strong></span>
             </div>
           </div>
 
-          <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
+          <div className="text-[11px] text-zinc-400 flex items-center gap-1.5">
             <TrendingUp size={12} className="text-indigo-400" />
             <span>Targeting high-match roles accelerates interview conversion</span>
           </div>

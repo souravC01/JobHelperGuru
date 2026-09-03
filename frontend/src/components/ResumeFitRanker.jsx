@@ -3,7 +3,6 @@ import {
   Crown,
   CheckCircle,
   AlertTriangle,
-  Wand2,
   ChevronDown,
   ChevronUp,
   Sparkles,
@@ -14,6 +13,8 @@ import {
   Plus,
   GraduationCap,
   CheckCircle2,
+  X,
+  TrendingUp,
 } from 'lucide-react';
 import { matchResumes } from '../api/client';
 
@@ -30,7 +31,6 @@ export default function ResumeFitRanker({
   const [rankedResumes, setRankedResumes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
-  // Track selected missing skills per resume: { [resumeId]: string[] }
   const [selectedSkillsMap, setSelectedSkillsMap] = useState({});
 
   const runRanking = async () => {
@@ -107,12 +107,12 @@ export default function ResumeFitRanker({
     <div className="glass-panel p-6 space-y-5 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <Crown className="text-amber-400" size={20} />
-            <span>Best-Fit Resume Comparison</span>
+          <h3 className="text-sm font-bold text-white flex items-center gap-2 tracking-tight">
+            <Crown className="text-amber-400" size={18} />
+            <span>Resume Best-Fit & ATS Alignment</span>
           </h3>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Evaluates your uploaded resumes against this job's required qualifications and ATS keywords.
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Evaluates candidate resumes against ATS keywords and required qualifications.
           </p>
         </div>
 
@@ -127,9 +127,9 @@ export default function ResumeFitRanker({
       </div>
 
       {loading ? (
-        <div className="py-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-          <Loader2 size={16} className="animate-spin text-indigo-400" />
-          <span>Ranking resumes and calculating keyword matches...</span>
+        <div className="py-12 text-center text-xs text-zinc-400 flex flex-col items-center justify-center gap-3">
+          <Loader2 size={22} className="animate-spin text-indigo-400" />
+          <span className="font-mono">Analyzing resume keywords and scoring ATS alignment...</span>
         </div>
       ) : (
         <div className="space-y-4">
@@ -158,8 +158,8 @@ export default function ResumeFitRanker({
                 key={rank.resume_id}
                 className={`glass-card p-5 transition-all ${
                   isBest
-                    ? 'border-indigo-500/60 bg-indigo-950/20 shadow-lg shadow-indigo-950/40'
-                    : 'border-slate-800'
+                    ? 'border-indigo-500/40 bg-gradient-to-b from-indigo-950/20 to-transparent shadow-lg shadow-indigo-950/30'
+                    : 'border-white/[0.06]'
                 }`}
               >
                 {/* Header Row */}
@@ -167,22 +167,22 @@ export default function ResumeFitRanker({
                   onClick={() => setExpandedId(isExpanded ? null : rank.resume_id)}
                   className="flex items-center justify-between gap-4 cursor-pointer select-none"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3.5">
                     <div
-                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-mono font-bold ${
                         isBest
-                          ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30'
-                          : 'bg-slate-800 text-slate-400'
+                          ? 'bg-gradient-to-tr from-amber-500 to-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
+                          : 'bg-white/[0.04] text-zinc-400 border border-white/10'
                       }`}
                     >
                       {idx + 1}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-100">{rank.resume_name}</span>
+                        <span className="font-semibold text-sm text-zinc-100">{rank.resume_name}</span>
                         {isBest && (
-                          <span className="badge-pill bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] py-0.5">
-                            ★ Recommended Fit
+                          <span className="badge-pill bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] py-0.5">
+                            ★ Top Fit
                           </span>
                         )}
                       </div>
@@ -191,51 +191,55 @@ export default function ResumeFitRanker({
                       {rank.is_new_grad_role && (
                         <div className="flex items-center gap-1.5 mt-1">
                           {rank.new_grad_eligible ? (
-                            <span className="badge-pill bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-[10px] py-0.5 px-2 flex items-center gap-1 font-medium">
+                            <span className="badge-pill bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[10px] py-0.5 px-2 flex items-center gap-1 font-medium">
                               <GraduationCap size={12} className="text-emerald-400" />
-                              <span>🎓 New Grad Eligible ({rank.graduation_status})</span>
+                              <span>New Grad Eligible ({rank.graduation_status})</span>
                             </span>
                           ) : (
-                            <span className="badge-pill bg-amber-950/60 border border-amber-500/40 text-amber-300 text-[10px] py-0.5 px-2 flex items-center gap-1 font-medium">
+                            <span className="badge-pill bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] py-0.5 px-2 flex items-center gap-1 font-medium">
                               <AlertTriangle size={12} className="text-amber-400" />
-                              <span>🎓 New Grad Check: {rank.graduation_status || 'Graduation date not detected'}</span>
+                              <span>Timeline Check: {rank.graduation_status || 'Date not found'}</span>
                             </span>
                           )}
                         </div>
                       )}
 
-                      <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                      <p className="text-[11px] text-zinc-400 line-clamp-1 mt-0.5">
                         {rank.fit_summary || 'Evaluated against required job skills'}
                       </p>
                     </div>
                   </div>
 
-                  {/* Match Score Gauge (Dynamic Recalculation with Adopted Skills) */}
+                  {/* Radial / Progress Score Gauge with JetBrains Mono */}
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <span className="text-sm font-extrabold text-white">{projectedScore}%</span>
+                      <div className="flex items-center justify-end gap-1.5 font-mono">
+                        <span className={`text-base font-bold ${
+                          projectedScore >= 80 ? 'text-emerald-400' : projectedScore >= 60 ? 'text-cyan-400' : 'text-amber-400'
+                        }`}>
+                          {projectedScore}%
+                        </span>
                         {hasAdopted && scoreDiff > 0 && (
-                          <span className="badge-pill bg-blue-950/80 border border-blue-400/50 text-blue-300 text-[10px] py-0.2 px-1.5 font-bold animate-pulse">
-                            +{scoreDiff}% Boosted
+                          <span className="badge-pill bg-blue-500/15 border border-blue-400/40 text-blue-300 text-[10px] py-0.2 px-1.5 font-bold animate-pulse">
+                            +{scoreDiff}% Boost
                           </span>
                         )}
                       </div>
-                      <div className="w-24 bg-slate-800 rounded-full h-1.5 overflow-hidden mt-1 relative flex">
+                      <div className="w-28 bg-white/[0.06] rounded-full h-1.5 overflow-hidden mt-1.5 relative flex">
                         <div
-                          className="h-full bg-emerald-400 transition-all duration-500"
+                          className="h-full bg-emerald-400 transition-all duration-500 rounded-full"
                           style={{ width: `${baseScore}%` }}
                         />
                         {hasAdopted && scoreDiff > 0 && (
                           <div
-                            className="h-full bg-blue-500 transition-all duration-500"
+                            className="h-full bg-blue-500 transition-all duration-500 rounded-full"
                             style={{ width: `${scoreDiff}%` }}
                           />
                         )}
                       </div>
                     </div>
 
-                    <button className="text-slate-400 hover:text-white p-1">
+                    <button className="text-zinc-400 hover:text-white p-1 transition-colors">
                       {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
                   </div>
@@ -243,22 +247,22 @@ export default function ResumeFitRanker({
 
                 {/* Expanded Details */}
                 {isExpanded && (
-                  <div className="mt-4 pt-4 border-t border-slate-800/80 space-y-4 animate-fade-in text-xs">
-                    {/* Education & Graduation Status Verification */}
+                  <div className="mt-4 pt-4 border-t border-white/[0.06] space-y-4 animate-fade-in text-xs">
+                    {/* Education & Graduation Status */}
                     {rank.graduation_status && (
-                      <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                      <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                         <div className="flex items-center gap-2">
-                          <GraduationCap size={16} className={rank.new_grad_eligible ? "text-emerald-400" : "text-amber-400"} />
+                          <GraduationCap size={15} className={rank.new_grad_eligible ? "text-emerald-400" : "text-amber-400"} />
                           <div>
-                            <span className="font-semibold text-slate-200">Education & Graduation: </span>
-                            <span className="text-slate-300">{rank.graduation_status}</span>
+                            <span className="font-semibold text-zinc-200">Education & Timeline: </span>
+                            <span className="text-zinc-400">{rank.graduation_status}</span>
                           </div>
                         </div>
                         {rank.is_new_grad_role && (
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shrink-0 self-start sm:self-auto ${
+                          <span className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 self-start sm:self-auto ${
                             rank.new_grad_eligible
-                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                              ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
                           }`}>
                             {rank.new_grad_eligible ? '✓ Meets 4mo/6mo Rule' : 'Verify Timeline'}
                           </span>
@@ -266,50 +270,50 @@ export default function ResumeFitRanker({
                       </div>
                     )}
 
-                    {/* Fit explanation */}
+                    {/* Fit Explanation */}
                     {rank.fit_summary && (
-                      <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 text-slate-300 leading-relaxed">
-                        <strong className="text-indigo-300">Why this score: </strong>
+                      <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] text-zinc-300 leading-relaxed">
+                        <strong className="text-indigo-400">Match Insights: </strong>
                         {rank.fit_summary}
                       </div>
                     )}
 
-                    {/* Matched Keywords (Both Verified Green & Potentially Added Blue) */}
+                    {/* Matched Keywords (Verified Emerald & Potentially Added Blue) */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <h5 className="font-semibold text-emerald-400 flex items-center gap-1.5">
-                          <CheckCircle size={14} />
+                        <h5 className="font-semibold text-emerald-400 flex items-center gap-1.5 text-xs">
+                          <CheckCircle size={13} />
                           <span>Matched Technical Skills ({rank.matched_keywords.length + adoptedSkills.length})</span>
                         </h5>
                         {adoptedSkills.length > 0 && (
-                          <span className="text-[10px] text-blue-300 font-semibold bg-blue-950/60 border border-blue-500/40 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <Sparkles size={11} className="text-blue-400" />
+                          <span className="text-[10px] text-blue-300 font-semibold bg-blue-500/10 border border-blue-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Sparkles size={10} className="text-blue-400" />
                             <span>{adoptedSkills.length} Potentially Added (Blue)</span>
                           </span>
                         )}
                       </div>
 
                       {rank.matched_keywords.length === 0 && adoptedSkills.length === 0 ? (
-                        <span className="text-slate-500 italic">No direct matches found.</span>
+                        <span className="text-zinc-500 italic">No direct matches found.</span>
                       ) : (
                         <div className="flex flex-wrap gap-1.5">
                           {/* Verified matches from original resume text */}
                           {rank.matched_keywords.map((kw, i) => (
-                            <span key={i} className="badge-pill badge-tech text-[11px] py-0.5">
+                            <span key={i} className="badge-pill bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-[11px] py-0.5 font-mono">
                               {kw} ✓
                             </span>
                           ))}
 
-                          {/* Potentially added skills from optimized bullets (Color-coded Blue) */}
+                          {/* Potentially added skills (Electric Blue) */}
                           {adoptedSkills.map((kw, i) => (
                             <span
                               key={`adopted-${i}`}
-                              className="badge-pill bg-blue-950/80 border border-blue-400 text-blue-200 text-[11px] py-0.5 px-2.5 flex items-center gap-1.5 shadow-md shadow-blue-950/50 animate-fade-in"
+                              className="badge-pill bg-blue-500/10 border border-blue-400/40 text-blue-200 text-[11px] py-0.5 px-2.5 flex items-center gap-1.5 font-mono animate-fade-in"
                               title="Potentially added to resume — re-evaluated and counting towards score!"
                             >
                               <Sparkles size={11} className="text-blue-400" />
                               <span>{kw}</span>
-                              <span className="text-[9px] uppercase font-bold text-blue-300 bg-blue-900/70 px-1 py-0.2 rounded border border-blue-500/40">
+                              <span className="text-[9px] uppercase font-bold text-blue-300 bg-blue-900/50 px-1 py-0.2 rounded border border-blue-500/30">
                                 Added
                               </span>
                               {onRemoveAdoptedSkill && (
@@ -322,7 +326,7 @@ export default function ResumeFitRanker({
                                   className="text-blue-400 hover:text-rose-400 hover:bg-rose-950/40 rounded p-0.5 transition-colors ml-0.5"
                                   title="Remove from added and return to missing"
                                 >
-                                  ✕
+                                  <X size={10} />
                                 </button>
                               )}
                             </span>
@@ -331,29 +335,29 @@ export default function ResumeFitRanker({
                       )}
                     </div>
 
-                    {/* Missing Keywords Multi-Select */}
+                    {/* Missing Skills Multi-Select */}
                     <div className="space-y-3">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <h5 className="font-semibold text-rose-400 flex items-center gap-1.5">
-                          <AlertTriangle size={14} />
+                        <h5 className="font-semibold text-rose-400 flex items-center gap-1.5 text-xs">
+                          <AlertTriangle size={13} />
                           <span>Missing Skills ({displayMissing.length})</span>
-                          <span className="text-[11px] text-slate-400 font-normal">
+                          <span className="text-[11px] text-zinc-500 font-normal">
                             — Click skills to select for bullet generation
                           </span>
                         </h5>
 
                         {displayMissing.length > 0 && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 text-xs">
                             <button
                               onClick={() => selectAllSkills(rank.resume_id, displayMissing)}
-                              className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium"
+                              className="text-indigo-400 hover:text-indigo-300 font-medium"
                             >
                               Select All
                             </button>
-                            <span className="text-slate-600">|</span>
+                            <span className="text-zinc-600">|</span>
                             <button
                               onClick={() => clearSkills(rank.resume_id)}
-                              className="text-[11px] text-slate-400 hover:text-slate-200"
+                              className="text-zinc-500 hover:text-zinc-300"
                             >
                               Clear
                             </button>
@@ -364,7 +368,7 @@ export default function ResumeFitRanker({
                       {displayMissing.length === 0 ? (
                         <span className="text-emerald-400 italic">All key target qualifications covered!</span>
                       ) : (
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-1.5">
                           {displayMissing.map((kw, i) => {
                             const isSelected = selectedSkills.includes(kw);
 
@@ -373,16 +377,16 @@ export default function ResumeFitRanker({
                                 key={i}
                                 type="button"
                                 onClick={() => toggleSkillSelection(rank.resume_id, kw)}
-                                className={`badge-pill text-xs py-1 px-3 flex items-center gap-1.5 transition-all cursor-pointer ${
+                                className={`badge-pill text-xs py-1 px-3 flex items-center gap-1.5 transition-all cursor-pointer font-mono ${
                                   isSelected
-                                    ? 'bg-indigo-600 text-white border-indigo-400 shadow-md shadow-indigo-600/30 font-bold scale-[1.03]'
-                                    : 'bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 hover:border-rose-400'
+                                    ? 'bg-indigo-600 text-white border-indigo-400 shadow-md shadow-indigo-600/30 font-bold scale-[1.02]'
+                                    : 'bg-rose-500/10 border border-rose-500/25 text-rose-300 hover:bg-rose-500/20'
                                 }`}
                               >
                                 {isSelected ? (
-                                  <Check size={13} className="text-white stroke-[3]" />
+                                  <Check size={12} className="text-white stroke-[3]" />
                                 ) : (
-                                  <Plus size={12} className="text-rose-400" />
+                                  <Plus size={11} className="text-rose-400" />
                                 )}
                                 <span>{kw}</span>
                               </button>
@@ -393,9 +397,9 @@ export default function ResumeFitRanker({
 
                       {/* Action Bar when 1 or more skills selected */}
                       {selectedSkills.length > 0 && (
-                        <div className="p-3.5 rounded-xl bg-indigo-950/50 border border-indigo-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in shadow-lg">
+                        <div className="p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in shadow-xl">
                           <div className="flex items-center gap-2">
-                            <Sparkles size={16} className="text-cyan-400 shrink-0" />
+                            <Sparkles size={15} className="text-cyan-400 shrink-0" />
                             <div>
                               <span className="text-xs font-bold text-white">
                                 {selectedSkills.length} Skill{selectedSkills.length > 1 ? 's' : ''} Selected:{' '}
@@ -413,28 +417,28 @@ export default function ResumeFitRanker({
                                   onAdoptSkills(selectedSkills, rank.resume_id);
                                   clearSkills(rank.resume_id);
                                 }}
-                                className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 bg-blue-950/80 border-blue-400/80 text-blue-200 hover:bg-blue-900 hover:text-white"
+                                className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 bg-blue-950/60 border-blue-400/40 text-blue-200 hover:bg-blue-900/80"
                                 title="Move selected skills to Matched (Blue) and re-evaluate score immediately"
                               >
-                                <CheckCircle2 size={13} className="text-blue-400" />
-                                <span>Mark as Added (Blue)</span>
+                                <CheckCircle2 size={12} className="text-blue-400" />
+                                <span>Mark Added (Blue)</span>
                               </button>
                             )}
 
                             <button
                               onClick={() => handleIncorporate(rank, 'project')}
-                              className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
+                              className="btn-gradient text-xs py-1.5 px-3 flex items-center gap-1.5"
                             >
-                              <FolderGit2 size={13} />
-                              <span>Incorporate into Project</span>
+                              <FolderGit2 size={12} />
+                              <span>Incorporate in Project</span>
                             </button>
 
                             <button
                               onClick={() => handleIncorporate(rank, 'work_history')}
-                              className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 bg-slate-900 border-indigo-400/40 text-indigo-200 hover:text-white"
+                              className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 text-indigo-300 hover:text-white"
                             >
-                              <Briefcase size={13} />
-                              <span>Incorporate into Work History</span>
+                              <Briefcase size={12} />
+                              <span>Incorporate in Work</span>
                             </button>
                           </div>
                         </div>
