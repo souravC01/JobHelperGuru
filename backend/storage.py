@@ -379,21 +379,29 @@ class StorageService:
 
             return None
 
-    def deduplicate_existing_applications(self):
-        """Removes existing duplicate applications, preserving the most recently updated record."""
+    def deduplicate_existing_applications(self, user_id: Optional[str] = None):
+        """Removes existing duplicate applications scoped per user, preserving the most recently updated record."""
         with self._get_cursor() as cursor:
-            cursor.execute("SELECT id, company, role, url, updated_at FROM applications ORDER BY updated_at DESC")
+            if user_id:
+                cursor.execute(
+                    self._format_sql("SELECT id, company, role, url, updated_at, user_id FROM applications WHERE user_id = ? ORDER BY updated_at DESC"),
+                    (user_id,),
+                )
+            else:
+                cursor.execute("SELECT id, company, role, url, updated_at, user_id FROM applications ORDER BY updated_at DESC")
             rows = cursor.fetchall()
             seen_urls = set()
             seen_roles = set()
             ids_to_delete = []
 
             for row in rows:
+                u_id = str(row["user_id"] or "global")
                 clean_url = (row["url"] or "").strip().rstrip("/")
-                comp_role_key = f"{row['company'].strip().lower()}:::{row['role'].strip().lower()}"
+                comp_role_key = f"{u_id}:::{row['company'].strip().lower()}:::{row['role'].strip().lower()}"
+                url_key = f"{u_id}:::{clean_url}" if clean_url and clean_url != "manual_paste" else None
 
                 is_dup = False
-                if clean_url and clean_url != "manual_paste" and clean_url in seen_urls:
+                if url_key and url_key in seen_urls:
                     is_dup = True
                 if comp_role_key in seen_roles:
                     is_dup = True
@@ -401,8 +409,8 @@ class StorageService:
                 if is_dup:
                     ids_to_delete.append(row["id"])
                 else:
-                    if clean_url and clean_url != "manual_paste":
-                        seen_urls.add(clean_url)
+                    if url_key:
+                        seen_urls.add(url_key)
                     seen_roles.add(comp_role_key)
 
             if ids_to_delete:
