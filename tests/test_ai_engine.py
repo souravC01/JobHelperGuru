@@ -198,3 +198,18 @@ def test_ai_engine_offline_heuristic_mode_bypasses_api():
     # Must succeed cleanly offline
     job = engine.analyze_job("Software Engineer at Google. Requirements: Python, Go, Docker.")
     assert "Python" in job.required_skills or "Python" in job.tech_stack
+
+
+def test_ai_engine_extracts_experience_required_offline():
+    engine = AIEngine(api_key=None)
+    text = "Senior Python Engineer at Datadog. Requires 3-5 years of backend experience."
+    res = engine.analyze_job(text)
+    assert res.experience_required == "3-5 years"
+
+
+def test_ai_engine_extracts_experience_required_new_grad_offline():
+    engine = AIEngine(api_key=None)
+    text = "Software Engineer - New Grad 2026. Looking for university graduates."
+    res = engine.analyze_job(text)
+    assert res.experience_required == "New Grad"
+

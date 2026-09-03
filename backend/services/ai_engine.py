@@ -14,7 +14,7 @@ from backend.models import (
     BulletOptimizationResponse,
     OutreachResponse,
 )
-from backend.services.heuristic_parser import HeuristicParser, filter_skills
+from backend.services.heuristic_parser import HeuristicParser, filter_skills, extract_experience_required
 
 
 def extract_json_from_llm_response(text: str) -> Any:
@@ -81,6 +81,7 @@ Extract all key details from the following job description and return strict, va
   "work_mode": "Remote" | "Hybrid" | "Onsite" | "Unknown",
   "salary_range": "e.g. $120k - $150k or Not specified",
   "experience_level": "Entry" | "Mid" | "Senior" | "Lead",
+  "experience_required": "Exact years of professional experience requested e.g. '1-4 years', '3+ years', '5 years', or 'New Grad' if for recent graduates, or 'Not specified' if not stated",
   "required_skills": ["Must have skills"],
   "preferred_skills": ["Nice to have skills"],
   "tech_stack": ["Languages, frameworks, clouds, databases"],
@@ -110,6 +111,13 @@ Do not wrap in markdown quotes. Return only raw JSON.
                 data["is_new_grad_role"] = data.get("is_new_grad_role", is_ng)
                 if data["is_new_grad_role"]:
                     data["new_grad_criteria"] = "Graduating in the next 4 months or graduated within the last 6 months"
+
+                # Enrich and normalize experience_required
+                exp_req = data.get("experience_required")
+                if not exp_req or exp_req.strip().lower() in ("not specified", "unknown", "n/a", "none"):
+                    data["experience_required"] = extract_experience_required(text, is_new_grad=data["is_new_grad_role"])
+                elif data["is_new_grad_role"] and "grad" in exp_req.lower():
+                    data["experience_required"] = "New Grad"
 
                 return JobAnalysisResult(**data)
             except Exception as e:
