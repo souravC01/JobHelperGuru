@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Mail, Lock, User as UserIcon, Eye, EyeOff, AlertCircle, Loader2, Sparkles } from 'lucide-react';
+import { X, Mail, Lock, User as UserIcon, Eye, EyeOff, AlertCircle, Loader2, Briefcase } from 'lucide-react';
 import { loginUser, registerUser, googleAuthUser } from '../api/client';
 
 export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'login' }) {
@@ -58,7 +58,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
 
           googleBtnRef.current.innerHTML = '';
           window.google.accounts.id.renderButton(googleBtnRef.current, {
-            theme: 'filled_black',
+            theme: 'outline',
             size: 'large',
             width: 320,
             text: mode === 'login' ? 'signin_with' : 'signup_with',
@@ -158,50 +158,49 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
       <div
-        className="relative w-full max-w-md bg-zinc-900/95 border border-white/10 rounded-2xl shadow-2xl overflow-hidden p-6 sm:p-8 backdrop-blur-xl animate-scale-up"
+        className="relative w-full max-w-md bg-white border border-[#e0e0e0] rounded-xl shadow-xl overflow-hidden p-6 sm:p-8 text-[#000000] animate-scale-up"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Glow Header Accents */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500" />
-        <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-48 h-20 bg-indigo-500/20 blur-3xl rounded-full pointer-events-none" />
+        {/* Top Accent Line */}
+        <div className="absolute top-0 left-0 right-0 h-1 bg-[#0a66c2]" />
 
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+          className="absolute top-4 right-4 p-1.5 text-[#666666] hover:text-[#000000] rounded-lg transition-colors"
         >
           <X size={18} />
         </button>
 
         {/* Header */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 text-indigo-400 mb-3 shadow-inner">
-            <Sparkles size={24} />
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#0a66c2]/10 text-[#0a66c2] mb-3 border border-[#0a66c2]/20">
+            <Briefcase size={22} />
           </div>
-          <h2 className="text-xl font-bold text-white tracking-tight">
-            {mode === 'login' ? 'Welcome Back to JobHelperGuru' : 'Create Your JobHelperGuru Account'}
+          <h2 className="text-xl font-bold text-[#000000] tracking-tight">
+            {mode === 'login' ? 'Welcome to JobHelperGuru' : 'Create Your JobHelperGuru Account'}
           </h2>
-          <p className="text-xs text-zinc-400 mt-1">
+          <p className="text-xs text-[#666666] mt-1">
             {mode === 'login'
-              ? 'Access your isolated resume library and personalized job pipeline.'
-              : 'Start tracking jobs and matching resumes with personal cloud storage.'}
+              ? 'Access your isolated resume vault and personal job pipeline.'
+              : 'Start tracking jobs and matching resumes with secure cloud storage.'}
           </p>
         </div>
 
         {/* Tab Toggle */}
-        <div className="flex p-1 bg-white/5 border border-white/10 rounded-xl mb-5">
+        <div className="flex p-1 bg-[#f3f6f8] border border-[#e0e0e0] rounded-full mb-5">
           <button
             type="button"
             onClick={() => {
               setMode('login');
               setError('');
             }}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-full transition-all ${
               mode === 'login'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-zinc-400 hover:text-white'
+                ? 'bg-[#0a66c2] text-white shadow-sm'
+                : 'text-[#666666] hover:text-[#000000]'
             }`}
           >
             Sign In
@@ -212,10 +211,10 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
               setMode('register');
               setError('');
             }}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-full transition-all ${
               mode === 'register'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-zinc-400 hover:text-white'
+                ? 'bg-[#0a66c2] text-white shadow-sm'
+                : 'text-[#666666] hover:text-[#000000]'
             }`}
           >
             Create Account
@@ -224,8 +223,8 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
 
         {/* Error Notification */}
         {error && (
-          <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-xs flex items-start gap-2 animate-shake">
-            <AlertCircle size={15} className="text-red-400 mt-0.5 shrink-0" />
+          <div className="mb-4 p-3 rounded-lg bg-[#b24020]/10 border border-[#b24020]/25 text-[#b24020] text-xs flex items-start gap-2 animate-shake">
+            <AlertCircle size={15} className="text-[#b24020] mt-0.5 shrink-0" />
             <span className="leading-relaxed">{error}</span>
           </div>
         )}
@@ -243,9 +242,9 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
             <button
               type="button"
               onClick={handleCustomGoogleClick}
-              className="w-full py-2.5 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-white text-xs font-semibold flex items-center justify-center gap-2.5 transition-all shadow-sm group hover:border-white/30"
+              className="btn-secondary-corporate w-full py-2.5 px-4 text-xs font-semibold flex items-center justify-center gap-2.5"
             >
-              <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -269,10 +268,10 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
 
           <div className="relative my-4">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/10" />
+              <div className="w-full border-t border-[#e0e0e0]" />
             </div>
             <div className="relative flex justify-center text-[10px] uppercase">
-              <span className="bg-zinc-900 px-2 text-zinc-500 font-medium tracking-wider">
+              <span className="bg-white px-2 text-[#666666] font-semibold tracking-wider">
                 or continue with email
               </span>
             </div>
@@ -283,52 +282,52 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
         <form onSubmit={handleSubmit} className="space-y-3.5">
           {mode === 'register' && (
             <div>
-              <label className="block text-[11px] font-medium text-zinc-300 mb-1">Full Name</label>
+              <label className="block text-[11px] font-semibold text-[#000000] mb-1">Full Name</label>
               <div className="relative">
-                <UserIcon size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <UserIcon size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#666666]" />
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Jane Doe"
-                  className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 focus:border-indigo-500 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                  className="input-corporate w-full pl-9 pr-3 py-2 text-xs"
                 />
               </div>
             </div>
           )}
 
           <div>
-            <label className="block text-[11px] font-medium text-zinc-300 mb-1">Email Address</label>
+            <label className="block text-[11px] font-semibold text-[#000000] mb-1">Email Address</label>
             <div className="relative">
-              <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#666666]" />
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 focus:border-indigo-500 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                className="input-corporate w-full pl-9 pr-3 py-2 text-xs"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-[11px] font-medium text-zinc-300 mb-1">Password</label>
+            <label className="block text-[11px] font-semibold text-[#000000] mb-1">Password</label>
             <div className="relative">
-              <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#666666]" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="At least 8 characters"
-                className="w-full pl-9 pr-10 py-2 bg-white/5 border border-white/10 focus:border-indigo-500 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                className="input-corporate w-full pl-9 pr-10 py-2 text-xs"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#666666] hover:text-[#000000]"
               >
                 {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
@@ -337,16 +336,16 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
 
           {mode === 'register' && (
             <div>
-              <label className="block text-[11px] font-medium text-zinc-300 mb-1">Confirm Password</label>
+              <label className="block text-[11px] font-semibold text-[#000000] mb-1">Confirm Password</label>
               <div className="relative">
-                <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#666666]" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Repeat your password"
-                  className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 focus:border-indigo-500 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                  className="input-corporate w-full pl-9 pr-3 py-2 text-xs"
                 />
               </div>
             </div>
@@ -355,7 +354,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 py-2.5 px-4 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary-corporate w-full mt-2 py-2.5 px-4 text-xs font-semibold flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
@@ -369,7 +368,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
         </form>
 
         {/* Footer switch */}
-        <div className="mt-5 text-center text-xs text-zinc-400">
+        <div className="mt-5 text-center text-xs text-[#666666]">
           {mode === 'login' ? (
             <span>
               Don't have an account?{' '}
@@ -379,7 +378,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
                   setMode('register');
                   setError('');
                 }}
-                className="text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-2 ml-1"
+                className="text-[#0a66c2] hover:underline font-semibold ml-1"
               >
                 Sign up
               </button>
@@ -393,7 +392,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
                   setMode('login');
                   setError('');
                 }}
-                className="text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-2 ml-1"
+                className="text-[#0a66c2] hover:underline font-semibold ml-1"
               >
                 Log in
               </button>
