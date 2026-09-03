@@ -64,6 +64,32 @@ def filter_skills(skills: List[str]) -> List[str]:
     return [s.strip() for s in skills if s and s.strip() and not is_non_skill(s)]
 
 
+def extract_experience_required(text: str, is_new_grad: bool = False) -> str:
+    """
+    Extracts required professional work experience from job description text.
+    Returns:
+      - 'New Grad' if new/recent graduate indicators are found
+      - Exact years like '1-4 years', '3+ years', '5 years' if found
+      - 'Not specified' if no tenure requirement is present
+    """
+    if is_new_grad or re.search(r"\b(recent grads?|recent graduates?|new grads?|new graduates?|fresh graduates?|university graduates?)\b", text, re.I):
+        return "New Grad"
+    patterns = [
+        r"(?:(?:minimum|at least)\s+)?(\d+\s*(?:-|to)\s*\d+)\+?\s*(?:years?|yrs?)(?:\s*(?:of)?\s*(?:professional|relevant|software|work|industry)?\s*experience)?",
+        r"(?:(?:minimum|at least)\s+)?(\d+\+)\s*(?:years?|yrs?)(?:\s*(?:of)?\s*(?:professional|relevant|software|work|industry)?\s*experience)?",
+        r"(?:(?:minimum|at least)\s+)?(\d+)\s*(?:years?|yrs?)\s*(?:of)?\s*(?:professional|relevant|software|work|industry)?\s*experience",
+        r"(?:minimum|at least)\s+(\d+)\s*(?:years?|yrs?)",
+    ]
+    for p in patterns:
+        m = re.search(p, text, re.I)
+        if m:
+            val = m.group(1).strip()
+            val_cleaned = re.sub(r"\s*to\s*", "-", val, flags=re.I)
+            val_cleaned = re.sub(r"\s+", "", val_cleaned)
+            return f"{val_cleaned} years"
+    return "Not specified"
+
+
 class HeuristicParser:
     def __init__(self, taxonomy: Set[str] = None):
         self.taxonomy = taxonomy or SKILL_TAXONOMY
@@ -216,6 +242,8 @@ class HeuristicParser:
         ats_candidates = list(dict.fromkeys(found_skills + [w for w, _ in counts.most_common(30) if w[0].isupper()]))
         ats_keywords = filter_skills(ats_candidates)[:20]
 
+        exp_required = extract_experience_required(text, is_new_grad=is_new_grad)
+
         summary = f"Role requiring proficiency in {', '.join(required_skills[:3]) if required_skills else 'software engineering'} with {work_mode} flexibility."
 
         return JobAnalysisResult(
@@ -225,6 +253,7 @@ class HeuristicParser:
             work_mode=work_mode,
             salary_range=salary_range,
             experience_level=exp_level,
+            experience_required=exp_required,
             is_new_grad_role=is_new_grad,
             new_grad_criteria=new_grad_criteria,
             required_skills=required_skills,
