@@ -328,26 +328,26 @@
 - Consumes: Resume bullet points, missing keywords, candidate generation API.
 - Produces: Candidate A/B/C comparison cards, WHAT+HOW+RESULT structure, claim verification tags.
 
-- [ ] **Step 1: Refactor Modal Frame & Header**
+- [x] **Step 1: Refactor Modal Frame & Header**
   - Modal overlay: `bg-black/40 backdrop-blur-sm fixed inset-0 z-50 flex items-center justify-center p-4`.
   - Modal container: Max-width 1080px, `bg-white border border-[#e0e0e0] rounded-xl shadow-xl overflow-hidden`.
   - Modal header: Title "BulletSkill 2.0 Resume Bullet Optimizer", subtitle, target role, and target missing skill in rust pill (`#b24020`).
 
-- [ ] **Step 2: Refactor Candidate Comparison Cards**
+- [x] **Step 2: Refactor Candidate Comparison Cards**
   - Grid of 3 cards (`grid grid-cols-1 md:grid-cols-3 gap-4`).
   - Card A (ATS-focused): White card, 1px border `#e0e0e0`, verified tags in emerald (`#057642`).
   - Card B (Concise): White card, 1px border `#e0e0e0`.
   - Card C (Technical & Result - Recommended): Highlighted with 2px `#0a66c2` border, "Accept & Insert" primary button (`btn-primary-corporate`).
 
-- [ ] **Step 3: Verification & Safeguards Drawer**
+- [x] **Step 3: Verification & Safeguards Drawer**
   - Verification checkbox: "I verify that I have hands-on experience with this skill."
   - Metric safeguards: Highlight placeholders `[X%]` in amber.
 
-- [ ] **Step 4: Run Vite build**
+- [x] **Step 4: Run Vite build**
   Command: `cd frontend && npm run build`
   Expected: Build succeeds with 0 errors.
 
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
   ```bash
   git add frontend/src/components/BulletOptimizerModal.jsx
   git commit -m "feat(ui): migrate BulletSkill 2.0 Optimizer Modal to corporate design"
