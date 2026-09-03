@@ -175,24 +175,24 @@
 - Consumes: Job parsing API, skills extraction.
 - Produces: Corporate white ingestion card, 1px `#e0e0e0` borders, `#0a66c2` Analyze button, parsed role metadata pills.
 
-- [ ] **Step 1: Refactor Command Bar to Corporate Ingestion Card**
+- [x] **Step 1: Refactor Command Bar to Corporate Ingestion Card**
   - Change main ingestion wrapper from dark glass container to `.card-corporate p-6 bg-white border border-[#e0e0e0] rounded-lg`.
   - Input field: `input-corporate w-full h-11 text-sm text-[#000000] placeholder:text-[#666666]`.
   - Action button: Solid `#0a66c2` pill button with white text "Analyze Job" (44px touch height).
   - Text paste toggle: Clean link/button `text-[#0a66c2] hover:underline font-semibold text-xs`.
   - Expanded raw text box: `bg-[#ffffff] border border-[#e0e0e0] rounded text-sm text-[#000000] p-3`.
 
-- [ ] **Step 2: Refactor Parsed Role Overview Panel**
+- [x] **Step 2: Refactor Parsed Role Overview Panel**
   - White container with 1px `#e0e0e0` border.
   - Role Title: `text-2xl font-bold text-[#000000]`.
   - Company: `text-base font-semibold text-[#666666] flex items-center gap-2`.
   - Metadata pills: `bg-[#f3f6f8] text-[#000000] border border-[#e0e0e0] px-3 py-1 rounded-full text-xs font-semibold`.
 
-- [ ] **Step 3: Run Vite build**
+- [x] **Step 3: Run Vite build**
   Command: `cd frontend && npm run build`
   Expected: Build succeeds with 0 errors.
 
-- [ ] **Step 4: Commit changes**
+- [x] **Step 4: Commit changes**
   ```bash
   git add frontend/src/components/JobAnalyzer.jsx
   git commit -m "feat(ui): migrate JobAnalyzer ingestion card and role brief to LinkedIn Corporate style"
