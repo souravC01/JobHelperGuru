@@ -42,7 +42,7 @@
     - `get_settings() -> Settings`
     - `update_settings(settings: SettingsUpdate) -> Settings`
 
-- [ ] **Step 1: Create requirements.txt and install Python dependencies**
+- [x] **Step 1: Create requirements.txt and install Python dependencies**
 ```txt
 fastapi>=0.115.0
 uvicorn>=0.30.0
@@ -57,7 +57,7 @@ httpx>=0.27.0
 ```
 Run: `pip install -r backend/requirements.txt`
 
-- [ ] **Step 2: Write the failing test for StorageService**
+- [x] **Step 2: Write the failing test for StorageService**
 ```python
 # tests/test_storage.py
 import pytest
@@ -103,18 +103,18 @@ def test_storage_crud(tmp_path):
     assert settings.api_base_url == "https://api.minimax.chat/v1"
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 Run: `pytest tests/test_storage.py`
 Expected: FAIL (ModuleNotFoundError: No module named 'backend')
 
-- [ ] **Step 4: Implement models.py and storage.py**
+- [x] **Step 4: Implement models.py and storage.py**
 Create Pydantic data models for `Application`, `Resume`, `Settings`, and the SQLite database repository with table initialization and CRUD methods.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 Run: `pytest tests/test_storage.py`
 Expected: PASS
 
-- [ ] **Step 6: Commit Task 1**
+- [x] **Step 6: Commit Task 1**
 ```bash
 git add backend/ requirements.txt tests/test_storage.py
 git commit -m "feat(backend): implement data models and SQLite storage service"
@@ -136,7 +136,7 @@ git commit -m "feat(backend): implement data models and SQLite storage service"
     - `parse_raw_text(text: str, source_url: str = "") -> ScrapedJob`
     - `ScrapedJob` dataclass: `title: str`, `company: str`, `location: str`, `raw_text: str`, `source_url: str`
 
-- [ ] **Step 1: Write the failing test for scraper**
+- [x] **Step 1: Write the failing test for scraper**
 ```python
 # tests/test_scraper.py
 import pytest
@@ -179,18 +179,18 @@ def test_extract_from_html():
     assert "FastAPI" in job.raw_text
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 Run: `pytest tests/test_scraper.py`
 Expected: FAIL
 
-- [ ] **Step 3: Implement `backend/services/scraper.py`**
+- [x] **Step 3: Implement `backend/services/scraper.py`**
 Implement `ScraperService` using `trafilatura` for primary content extraction, `BeautifulSoup4` for custom meta tag/header extraction, and HTTP request headers mimicking modern browsers.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 Run: `pytest tests/test_scraper.py`
 Expected: PASS
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 ```bash
 git add backend/services/scraper.py tests/test_scraper.py
 git commit -m "feat(scraper): implement web scraper and text ingestion service"
@@ -210,7 +210,7 @@ git commit -m "feat(scraper): implement web scraper and text ingestion service"
     - `analyze_job_text(text: str) -> JobAnalysisResult`
     - `match_resume(resume_text: str, job_analysis: JobAnalysisResult) -> ResumeMatchResult`
 
-- [ ] **Step 1: Write the failing test for heuristic parser**
+- [x] **Step 1: Write the failing test for heuristic parser**
 ```python
 # tests/test_heuristic_parser.py
 from backend.services.heuristic_parser import HeuristicParser
@@ -249,18 +249,18 @@ def test_heuristic_resume_matching():
     assert 40 <= match.match_score <= 80
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 Run: `pytest tests/test_heuristic_parser.py`
 Expected: FAIL
 
-- [ ] **Step 3: Implement `backend/services/heuristic_parser.py`**
+- [x] **Step 3: Implement `backend/services/heuristic_parser.py`**
 Build a comprehensive dictionary of 600+ skills across backend, frontend, databases, DevOps, testing, cloud, and soft skills. Include regex for salary, work mode, and experience levels, plus frequency-weighted ATS keyword extraction.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 Run: `pytest tests/test_heuristic_parser.py`
 Expected: PASS
 
-- [ ] **Step 5: Commit Task 3**
+- [x] **Step 5: Commit Task 3**
 ```bash
 git add backend/services/heuristic_parser.py tests/test_heuristic_parser.py
 git commit -m "feat(nlp): implement offline heuristic skill and keyword extraction"
@@ -283,7 +283,7 @@ git commit -m "feat(nlp): implement offline heuristic skill and keyword extracti
     - `optimize_bullet(request: BulletOptimizationRequest) -> BulletOptimizationResponse`
     - `generate_outreach(job: JobAnalysisResult, resume: Resume) -> OutreachResponse`
 
-- [ ] **Step 1: Write the failing test for AI Engine and Bulletskill optimizer**
+- [x] **Step 1: Write the failing test for AI Engine and Bulletskill optimizer**
 ```python
 # tests/test_ai_engine.py
 from backend.services.ai_engine import AIEngine
@@ -312,11 +312,11 @@ def test_bulletskill_optimization_schema():
         assert res.warning is not None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 Run: `pytest tests/test_ai_engine.py`
 Expected: FAIL
 
-- [ ] **Step 3: Implement `backend/services/ai_engine.py`**
+- [x] **Step 3: Implement `backend/services/ai_engine.py`**
 Implement the OpenAI-compatible AI client with strict prompts encoding:
 - Job Analysis schema extraction
 - Multi-resume ranking and scoring
@@ -328,11 +328,11 @@ Implement the OpenAI-compatible AI client with strict prompts encoding:
   - Clear assumptions & confirmation warnings
 - Fallback to `HeuristicParser` whenever the API key is not provided or connection fails.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 Run: `pytest tests/test_ai_engine.py`
 Expected: PASS
 
-- [ ] **Step 5: Commit Task 4**
+- [x] **Step 5: Commit Task 4**
 ```bash
 git add backend/services/ai_engine.py tests/test_ai_engine.py
 git commit -m "feat(ai): implement universal AI analysis and Bulletskill optimizer"
@@ -352,7 +352,7 @@ git commit -m "feat(ai): implement universal AI analysis and Bulletskill optimiz
   - `ExcelExporter`:
     - `export_workbook(applications: list[Application]) -> bytes`
 
-- [ ] **Step 1: Write the failing test for Excel export**
+- [x] **Step 1: Write the failing test for Excel export**
 ```python
 # tests/test_excel_exporter.py
 import io
@@ -393,20 +393,20 @@ def test_generate_excel_workbook():
     assert ws.cell(row=2, column=4).value == "Interviewing"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 Run: `pytest tests/test_excel_exporter.py`
 Expected: FAIL
 
-- [ ] **Step 3: Implement `backend/services/excel_exporter.py`**
+- [x] **Step 3: Implement `backend/services/excel_exporter.py`**
 Implement workbook generation using `openpyxl`:
 - Sheet 1: `Applications Tracker` with styled navy header (`#1E293B`), white bold text, freeze header pane, auto-sized columns, clickable URLs, and color-coded status pills.
 - Sheet 2: `Skills & ATS Keywords` containing detailed breakdown of must-haves, tools, and keywords.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 Run: `pytest tests/test_excel_exporter.py`
 Expected: PASS
 
-- [ ] **Step 5: Commit Task 5**
+- [x] **Step 5: Commit Task 5**
 ```bash
 git add backend/services/excel_exporter.py tests/test_excel_exporter.py
 git commit -m "feat(excel): implement styled openpyxl Excel export engine"
@@ -433,7 +433,7 @@ git commit -m "feat(excel): implement styled openpyxl Excel export engine"
   - `GET /api/export/excel`
   - `GET /api/settings`, `POST /api/settings`, `POST /api/settings/test-ai`
 
-- [ ] **Step 1: Write the failing test for API endpoints**
+- [x] **Step 1: Write the failing test for API endpoints**
 ```python
 # tests/test_api.py
 from fastapi.testclient import TestClient
@@ -453,18 +453,18 @@ def test_analyze_job_endpoint():
     assert "Python" in data["required_skills"] or "Python" in data["tech_stack"]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 Run: `pytest tests/test_api.py`
 Expected: FAIL
 
-- [ ] **Step 3: Implement `backend/main.py` and `run.py`**
+- [x] **Step 3: Implement `backend/main.py` and `run.py`**
 Wire up FastAPI router, CORS middleware, error handlers, and single-click launch script `run.py`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 Run: `pytest tests/test_api.py`
 Expected: PASS
 
-- [ ] **Step 5: Commit Task 6**
+- [x] **Step 5: Commit Task 6**
 ```bash
 git add backend/main.py run.py tests/test_api.py
 git commit -m "feat(api): implement FastAPI endpoints and single command runner"
@@ -486,21 +486,21 @@ git commit -m "feat(api): implement FastAPI endpoints and single command runner"
 **Interfaces:**
 - Produces: Complete Vite + React frontend foundation with modern glassmorphism design tokens, active tab routing, and typed API client wrapper.
 
-- [ ] **Step 1: Initialize Vite React app in `frontend/`**
+- [x] **Step 1: Initialize Vite React app in `frontend/`**
 Install Vite, React, Lucide-React for modern icons.
 Run: `cd frontend && npm install`
 
-- [ ] **Step 2: Create `frontend/src/index.css` with sleek dark/light design system**
+- [x] **Step 2: Create `frontend/src/index.css` with sleek dark/light design system**
 Implement vibrant color tokens, dark mode palette, glassmorphism panels, pill badges, and smooth animations.
 
-- [ ] **Step 3: Create `frontend/src/api/client.js`**
+- [x] **Step 3: Create `frontend/src/api/client.js`**
 Centralized fetch client for backend endpoints with error toast notifications.
 
-- [ ] **Step 4: Verify frontend builds without errors**
+- [x] **Step 4: Verify frontend builds without errors**
 Run: `cd frontend && npm run build`
 Expected: Success
 
-- [ ] **Step 5: Commit Task 7**
+- [x] **Step 5: Commit Task 7**
 ```bash
 git add frontend/
 git commit -m "feat(frontend): initialize React Vite app with modern design tokens"
@@ -519,20 +519,20 @@ git commit -m "feat(frontend): initialize React Vite app with modern design toke
 - Consumes: `POST /api/jobs/analyze`, `POST /api/applications`
 - Produces: URL fetch bar, text input toggle, formatted company/role card, categorized skill badges (Required, Preferred, Tech Stack, Soft Skills), and one-click copy ATS keyword cloud.
 
-- [ ] **Step 1: Build `JobAnalyzer.jsx` component**
+- [x] **Step 1: Build `JobAnalyzer.jsx` component**
 Input bar for pasting URL or toggling to raw text. Loading animation during fetch/parsing.
 
-- [ ] **Step 2: Build `SkillsMatrix.jsx` and `ATSKeywordBank.jsx`**
+- [x] **Step 2: Build `SkillsMatrix.jsx` and `ATSKeywordBank.jsx`**
 Categorized pill badges with color differentiation (Red/Purple for Required, Blue for Preferred, Emerald for Tech Stack, Amber for Soft Skills) and copy-all button for ATS keywords.
 
-- [ ] **Step 3: Integrate with "Save to Tracker" dialog**
+- [x] **Step 3: Integrate with "Save to Tracker" dialog**
 Allows instant saving of analyzed job to applications table with one click.
 
-- [ ] **Step 4: Verify in browser and build**
+- [x] **Step 4: Verify in browser and build**
 Run: `cd frontend && npm run build`
 Expected: PASS
 
-- [ ] **Step 5: Commit Task 8**
+- [x] **Step 5: Commit Task 8**
 ```bash
 git add frontend/src/components/
 git commit -m "feat(frontend): add job analyzer, skills matrix, and keyword bank"
@@ -552,17 +552,17 @@ git commit -m "feat(frontend): add job analyzer, skills matrix, and keyword bank
   - Resume Library: Manage multiple resumes (e.g. "Backend Resume", "Full Stack Resume").
   - Best-Fit Matcher: Ranked list of resumes with match score progress gauges (0-100%), selection explanation, and Matched vs. Missing keyword badges.
 
-- [ ] **Step 1: Build `ResumeLibrary.jsx`**
+- [x] **Step 1: Build `ResumeLibrary.jsx`**
 Modal/View to upload, paste, rename, and manage multiple resume versions.
 
-- [ ] **Step 2: Build `ResumeFitRanker.jsx`**
+- [x] **Step 2: Build `ResumeFitRanker.jsx`**
 Displays each uploaded resume ranked by fit against the currently analyzed job. Highlights the top resume with a "Best Match" star badge, match percentage gauge, and side-by-side view of matched (green) vs. missing (amber/red) keywords.
 
-- [ ] **Step 3: Test component interaction and build**
+- [x] **Step 3: Test component interaction and build**
 Run: `cd frontend && npm run build`
 Expected: PASS
 
-- [ ] **Step 4: Commit Task 9**
+- [x] **Step 4: Commit Task 9**
 ```bash
 git add frontend/src/components/ResumeLibrary.jsx frontend/src/components/ResumeFitRanker.jsx
 git commit -m "feat(frontend): add multi-resume manager and best-fit ranking component"
@@ -588,17 +588,17 @@ git commit -m "feat(frontend): add multi-resume manager and best-fit ranking com
     - "Confirm & Verify" toggle to make the bullet export-ready!
   - Cover Letter Modal: Generates tailored pitch with 1-click copy.
 
-- [ ] **Step 1: Build `BulletOptimizerModal.jsx`**
+- [x] **Step 1: Build `BulletOptimizerModal.jsx`**
 Strictly implement the UI presentation dictated by `Bulletskill.md`.
 
-- [ ] **Step 2: Build `CoverLetterModal.jsx`**
+- [x] **Step 2: Build `CoverLetterModal.jsx`**
 Generates concise 3-paragraph tailored cold outreach note / cover letter.
 
-- [ ] **Step 3: Test component rendering and build**
+- [x] **Step 3: Test component rendering and build**
 Run: `cd frontend && npm run build`
 Expected: PASS
 
-- [ ] **Step 4: Commit Task 10**
+- [x] **Step 4: Commit Task 10**
 ```bash
 git add frontend/src/components/BulletOptimizerModal.jsx frontend/src/components/CoverLetterModal.jsx
 git commit -m "feat(frontend): implement Bulletskill optimizer modal and cover letter generator"
@@ -621,20 +621,20 @@ git commit -m "feat(frontend): implement Bulletskill optimizer modal and cover l
   - Follow-up reminder alert banner.
   - "Export to Excel (.xlsx)" button that immediately triggers browser file download.
 
-- [ ] **Step 1: Build `ApplicationsTracker.jsx` with Table and Kanban views**
+- [x] **Step 1: Build `ApplicationsTracker.jsx` with Table and Kanban views**
 Provide toggle between Table view and Kanban board. Search by company or role. Filter by status.
 
-- [ ] **Step 2: Add Follow-up alerts banner**
+- [x] **Step 2: Add Follow-up alerts banner**
 Highlights applications whose follow-up date is today or overdue.
 
-- [ ] **Step 3: Wire up Excel Export button**
+- [x] **Step 3: Wire up Excel Export button**
 Triggers `/api/export/excel` and downloads `job_tracker.xlsx`.
 
-- [ ] **Step 4: Verify build and user flow**
+- [x] **Step 4: Verify build and user flow**
 Run: `cd frontend && npm run build`
 Expected: PASS
 
-- [ ] **Step 5: Commit Task 11**
+- [x] **Step 5: Commit Task 11**
 ```bash
 git add frontend/src/components/ApplicationsTracker.jsx frontend/src/components/KanbanBoard.jsx frontend/src/components/FollowUpBanner.jsx
 git commit -m "feat(frontend): implement applications table, kanban board, follow-up alerts, and Excel export"
@@ -652,24 +652,24 @@ git commit -m "feat(frontend): implement applications table, kanban board, follo
 **Interfaces:**
 - Full system verification with live mock URLs, resume uploads, bullet optimization, and Excel export verification.
 
-- [ ] **Step 1: Implement `SettingsModal.jsx`**
+- [x] **Step 1: Implement `SettingsModal.jsx`**
 Allows user to set API Base URL (MiniMax, Nemotron, Ollama, OpenRouter), API Key, and Model Name, with "Test Connection" button.
 
-- [ ] **Step 2: Build production frontend bundle into backend static directory**
+- [x] **Step 2: Build production frontend bundle into backend static directory**
 Run: `cd frontend && npm run build`
 Ensure `backend/main.py` serves the built frontend so `python run.py` works out of the box on `http://localhost:8000`.
 
-- [ ] **Step 3: Run full backend test suite**
+- [x] **Step 3: Run full backend test suite**
 Run: `pytest tests/ -v`
 Expected: All tests PASS.
 
-- [ ] **Step 4: Verify full application flow via browser subagent or manual test**
+- [x] **Step 4: Verify full application flow via browser subagent or manual test**
 Test URL parsing, multi-resume best-fit ranking, Bulletskill optimizer suggestions, table/kanban interactions, and Excel file download.
 
-- [ ] **Step 5: Create README.md with clear instructions**
+- [x] **Step 5: Create README.md with clear instructions**
 Document how to run (`python run.py`), how to configure MiniMax/Nemotron/Ollama keys, and feature breakdown.
 
-- [ ] **Step 6: Commit Task 12**
+- [x] **Step 6: Commit Task 12**
 ```bash
 git add frontend/src/components/SettingsModal.jsx README.md run.py
 git commit -m "feat(release): finalize settings modal, end-to-end integration, and docs"
