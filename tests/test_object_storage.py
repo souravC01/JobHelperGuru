@@ -29,3 +29,12 @@ def test_object_storage_local_fallback(tmp_path, monkeypatch):
     deleted = storage.delete_file(key)
     assert deleted is True
     assert storage.get_file(key) is None
+
+
+def test_user_scoped_upload(tmp_path, monkeypatch):
+    monkeypatch.setenv("R2_ACCOUNT_ID", "")
+    storage = ObjectStorageService()
+    test_content = b"%PDF-1.4 User scoped resume test"
+    key = storage.upload_file(test_content, "resume.pdf", user_id="usr-999")
+    assert key.startswith("resumes/usr-999/")
+
