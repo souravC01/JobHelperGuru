@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "jobhelperguru-super-secret-dev-jwt-key-2026")
+if os.getenv("ENVIRONMENT") == "production" and JWT_SECRET_KEY == "jobhelperguru-super-secret-dev-jwt-key-2026":
+    raise RuntimeError("CRITICAL: Default JWT_SECRET_KEY cannot be used in production. Set JWT_SECRET_KEY in .env")
 JWT_ALGORITHM = "HS256"
 
 
