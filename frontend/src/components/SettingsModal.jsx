@@ -43,6 +43,17 @@ export default function SettingsModal({ isOpen, onClose }) {
     }
   }, [isOpen]);
 
+  // Helper to deduplicate an array of key profiles
+  const deduplicateKeys = (keysList) => {
+    const seen = new Set();
+    return keysList.filter((k) => {
+      const sig = `${(k.api_base_url || '').trim()}::${(k.model_name || '').trim()}::${(k.api_key || '').trim()}`;
+      if (seen.has(sig)) return false;
+      seen.add(sig);
+      return true;
+    });
+  };
+
   const loadSettingsAndKeys = async () => {
     try {
       const data = await getSettings();
@@ -83,40 +94,44 @@ export default function SettingsModal({ isOpen, onClose }) {
         parsedSavedKeys = [initialProfile];
       }
 
+      // Clean up any duplicates from earlier saves
+      parsedSavedKeys = deduplicateKeys(parsedSavedKeys);
       setSavedKeys(parsedSavedKeys);
 
       // Find active key
+      let currentActiveId = null;
       if (!data.use_offline_mode) {
         const activeMatch = parsedSavedKeys.find(
           (k) =>
-            k.api_base_url === data.api_base_url &&
-            k.model_name === data.model_name &&
-            k.api_key === data.api_key
+            (k.api_base_url || '').trim() === (data.api_base_url || '').trim() &&
+            (k.model_name || '').trim() === (data.model_name || '').trim() &&
+            (k.api_key || '').trim() === (data.api_key || '').trim()
         );
 
         if (activeMatch) {
-          setActiveKeyId(activeMatch.id);
+          currentActiveId = activeMatch.id;
         } else if (parsedSavedKeys.length > 0) {
-          setActiveKeyId(parsedSavedKeys[0].id);
+          currentActiveId = parsedSavedKeys[0].id;
         }
-      } else {
-        setActiveKeyId(null);
       }
 
+      setActiveKeyId(currentActiveId);
+
       // Populate form with current active or first profile
-      const target = parsedSavedKeys.find((k) => k.id === activeKeyId) || parsedSavedKeys[0];
+      const target = parsedSavedKeys.find((k) => k.id === currentActiveId) || parsedSavedKeys[0];
       if (target) {
+        setEditingId(target.id);
         setKeyName(target.name || '');
         setBaseUrl(target.api_base_url || '');
         setModelName(target.model_name || '');
         setApiKey(target.api_key || '');
       } else {
+        setEditingId(null);
         setBaseUrl(data.api_base_url || '');
         setModelName(data.model_name || '');
         setApiKey(data.api_key || '');
       }
 
-      setEditingId(null);
       setTestResult(null);
     } catch (err) {
       console.error('Failed to load settings:', err);
@@ -163,11 +178,11 @@ export default function SettingsModal({ isOpen, onClose }) {
 
       setIsOfflineActive(false);
       setActiveKeyId(profile.id);
+      setEditingId(profile.id);
       setKeyName(profile.name);
       setBaseUrl(profile.api_base_url);
       setModelName(profile.model_name);
       setApiKey(profile.api_key);
-      setEditingId(null);
       setTestResult({
         success: true,
         message: `Active provider switched to ${profile.name} (${profile.model_name})!`,
@@ -202,11 +217,11 @@ export default function SettingsModal({ isOpen, onClose }) {
     }
 
     if (editingId === idToDelete) {
-      handleCancelEdit();
+      handleAddNewKey();
     }
   };
 
-  const handleCancelEdit = () => {
+  const handleAddNewKey = () => {
     setEditingId(null);
     setKeyName('');
     setBaseUrl('');
@@ -230,23 +245,39 @@ export default function SettingsModal({ isOpen, onClose }) {
 
     let updatedList = [...savedKeys];
 
+    // Check if we are updating by editingId OR if this exact key combination already exists
+    let targetIndex = -1;
     if (editingId) {
-      // Update existing
-      updatedList = updatedList.map((item) =>
-        item.id === editingId
-          ? {
-              ...item,
-              name: nameToUse,
-              api_base_url: trimmedUrl,
-              model_name: trimmedModel,
-              api_key: trimmedKey,
-            }
-          : item
+      targetIndex = updatedList.findIndex((item) => item.id === editingId);
+    }
+
+    // If not found by ID, look for existing entry with identical credentials to prevent duplicate!
+    if (targetIndex === -1) {
+      targetIndex = updatedList.findIndex(
+        (item) =>
+          item.api_base_url.trim() === trimmedUrl &&
+          item.model_name.trim() === trimmedModel &&
+          item.api_key.trim() === trimmedKey
       );
+    }
+
+    let savedId;
+    if (targetIndex !== -1) {
+      // UPDATE existing key without duplicating
+      savedId = updatedList[targetIndex].id;
+      updatedList[targetIndex] = {
+        ...updatedList[targetIndex],
+        name: nameToUse,
+        api_base_url: trimmedUrl,
+        model_name: trimmedModel,
+        api_key: trimmedKey,
+        updated_at: new Date().toISOString(),
+      };
     } else {
-      // Create new
+      // Create genuinely new key profile
+      savedId = 'key-' + Date.now();
       const newProfile = {
-        id: 'key-' + Date.now(),
+        id: savedId,
         name: nameToUse,
         api_base_url: trimmedUrl,
         model_name: trimmedModel,
@@ -255,6 +286,9 @@ export default function SettingsModal({ isOpen, onClose }) {
       };
       updatedList.unshift(newProfile);
     }
+
+    // Deduplicate entire list by signature to ensure zero duplicates
+    updatedList = deduplicateKeys(updatedList);
 
     setSavedKeys(updatedList);
     localStorage.setItem('jobhelperguru_saved_keys', JSON.stringify(updatedList));
@@ -269,11 +303,10 @@ export default function SettingsModal({ isOpen, onClose }) {
         saved_keys: JSON.stringify(updatedList),
       });
 
-      const activeId = editingId || updatedList[0].id;
-      setActiveKeyId(activeId);
+      setActiveKeyId(savedId);
+      setEditingId(savedId);
       setIsOfflineActive(false);
       setSaveSuccess(true);
-      setEditingId(null);
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (err) {
       alert('Failed to save settings: ' + err.message);
@@ -303,6 +336,8 @@ export default function SettingsModal({ isOpen, onClose }) {
       setTesting(false);
     }
   };
+
+  const isEditingExisting = editingId && savedKeys.some((k) => k.id === editingId);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
@@ -376,16 +411,14 @@ export default function SettingsModal({ isOpen, onClose }) {
               <ShieldCheck size={14} className="text-indigo-400" />
               <span>Saved API Keys ({savedKeys.length})</span>
             </label>
-            {editingId && (
-              <button
-                type="button"
-                onClick={handleCancelEdit}
-                className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium"
-              >
-                <PlusCircle size={12} />
-                <span>New Key</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleAddNewKey}
+              className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium"
+            >
+              <PlusCircle size={12} />
+              <span>+ Add New Key</span>
+            </button>
           </div>
 
           {savedKeys.length === 0 ? (
@@ -420,7 +453,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                         )}
                         {isBeingEdited && (
                           <span className="badge-pill bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-[10px] py-0.2 px-1.5 font-semibold">
-                            Editing
+                            Loaded in Form
                           </span>
                         )}
                       </div>
@@ -453,7 +486,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                         type="button"
                         onClick={() => handleEditKey(item)}
                         className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
-                        title="Edit this saved key"
+                        title="Edit this saved key in form"
                       >
                         <Edit2 size={13} />
                       </button>
@@ -478,15 +511,16 @@ export default function SettingsModal({ isOpen, onClose }) {
         <form onSubmit={handleSaveForm} className="space-y-4 pt-3 border-t border-slate-800">
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-              {editingId ? 'Edit Saved Key Profile' : 'Enter Key Details'}
+              {isEditingExisting ? 'Edit Selected Key Profile' : 'Configure New Key'}
             </h4>
-            {editingId && (
+            {isEditingExisting && (
               <button
                 type="button"
-                onClick={handleCancelEdit}
-                className="text-[11px] text-slate-400 hover:text-slate-200"
+                onClick={handleAddNewKey}
+                className="text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1"
               >
-                Cancel Edit
+                <PlusCircle size={11} />
+                <span>Switch to New Key</span>
               </button>
             )}
           </div>
@@ -619,8 +653,8 @@ export default function SettingsModal({ isOpen, onClose }) {
                   ? 'Saving...'
                   : saveSuccess
                   ? 'Saved & Active! ✓'
-                  : editingId
-                  ? 'Update Key'
+                  : isEditingExisting
+                  ? 'Update Saved Key'
                   : 'Save Key'}
               </button>
             </div>
