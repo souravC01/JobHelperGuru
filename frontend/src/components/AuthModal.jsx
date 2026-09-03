@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Mail, Lock, User as UserIcon, Eye, EyeOff, AlertCircle, Loader2, Sparkles } from 'lucide-react';
 import { loginUser, registerUser, googleAuthUser } from '../api/client';
 
@@ -11,53 +11,111 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [gsiButtonRendered, setGsiButtonRendered] = useState(false);
+
+  const googleBtnRef = useRef(null);
+
+  // Read Google Client ID with fallback to configured client ID
+  const googleClientId =
+    import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+    '999060759573-45b5m9cn9v7g6birnj9d8j65cqn72mfq.apps.googleusercontent.com';
 
   useEffect(() => {
     setMode(initialMode);
     setError('');
   }, [initialMode, isOpen]);
 
-  // Load Google Identity Services script if Google Client ID is configured
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+  // Handle Google OAuth Credential
+  const handleCredentialResponse = async (response) => {
+    if (!response?.credential) return;
+    setLoading(true);
+    setError('');
+    try {
+      const data = await googleAuthUser(response.credential);
+      if (onSuccess) onSuccess(data.user);
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Google sign-in failed. Please try again or use email login.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  // Initialize Google Identity Services (GIS)
   useEffect(() => {
     if (!isOpen || !googleClientId) return;
 
-    const handleCredentialResponse = async (response) => {
-      if (!response.credential) return;
-      setLoading(true);
-      setError('');
-      try {
-        const data = await googleAuthUser(response.credential);
-        if (onSuccess) onSuccess(data.user);
-        onClose();
-      } catch (err) {
-        setError(err.message || 'Google sign-in failed');
-      } finally {
-        setLoading(false);
+    let attempts = 0;
+    const maxAttempts = 40; // 4 seconds polling
+
+    const setupGoogleSignIn = () => {
+      if (window.google?.accounts?.id && googleBtnRef.current) {
+        try {
+          window.google.accounts.id.initialize({
+            client_id: googleClientId,
+            callback: handleCredentialResponse,
+            auto_select: false,
+            cancel_on_tap_outside: true,
+          });
+
+          googleBtnRef.current.innerHTML = '';
+          window.google.accounts.id.renderButton(googleBtnRef.current, {
+            theme: 'filled_black',
+            size: 'large',
+            width: 320,
+            text: mode === 'login' ? 'signin_with' : 'signup_with',
+            shape: 'pill',
+            logo_alignment: 'left',
+          });
+          setGsiButtonRendered(true);
+          return true;
+        } catch (err) {
+          console.warn('Google GSI render error:', err);
+        }
       }
+      return false;
     };
+
+    if (!setupGoogleSignIn()) {
+      const interval = setInterval(() => {
+        attempts++;
+        if (setupGoogleSignIn() || attempts >= maxAttempts) {
+          clearInterval(interval);
+        }
+      }, 100);
+      return () => clearInterval(interval);
+    }
+  }, [isOpen, mode, googleClientId]);
+
+  if (!isOpen) return null;
+
+  const handleCustomGoogleClick = () => {
+    setError('');
+    if (!googleClientId) {
+      setError(
+        'Google OAuth Client ID is missing. Add VITE_GOOGLE_CLIENT_ID to your .env file or sign in with email.'
+      );
+      return;
+    }
 
     if (window.google?.accounts?.id) {
       window.google.accounts.id.initialize({
         client_id: googleClientId,
         callback: handleCredentialResponse,
       });
-      const googleBtnContainer = document.getElementById('google-signin-btn-container');
-      if (googleBtnContainer) {
-        googleBtnContainer.innerHTML = '';
-        window.google.accounts.id.renderButton(googleBtnContainer, {
-          theme: 'filled_black',
-          size: 'large',
-          width: '100%',
-          text: mode === 'login' ? 'signin_with' : 'signup_with',
-          shape: 'pill',
-        });
-      }
+      window.google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          setError(
+            'Google Sign-In popup could not be displayed. Make sure popups are allowed and http://localhost:5173 is added to Authorized JavaScript Origins in your Google Cloud Console.'
+          );
+        }
+      });
+    } else {
+      setError(
+        'Google Identity SDK is still loading. Please check your internet connection or use email and password.'
+      );
     }
-  }, [isOpen, mode, googleClientId]);
-
-  if (!isOpen) return null;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -170,22 +228,23 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
         {error && (
           <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-xs flex items-start gap-2 animate-shake">
             <AlertCircle size={15} className="text-red-400 mt-0.5 shrink-0" />
-            <span>{error}</span>
+            <span className="leading-relaxed">{error}</span>
           </div>
         )}
 
         {/* Google SSO Button Container */}
         <div className="mb-4">
-          {googleClientId ? (
-            <div id="google-signin-btn-container" className="w-full flex justify-center min-h-[40px]" />
-          ) : (
+          <div
+            ref={googleBtnRef}
+            className={`w-full flex justify-center min-h-[40px] ${
+              !gsiButtonRendered ? 'hidden' : ''
+            }`}
+          />
+
+          {!gsiButtonRendered && (
             <button
               type="button"
-              onClick={() => {
-                setError(
-                  "Google Sign-In requires a Google OAuth Client ID. Add VITE_GOOGLE_CLIENT_ID=<your-client-id> to your .env file to enable one-click Google OAuth, or sign in with email and password below."
-                );
-              }}
+              onClick={handleCustomGoogleClick}
               className="w-full py-2.5 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-white text-xs font-semibold flex items-center justify-center gap-2.5 transition-all shadow-sm group hover:border-white/30"
             >
               <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
