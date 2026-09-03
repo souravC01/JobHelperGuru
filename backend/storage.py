@@ -112,10 +112,18 @@ class StorageService:
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
                     content TEXT NOT NULL,
+                    file_key TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
             """)
+            if self.is_postgres:
+                cursor.execute("ALTER TABLE resumes ADD COLUMN IF NOT EXISTS file_key TEXT")
+            else:
+                try:
+                    cursor.execute("ALTER TABLE resumes ADD COLUMN file_key TEXT")
+                except Exception:
+                    pass
             # Settings table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS settings (
@@ -126,17 +134,17 @@ class StorageService:
         self.deduplicate_existing_applications()
 
     # --- Resumes CRUD ---
-    def add_resume(self, name: str, content: str) -> Resume:
+    def add_resume(self, name: str, content: str, file_key: Optional[str] = None) -> Resume:
         now = datetime.now().isoformat()
         resume_id = str(uuid.uuid4())
         with self._get_cursor() as cursor:
             cursor.execute(
                 self._format_sql(
-                    "INSERT INTO resumes (id, name, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+                    "INSERT INTO resumes (id, name, content, file_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
                 ),
-                (resume_id, name, content, now, now),
+                (resume_id, name, content, file_key, now, now),
             )
-        return Resume(id=resume_id, name=name, content=content, created_at=now, updated_at=now)
+        return Resume(id=resume_id, name=name, content=content, file_key=file_key, created_at=now, updated_at=now)
 
     def get_resumes(self) -> List[Resume]:
         with self._get_cursor() as cursor:
@@ -147,6 +155,7 @@ class StorageService:
                     id=row["id"],
                     name=row["name"],
                     content=row["content"],
+                    file_key=row.get("file_key") if isinstance(row, dict) else (row["file_key"] if "file_key" in row.keys() else None),
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
                 )
@@ -163,6 +172,7 @@ class StorageService:
                 id=row["id"],
                 name=row["name"],
                 content=row["content"],
+                file_key=row.get("file_key") if isinstance(row, dict) else (row["file_key"] if "file_key" in row.keys() else None),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )

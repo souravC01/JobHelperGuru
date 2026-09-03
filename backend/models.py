@@ -66,6 +66,8 @@ class Resume(BaseModel):
     id: str
     name: str
     content: str
+    file_key: Optional[str] = None
+    download_url: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
 
@@ -73,6 +75,7 @@ class Resume(BaseModel):
 class ResumeCreate(BaseModel):
     name: str
     content: str
+    file_key: Optional[str] = None
 
 
 class Settings(BaseModel):

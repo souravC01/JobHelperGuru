@@ -25,6 +25,7 @@ from backend.storage import StorageService
 from backend.services.scraper import ScraperService
 from backend.services.ai_engine import AIEngine
 from backend.services.excel_exporter import ExcelExporter
+from backend.services.object_storage import ObjectStorageService
 
 app = FastAPI(title="JobHelperGuru API", version="1.0.0")
 
@@ -50,6 +51,11 @@ else:
 
 scraper = ScraperService()
 excel_exporter = ExcelExporter()
+object_storage = ObjectStorageService()
+if object_storage.is_configured:
+    print("[INFO] Connected to Cloudflare R2 Object Storage.")
+else:
+    print("[INFO] Cloudflare R2 not configured. Using local file storage fallback.")
 
 
 def get_ai_engine() -> AIEngine:
@@ -74,6 +80,7 @@ def health():
         "status": "ok",
         "app": "JobHelperGuru",
         "database": "postgresql" if storage.is_postgres else "sqlite",
+        "object_storage": "cloudflare_r2" if object_storage.is_configured else "local",
     }
 
 
@@ -153,14 +160,18 @@ from backend.services.document_parser import extract_text_from_file
 # --- Resumes ---
 @app.get("/api/resumes", response_model=List[Resume])
 def get_resumes():
-    return storage.get_resumes()
+    resumes = storage.get_resumes()
+    for r in resumes:
+        if r.file_key:
+            r.download_url = object_storage.generate_download_url(r.file_key)
+    return resumes
 
 
 @app.post("/api/resumes", response_model=Resume)
 def add_resume(req: ResumeCreate):
     if not req.name.strip() or not req.content.strip():
         raise HTTPException(status_code=400, detail="Resume name and content are required.")
-    return storage.add_resume(name=req.name, content=req.content)
+    return storage.add_resume(name=req.name, content=req.content, file_key=req.file_key)
 
 
 @app.post("/api/resumes/upload", response_model=Resume)
@@ -174,8 +185,17 @@ async def upload_resume_file(
         if not extracted_text.strip():
             raise HTTPException(status_code=400, detail="No readable text could be extracted from this document.")
 
+        # Upload raw binary (.pdf / .docx) to Cloudflare R2 or local uploads
+        file_key = object_storage.upload_file(
+            content_bytes=content_bytes,
+            filename=file.filename,
+            content_type=file.content_type,
+        )
+
         resume_name = name.strip() if (name and name.strip()) else Path(file.filename).stem
-        resume = storage.add_resume(name=resume_name, content=extracted_text)
+        resume = storage.add_resume(name=resume_name, content=extracted_text, file_key=file_key)
+        if file_key:
+            resume.download_url = object_storage.generate_download_url(file_key)
         return resume
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -185,9 +205,12 @@ async def upload_resume_file(
 
 @app.delete("/api/resumes/{resume_id}")
 def delete_resume(resume_id: str):
-    success = storage.delete_resume(resume_id)
-    if not success:
+    resume = storage.get_resume(resume_id)
+    if not resume:
         raise HTTPException(status_code=404, detail="Resume not found.")
+    if resume.file_key:
+        object_storage.delete_file(resume.file_key)
+    success = storage.delete_resume(resume_id)
     return {"success": True}
 
 
