@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronUp,
   Check,
+  Clock,
 } from 'lucide-react';
 import SkillsMatrix from './SkillsMatrix';
 import ATSKeywordBank from './ATSKeywordBank';
@@ -235,7 +236,33 @@ export default function JobAnalyzer({
                     </div>
                   )}
 
-                  {currentJob.experience_level && currentJob.experience_level !== 'Not specified' && (
+                  {/* Required Professional Work Experience Badge */}
+                  <div
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium border text-xs transition-colors ${
+                      (currentJob.experience_required === 'New Grad' || currentJob.is_new_grad_role)
+                        ? 'bg-cyan-500/10 border-cyan-500/25 text-cyan-300'
+                        : currentJob.experience_required && currentJob.experience_required !== 'Not specified'
+                        ? 'bg-amber-500/10 border-amber-500/25 text-amber-300 font-mono'
+                        : 'bg-white/[0.03] border-white/[0.08] text-zinc-400'
+                    }`}
+                    title="Required Professional Work Experience"
+                  >
+                    <Clock
+                      size={13}
+                      className={
+                        (currentJob.experience_required === 'New Grad' || currentJob.is_new_grad_role)
+                          ? 'text-cyan-400'
+                          : currentJob.experience_required && currentJob.experience_required !== 'Not specified'
+                          ? 'text-amber-400'
+                          : 'text-zinc-500'
+                      }
+                    />
+                    <span>
+                      Exp: {currentJob.experience_required || currentJob.experience_level || 'Not specified'}
+                    </span>
+                  </div>
+
+                  {currentJob.experience_level && currentJob.experience_level !== 'Not specified' && currentJob.experience_level !== currentJob.experience_required && (
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-300 font-medium">
                       <Briefcase size={13} />
                       <span>{currentJob.experience_level}</span>
