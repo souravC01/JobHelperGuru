@@ -83,12 +83,18 @@ class ScraperService:
 
         # 1. Try TLS browser impersonation via curl_cffi for anti-bot protected sites (Indeed, Glassdoor, Cloudflare)
         if CURL_CFFI_AVAILABLE:
-            try:
-                cffi_resp = cffi_requests.get(clean_url, impersonate="chrome124", timeout=timeout)
-                if cffi_resp.status_code == 200 and "Authenticating..." not in cffi_resp.text:
-                    html = cffi_resp.text
-            except Exception:
-                pass
+            for profile in ("safari17_0", "safari15_5", "chrome124"):
+                try:
+                    cffi_resp = cffi_requests.get(clean_url, impersonate=profile, timeout=timeout)
+                    if (
+                        cffi_resp.status_code == 200
+                        and "Authenticating..." not in cffi_resp.text
+                        and "Security Check" not in cffi_resp.text
+                    ):
+                        html = cffi_resp.text
+                        break
+                except Exception:
+                    continue
 
         # 2. Fallback to standard requests.Session
         if not html:

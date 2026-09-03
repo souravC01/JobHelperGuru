@@ -73,12 +73,46 @@ class StorageService:
         if self.is_postgres:
             if self.pool:
                 conn = self.pool.getconn()
+                is_stale = False
+                try:
+                    if conn.closed:
+                        is_stale = True
+                    else:
+                        with conn.cursor() as test_cur:
+                            test_cur.execute("SELECT 1")
+                except Exception:
+                    is_stale = True
+
+                if is_stale:
+                    try:
+                        self.pool.putconn(conn, close=True)
+                    except Exception:
+                        pass
+                    conn = psycopg2.connect(self.database_url)
+                    try:
+                        with conn:
+                            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                                yield cursor
+                    finally:
+                        conn.close()
+                    return
+
                 try:
                     with conn:
                         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                             yield cursor
+                except (psycopg2.OperationalError, psycopg2.InterfaceError):
+                    try:
+                        self.pool.putconn(conn, close=True)
+                    except Exception:
+                        pass
+                    raise
                 finally:
-                    self.pool.putconn(conn)
+                    if not conn.closed:
+                        try:
+                            self.pool.putconn(conn)
+                        except Exception:
+                            pass
             else:
                 conn = psycopg2.connect(self.database_url)
                 try:
