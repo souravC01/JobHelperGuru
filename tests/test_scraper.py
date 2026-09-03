@@ -177,3 +177,19 @@ def test_extract_json_ld_schema():
     assert "Austin, TX, US" in job.location
     assert "Kubernetes" in job.raw_text
     assert "Terraform" in job.raw_text
+
+
+def test_scrape_url_blocks_internal_and_cloud_metadata():
+    scraper = ScraperService()
+    blocked_urls = [
+        "http://169.254.169.254/latest/meta-data/",
+        "http://localhost:8000/api/health",
+        "http://127.0.0.1:8000/",
+        "http://10.0.0.1/admin",
+        "file:///etc/passwd",
+    ]
+    for url in blocked_urls:
+        job = scraper.scrape_url(url)
+        # Should be caught by SSRF filter without making a network request
+        assert any(term in job.raw_text.lower() for term in ["blocked", "disallowed", "invalid", "security"])
+

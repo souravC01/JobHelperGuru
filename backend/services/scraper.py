@@ -1,12 +1,47 @@
 import re
 import json
 import urllib.parse
+from urllib.parse import urlparse
+import ipaddress
+import socket
 from typing import Optional
 import requests
 from bs4 import BeautifulSoup
 import trafilatura
 
 from backend.models import ScrapedJob
+
+
+def is_safe_url(url: str) -> bool:
+    """
+    Validates URL to protect against SSRF (Server-Side Request Forgery).
+    Blocks non-HTTP(S) schemes, private IP addresses, loopback, link-local, and cloud metadata endpoints.
+    """
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        if hostname.lower() in ("localhost", "127.0.0.1", "::1", "metadata.google.internal"):
+            return False
+
+        addr_info = socket.getaddrinfo(hostname, None)
+        for item in addr_info:
+            ip_str = item[4][0]
+            ip = ipaddress.ip_address(ip_str)
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_reserved
+                or not ip.is_global
+            ):
+                return False
+        return True
+    except Exception:
+        return False
 
 
 class ScraperService:
@@ -30,6 +65,13 @@ class ScraperService:
         clean_url = url.strip()
         if not clean_url.startswith("http://") and not clean_url.startswith("https://"):
             clean_url = "https://" + clean_url
+
+        if not is_safe_url(clean_url):
+            return ScrapedJob(
+                title="Invalid Target",
+                raw_text="Disallowed or private URL target blocked for security.",
+                source_url=clean_url,
+            )
 
         try:
             response = self.session.get(clean_url, timeout=timeout, allow_redirects=True)
