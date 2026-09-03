@@ -124,7 +124,12 @@ def analyze_job(req: JobAnalyzeRequest, current_user: Optional[User] = Depends(g
         scraped_location = parsed.location
         job_text = parsed.raw_text
 
-    if not job_text or len(job_text.strip()) < 30:
+    if (
+        not job_text
+        or len(job_text.strip()) < 30
+        or job_text.strip().startswith("Error fetching URL:")
+        or job_text.strip().startswith("Disallowed or private URL target")
+    ):
         raise HTTPException(
             status_code=400,
             detail=(

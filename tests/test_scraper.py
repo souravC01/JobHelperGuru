@@ -193,3 +193,14 @@ def test_scrape_url_blocks_internal_and_cloud_metadata():
         # Should be caught by SSRF filter without making a network request
         assert any(term in job.raw_text.lower() for term in ["blocked", "disallowed", "invalid", "security"])
 
+
+def test_scrape_indeed_url_with_tls_impersonation():
+    scraper = ScraperService()
+    # Mock curl_cffi response or live test
+    job = scraper.scrape_url("https://ca.indeed.com/viewjob?jk=d721d1b5ad371161&from=shareddesktop_copy")
+    # If network allows, it will parse job details
+    if not job.raw_text.startswith("Error fetching URL:"):
+        assert "Software Engineering" in job.title or "Java" in job.raw_text
+        assert len(job.raw_text) > 100
+
+

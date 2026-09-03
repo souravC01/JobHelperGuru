@@ -9,6 +9,12 @@ import requests
 from bs4 import BeautifulSoup
 import trafilatura
 
+try:
+    from curl_cffi import requests as cffi_requests
+    CURL_CFFI_AVAILABLE = True
+except ImportError:
+    CURL_CFFI_AVAILABLE = False
+
 from backend.models import ScrapedJob
 
 
@@ -73,11 +79,34 @@ class ScraperService:
                 source_url=clean_url,
             )
 
-        try:
-            response = self.session.get(clean_url, timeout=timeout, allow_redirects=True)
-            response.raise_for_status()
-            html = response.text
+        html = None
 
+        # 1. Try TLS browser impersonation via curl_cffi for anti-bot protected sites (Indeed, Glassdoor, Cloudflare)
+        if CURL_CFFI_AVAILABLE:
+            try:
+                cffi_resp = cffi_requests.get(clean_url, impersonate="chrome124", timeout=timeout)
+                if cffi_resp.status_code == 200 and "Authenticating..." not in cffi_resp.text:
+                    html = cffi_resp.text
+            except Exception:
+                pass
+
+        # 2. Fallback to standard requests.Session
+        if not html:
+            try:
+                response = self.session.get(clean_url, timeout=timeout, allow_redirects=True)
+                response.raise_for_status()
+                html = response.text
+            except Exception as e:
+                # If fetch fails (e.g. anti-bot or 403), return error info in raw_text so user knows
+                return ScrapedJob(
+                    title="",
+                    company="",
+                    location="",
+                    raw_text=f"Error fetching URL: {str(e)}. Please paste the job description text directly.",
+                    source_url=clean_url,
+                )
+
+        try:
             # Check if page is Workday or SmartRecruiters REST API
             workday_job = self._try_fetch_workday_cxs(clean_url, timeout=timeout)
             if workday_job and len(workday_job.raw_text.strip()) > 50:
