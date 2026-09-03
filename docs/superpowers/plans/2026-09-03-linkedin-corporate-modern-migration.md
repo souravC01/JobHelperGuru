@@ -244,7 +244,7 @@
 - Consumes: Resumes list, ATS match algorithm, BulletSkill triggers.
 - Produces: Ranked resume comparison cards, match percentage pills, 1-click BulletSkill trigger.
 
-- [ ] **Step 1: Refactor Resume Cards & Match Badges**
+- [x] **Step 1: Refactor Resume Cards & Match Badges**
   - Container: `card-corporate p-6 bg-white border border-[#e0e0e0] rounded-lg`.
   - Top Match Resume Card:
     - 1px border `#0a66c2` (highlighted) with a clean white background.
@@ -255,11 +255,11 @@
     - Neutral 1px border `#e0e0e0`, match badge in muted navy or gray.
   - Action Button: `btn-primary-corporate w-full` with text "Optimize Bullets with BulletSkill".
 
-- [ ] **Step 2: Run Vite build**
+- [x] **Step 2: Run Vite build**
   Command: `cd frontend && npm run build`
   Expected: Build succeeds with 0 errors.
 
-- [ ] **Step 3: Commit changes**
+- [x] **Step 3: Commit changes**
   ```bash
   git add frontend/src/components/ResumeFitRanker.jsx
   git commit -m "feat(ui): migrate ResumeFitRanker to LinkedIn Corporate Modern design"
