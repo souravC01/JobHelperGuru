@@ -1,6 +1,6 @@
 # Security & Performance Hardening Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Remediate all high/medium security vulnerabilities, implement PostgreSQL connection pooling and concurrency optimizations, and clean up dead startup code in JobHelperGuru without modifying any existing business logic or breaking test suites.
 
@@ -33,7 +33,7 @@
 - Consumes: `token_data` from Google's `oauth2.googleapis.com/tokeninfo`.
 - Produces: Strict audience verification against `GOOGLE_CLIENT_ID` / `VITE_GOOGLE_CLIENT_ID`.
 
-- [ ] **Step 1: Write failing test for Google ID token audience mismatch**
+- [x] **Step 1: Write failing test for Google ID token audience mismatch**
 
 ```python
 # tests/test_auth_api.py
@@ -52,12 +52,12 @@ def test_google_auth_rejects_mismatched_audience(client):
         assert "audience" in resp.json()["detail"].lower() or "unauthorized" in resp.json()["detail"].lower()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_auth_api.py::test_google_auth_rejects_mismatched_audience -v`  
 Expected: FAIL (currently returns 200 and logs in without checking `aud`).
 
-- [ ] **Step 3: Implement audience check in `backend/routers/auth.py`**
+- [x] **Step 3: Implement audience check in `backend/routers/auth.py`**
 
 ```python
     expected_aud = (
@@ -73,12 +73,12 @@ Expected: FAIL (currently returns 200 and logs in without checking `aud`).
         )
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_auth_api.py -v`  
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/routers/auth.py tests/test_auth_api.py
@@ -97,7 +97,7 @@ git commit -m "fix(security): verify Google ID token audience matches client ID"
 - Consumes: `applications` records in database.
 - Produces: Deduplication strictly isolated per `user_id`.
 
-- [ ] **Step 1: Write failing test verifying two different users with identical applications are NOT deduplicated**
+- [x] **Step 1: Write failing test verifying two different users with identical applications are NOT deduplicated**
 
 ```python
 # tests/test_storage.py
@@ -115,12 +115,12 @@ def test_deduplicate_applications_preserves_multi_tenant_isolation(tmp_path):
     assert storage.get_application(app_b.id) is not None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_storage.py::test_deduplicate_applications_preserves_multi_tenant_isolation -v`  
 Expected: FAIL (currently deletes User B's application).
 
-- [ ] **Step 3: Update `deduplicate_existing_applications` in `backend/storage.py`**
+- [x] **Step 3: Update `deduplicate_existing_applications` in `backend/storage.py`**
 
 Partition `seen_urls` and `seen_roles` by `user_id`:
 ```python
@@ -129,12 +129,12 @@ Partition `seen_urls` and `seen_roles` by `user_id`:
     url_key = f"{user_prefix}:::{clean_url}" if clean_url and clean_url != "manual_paste" else None
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_storage.py::test_deduplicate_applications_preserves_multi_tenant_isolation -v`  
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/storage.py tests/test_storage.py
@@ -153,7 +153,7 @@ git commit -m "fix(storage): scope application deduplication by user_id to preve
 - Consumes: Target URL string from `/api/jobs/analyze`.
 - Produces: Validated safe public HTTP/HTTPS URL or raises `ValueError("Disallowed URL target.")`.
 
-- [ ] **Step 1: Write failing test for SSRF blocking**
+- [x] **Step 1: Write failing test for SSRF blocking**
 
 ```python
 # tests/test_scraper.py
@@ -170,12 +170,12 @@ def test_scrape_url_blocks_internal_and_cloud_metadata(scraper):
         assert "blocked" in job.raw_text.lower() or "disallowed" in job.raw_text.lower() or "invalid" in job.raw_text.lower()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_scraper.py::test_scrape_url_blocks_internal_and_cloud_metadata -v`  
 Expected: FAIL.
 
-- [ ] **Step 3: Implement `is_safe_url` in `backend/services/scraper.py`**
+- [x] **Step 3: Implement `is_safe_url` in `backend/services/scraper.py`**
 
 ```python
 import ipaddress
@@ -203,12 +203,12 @@ def is_safe_url(url: str) -> bool:
 ```
 Call `is_safe_url(clean_url)` inside `scrape_url()`. If False, return a safe `ScrapedJob(title="Invalid URL", raw_text="Disallowed or private URL target blocked for security.")`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_scraper.py -v`  
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/services/scraper.py tests/test_scraper.py
@@ -227,7 +227,7 @@ git commit -m "feat(security): add SSRF protection blocking private IPs and clou
 - Consumes: UploadFile from `POST /api/resumes/upload`.
 - Produces: Validated file $\le 10\text{MB}$ and extension in `ALLOWED_RESUME_EXTENSIONS`.
 
-- [ ] **Step 1: Write failing test for disallowed extension and oversized upload**
+- [x] **Step 1: Write failing test for disallowed extension and oversized upload**
 
 ```python
 # tests/test_api.py
@@ -238,12 +238,12 @@ def test_upload_rejects_disallowed_extension(client, auth_headers):
     assert "extension" in resp.json()["detail"].lower()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_api.py::test_upload_rejects_disallowed_extension -v`  
 Expected: FAIL (currently accepts any extension).
 
-- [ ] **Step 3: Implement validation in `backend/main.py`**
+- [x] **Step 3: Implement validation in `backend/main.py`**
 
 ```python
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".rtf"}
@@ -261,12 +261,12 @@ if len(content_bytes) > MAX_FILE_SIZE_BYTES:
     raise HTTPException(status_code=413, detail="File exceeds maximum allowed size of 10MB.")
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_api.py -v`  
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/main.py tests/test_api.py
@@ -280,7 +280,7 @@ git commit -m "feat(security): enforce 10MB size cap and extension whitelist on 
 **Files:**
 - Modify: `backend/main.py:35-42`, `backend/services/auth_service.py:7-10`, `.env`, `.env.example`
 
-- [ ] **Step 1: Add `JWT_SECRET_KEY` and `ALLOWED_ORIGINS` to `.env` and `.env.example`**
+- [x] **Step 1: Add `JWT_SECRET_KEY` and `ALLOWED_ORIGINS` to `.env` and `.env.example`**
 
 Generate a 64-char random key for `JWT_SECRET_KEY` in `.env`:
 ```
@@ -288,7 +288,7 @@ JWT_SECRET_KEY=e83a9d7249b6b72a1936c5df53b1bcf06f157ad9cb71e16f3d1b46a782cb4125
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173
 ```
 
-- [ ] **Step 2: Update CORS in `backend/main.py`**
+- [x] **Step 2: Update CORS in `backend/main.py`**
 
 ```python
 allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173")
@@ -303,19 +303,19 @@ app.add_middleware(
 )
 ```
 
-- [ ] **Step 3: Add production warning in `backend/services/auth_service.py` if default key is detected**
+- [x] **Step 3: Add production warning in `backend/services/auth_service.py` if default key is detected**
 
 ```python
 if os.getenv("ENVIRONMENT") == "production" and JWT_SECRET_KEY == "jobhelperguru-super-secret-dev-jwt-key-2026":
     raise RuntimeError("CRITICAL: Default JWT_SECRET_KEY cannot be used in production. Set JWT_SECRET_KEY in .env")
 ```
 
-- [ ] **Step 4: Run tests to verify auth flows still work**
+- [x] **Step 4: Run tests to verify auth flows still work**
 
 Run: `python -m pytest tests/test_auth_api.py tests/test_auth_service.py -v`  
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/main.py backend/services/auth_service.py .env.example
@@ -334,7 +334,7 @@ git commit -m "fix(security): configure restricted CORS origins and enforce prod
 - Consumes: `self.database_url`.
 - Produces: Thread-safe checked-out connection pool for Neon PostgreSQL.
 
-- [ ] **Step 1: Write test verifying connection pool initialization and checkout**
+- [x] **Step 1: Write test verifying connection pool initialization and checkout**
 
 ```python
 # tests/test_storage.py
@@ -345,7 +345,7 @@ def test_storage_connection_pool_lifecycle(tmp_path):
         assert cur.fetchone()[0] == 1
 ```
 
-- [ ] **Step 2: Update `_get_cursor` and initialize `ThreadedConnectionPool` in `backend/storage.py`**
+- [x] **Step 2: Update `_get_cursor` and initialize `ThreadedConnectionPool` in `backend/storage.py`**
 
 ```python
 from psycopg2.pool import ThreadedConnectionPool
@@ -367,12 +367,12 @@ if self.is_postgres and self.pool:
         self.pool.putconn(conn)
 ```
 
-- [ ] **Step 3: Run full storage and API test suite**
+- [x] **Step 3: Run full storage and API test suite**
 
 Run: `python -m pytest tests/test_storage.py tests/test_api.py -v`  
 Expected: PASS (and drastically reduced execution time).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/storage.py tests/test_storage.py
@@ -386,7 +386,7 @@ git commit -m "perf(db): implement ThreadedConnectionPool for Neon PostgreSQL"
 **Files:**
 - Modify: `backend/main.py:190-215`
 
-- [ ] **Step 1: Change `async def upload_resume_file` to `def upload_resume_file`**
+- [x] **Step 1: Change `async def upload_resume_file` to `def upload_resume_file`**
 
 In `backend/main.py`, convert the signature from `async def` to synchronous `def`:
 ```python
@@ -402,12 +402,12 @@ def upload_resume_file(
 ```
 *FastAPI automatically runs standard `def` functions in its worker threadpool, preventing heavy CPU PDF parsing and boto3 uploads from blocking the main event loop.*
 
-- [ ] **Step 2: Run tests to verify upload endpoint functions identically**
+- [x] **Step 2: Run tests to verify upload endpoint functions identically**
 
 Run: `python -m pytest tests/test_api.py::test_upload_resume_file_endpoint -v`  
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/main.py
@@ -422,7 +422,7 @@ git commit -m "perf(concurrency): convert upload_resume_file to worker threadpoo
 - Modify: `backend/services/encryption.py:10-40`
 - Test: `tests/test_encryption.py`
 
-- [ ] **Step 1: Cache module-level Fernet instance**
+- [x] **Step 1: Cache module-level Fernet instance**
 
 ```python
 _cached_fernet: Optional[Fernet] = None
@@ -447,12 +447,12 @@ def decrypt_value(value: Optional[str]) -> Optional[str]:
         return value
 ```
 
-- [ ] **Step 2: Run encryption tests**
+- [x] **Step 2: Run encryption tests**
 
 Run: `python -m pytest tests/test_encryption.py tests/test_storage_encryption.py -v`  
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/services/encryption.py
@@ -466,7 +466,7 @@ git commit -m "perf(encryption): cache Fernet cipher instance to eliminate redun
 **Files:**
 - Modify: `backend/main.py:46-52`, `frontend/src/components/AuthModal.jsx:25-28`, `frontend/src/api/client.js:270-275`
 
-- [ ] **Step 1: Guard SQLite migration in `backend/main.py`**
+- [x] **Step 1: Guard SQLite migration in `backend/main.py`**
 
 ```python
 if storage.is_postgres:
@@ -478,13 +478,13 @@ if storage.is_postgres:
             print(f"[WARN] SQLite migration skipped: {e}")
 ```
 
-- [ ] **Step 2: Clean `AuthModal.jsx` to load strictly from env**
+- [x] **Step 2: Clean `AuthModal.jsx` to load strictly from env**
 
 ```javascript
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 ```
 
-- [ ] **Step 3: Mark `getExcelExportUrl` as deprecated in `frontend/src/api/client.js`**
+- [x] **Step 3: Mark `getExcelExportUrl` as deprecated in `frontend/src/api/client.js`**
 
 ```javascript
 /** @deprecated Use downloadExcelReport() which includes authenticated Bearer token headers */
@@ -493,12 +493,12 @@ export function getExcelExportUrl() {
 }
 ```
 
-- [ ] **Step 4: Verify frontend build**
+- [x] **Step 4: Verify frontend build**
 
 Run: `npm run build` in `frontend/`  
 Expected: PASS with 0 build errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/main.py frontend/src/components/AuthModal.jsx frontend/src/api/client.js
@@ -509,14 +509,14 @@ git commit -m "chore(cleanup): guard startup sqlite migration and remove hardcod
 
 ### Task 10: Full Regression Verification & Walkthrough
 
-- [ ] **Step 1: Run complete test suite**
+- [x] **Step 1: Run complete test suite**
 
 Run: `python -m pytest -v`  
 Expected: All tests PASS.
 
-- [ ] **Step 2: Build frontend assets**
+- [x] **Step 2: Build frontend assets**
 
 Run: `cd frontend && npm run build`  
 Expected: Clean build.
 
-- [ ] **Step 3: Document completed fixes in walkthrough artifact**
+- [x] **Step 3: Document completed fixes in walkthrough artifact**
