@@ -106,3 +106,74 @@ def test_extract_embedded_greenhouse_ats(monkeypatch):
     assert job.location == "Remote, US"
     assert "React" in job.raw_text
     assert "PostgreSQL" in job.raw_text
+
+def test_extract_nextjs_hydration_dayforce_portal():
+    scraper = ScraperService()
+    next_html = """
+    <!DOCTYPE html>
+    <html>
+      <head><title>Job Details | Dayforce Jobs</title></head>
+      <body>
+        <script id="__NEXT_DATA__" type="application/json">
+        {
+          "props": {
+            "pageProps": {
+              "jobData": {
+                "jobTitle": "QA & Test Automation Developer",
+                "postingLocations": [
+                  {"formattedAddress": "MindBridge Analytics, 80 Aberdeen Street, Ottawa, Ontario, Canada"}
+                ],
+                "jobPostingContent": {
+                  "jobDescription": "<p>MindBridge is looking for a QA Developer skilled in Python, Playwright, and CI/CD pipelines.</p>"
+                }
+              }
+            }
+          }
+        }
+        </script>
+      </body>
+    </html>
+    """
+    job = scraper.extract_from_html(next_html, source_url="https://jobs.dayforcehcm.com/en-CA/mindbridge/CANDIDATEPORTAL/jobs/217")
+    assert job.title == "QA & Test Automation Developer"
+    assert job.company == "MindBridge Analytics"
+    assert "Ottawa, Ontario, Canada" in job.location
+    assert "Playwright" in job.raw_text
+    assert "Python" in job.raw_text
+
+def test_extract_json_ld_schema():
+    scraper = ScraperService()
+    ld_html = """
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "JobPosting",
+          "title": "Senior Cloud Architect",
+          "description": "<p>Join our team to build multi-cloud platforms using Kubernetes, Terraform, and Go.</p>",
+          "hiringOrganization": {
+            "@type": "Organization",
+            "name": "CloudScale Systems"
+          },
+          "jobLocation": {
+            "@type": "Place",
+            "address": {
+              "addressLocality": "Austin",
+              "addressRegion": "TX",
+              "addressCountry": "US"
+            }
+          }
+        }
+        </script>
+      </head>
+      <body><h1>Loading Application...</h1></body>
+    </html>
+    """
+    job = scraper.extract_from_html(ld_html, source_url="https://cloudscale.io/jobs/101")
+    assert job.title == "Senior Cloud Architect"
+    assert job.company == "CloudScale Systems"
+    assert "Austin, TX, US" in job.location
+    assert "Kubernetes" in job.raw_text
+    assert "Terraform" in job.raw_text

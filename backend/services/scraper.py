@@ -1,4 +1,5 @@
 import re
+import json
 import urllib.parse
 from typing import Optional
 import requests
@@ -40,6 +41,16 @@ class ScraperService:
             if embedded_job and len(embedded_job.raw_text.strip()) > 20:
                 return embedded_job
 
+            # Check for Next.js hydration data (Dayforce HCM, Lever, modern career sites)
+            next_job = self._try_extract_next_data(html, source_url=clean_url)
+            if next_job and len(next_job.raw_text.strip()) > 50:
+                return next_job
+
+            # Check for Schema.org JSON-LD JobPosting data
+            json_ld_job = self._try_extract_json_ld(html, source_url=clean_url)
+            if json_ld_job and len(json_ld_job.raw_text.strip()) > 50:
+                return json_ld_job
+
             return self.extract_from_html(html, source_url=clean_url)
         except Exception as e:
             # If fetch fails (e.g. anti-bot or 403), return error info in raw_text so user knows
@@ -56,6 +67,14 @@ class ScraperService:
             embedded_job = self._try_fetch_embedded_ats(html, source_url=source_url)
             if embedded_job and len(embedded_job.raw_text.strip()) > 20:
                 return embedded_job
+
+        next_job = self._try_extract_next_data(html, source_url=source_url)
+        if next_job and len(next_job.raw_text.strip()) > 50:
+            return next_job
+
+        json_ld_job = self._try_extract_json_ld(html, source_url=source_url)
+        if json_ld_job and len(json_ld_job.raw_text.strip()) > 50:
+            return json_ld_job
 
         soup = BeautifulSoup(html, "html.parser")
 
@@ -302,4 +321,126 @@ class ScraperService:
                     )
         except Exception:
             pass
+        return None
+
+    def _try_extract_next_data(self, html: str, source_url: str = "") -> Optional[ScrapedJob]:
+        """
+        Extracts structured job posting data from Next.js hydration payload (__NEXT_DATA__)
+        used by Dayforce HCM (Ceridian), Lever, and modern headless career portals.
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        script = soup.find("script", id="__NEXT_DATA__")
+        if not script or not script.string:
+            return None
+
+        try:
+            data = json.loads(script.string)
+            page_props = data.get("props", {}).get("pageProps", {})
+
+            # 1. Dayforce HCM (Ceridian) pattern
+            if "jobData" in page_props:
+                jd = page_props["jobData"]
+                title = jd.get("jobTitle") or ""
+                content = jd.get("jobPostingContent", {})
+                if isinstance(content, dict):
+                    parts = [
+                        content.get("jobDescriptionHeader", ""),
+                        content.get("jobDescription", ""),
+                        content.get("jobDescriptionFooter", ""),
+                    ]
+                    full_html = "\n".join(p for p in parts if p)
+                    text = BeautifulSoup(full_html, "html.parser").get_text(separator="\n", strip=True)
+                else:
+                    text = str(content)
+
+                locations = jd.get("postingLocations", [])
+                loc_str = locations[0].get("formattedAddress", "") if locations else ""
+                company = ""
+                if loc_str:
+                    company = loc_str.split(",")[0].strip()
+                if not company and source_url:
+                    m = re.search(r"dayforcehcm\.com/[^/]+/([^/]+)/", source_url, re.I)
+                    if m:
+                        company = m.group(1).capitalize()
+
+                if text and len(text.strip()) > 50:
+                    return ScrapedJob(
+                        title=title.strip() or "Open Position",
+                        company=company.strip() or "Dayforce Employer",
+                        location=loc_str.strip() or "Unknown",
+                        raw_text=text.strip(),
+                        source_url=source_url,
+                    )
+
+            # 2. Generic Next.js Job Posting patterns (job, jobDetails, posting, jobPost, position)
+            for key in ["job", "jobDetails", "posting", "jobPost", "position"]:
+                if key in page_props and isinstance(page_props[key], dict):
+                    item = page_props[key]
+                    title = item.get("title") or item.get("jobTitle") or item.get("name") or ""
+                    desc = item.get("description") or item.get("jobDescription") or item.get("content") or ""
+                    if isinstance(desc, str):
+                        desc_text = BeautifulSoup(desc, "html.parser").get_text(separator="\n", strip=True)
+                    else:
+                        desc_text = str(desc)
+
+                    company = item.get("company") or item.get("companyName") or item.get("clientName") or ""
+                    loc = item.get("location") or item.get("workLocation") or ""
+                    if isinstance(loc, dict):
+                        loc = loc.get("name") or loc.get("formattedAddress") or ""
+
+                    if desc_text and len(desc_text.strip()) > 50:
+                        return ScrapedJob(
+                            title=title.strip() or "Open Position",
+                            company=str(company).strip() or "Unknown Company",
+                            location=str(loc).strip() or "Unknown",
+                            raw_text=desc_text.strip(),
+                            source_url=source_url,
+                        )
+        except Exception:
+            pass
+
+        return None
+
+    def _try_extract_json_ld(self, html: str, source_url: str = "") -> Optional[ScrapedJob]:
+        """
+        Extracts structured job posting data from Schema.org JobPosting JSON-LD.
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        for script in soup.find_all("script", type="application/ld+json"):
+            if not script.string:
+                continue
+            try:
+                data = json.loads(script.string)
+                items = data if isinstance(data, list) else [data]
+                for item in items:
+                    if isinstance(item, dict) and item.get("@type") in ["JobPosting", "jobPosting"]:
+                        title = item.get("title", "")
+                        desc_html = item.get("description", "")
+                        desc_text = BeautifulSoup(desc_html, "html.parser").get_text(separator="\n", strip=True)
+                        hiring_org = item.get("hiringOrganization", {})
+                        company = hiring_org.get("name", "") if isinstance(hiring_org, dict) else str(hiring_org)
+
+                        loc = ""
+                        job_loc = item.get("jobLocation", {})
+                        if isinstance(job_loc, dict):
+                            address = job_loc.get("address", {})
+                            if isinstance(address, dict):
+                                parts = [address.get("addressLocality"), address.get("addressRegion"), address.get("addressCountry")]
+                                loc = ", ".join(p for p in parts if p)
+                            else:
+                                loc = str(address)
+                        elif isinstance(job_loc, list) and job_loc:
+                            loc = str(job_loc[0])
+
+                        if desc_text and len(desc_text.strip()) > 50:
+                            return ScrapedJob(
+                                title=title.strip() or "Open Position",
+                                company=company.strip() or "Unknown Company",
+                                location=loc.strip() or "Unknown",
+                                raw_text=desc_text.strip(),
+                                source_url=source_url,
+                            )
+            except Exception:
+                continue
+
         return None
