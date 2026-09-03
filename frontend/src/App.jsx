@@ -20,6 +20,7 @@ import SettingsModal from './components/SettingsModal';
 import OfflineSwitchModal from './components/OfflineSwitchModal';
 import AuthModal from './components/AuthModal';
 import UserNav from './components/UserNav';
+import ThemeToggle from './components/ThemeToggle';
 import {
   getResumes,
   getApplications,
@@ -33,6 +34,23 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(getCurrentUser());
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
+
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('jobhelperguru_theme') || 'light';
+  });
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('jobhelperguru_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
 
   const [activeTab, setActiveTab] = useState('analyzer'); // 'analyzer', 'resumes', 'tracker'
   const [currentJob, setCurrentJob] = useState(null);
@@ -259,6 +277,8 @@ export default function App() {
               <FileSpreadsheet size={14} />
               <span>Export .xlsx</span>
             </button>
+
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
 
             <button
               onClick={() => {

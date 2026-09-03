@@ -14,6 +14,24 @@
   --accent-navy: #004e99;
   --text-primary: #000000;
   --text-muted: #666666;
+  --input-bg: #ffffff;
+}
+
+html.dark, :root.dark, .dark {
+  --bg-canvas: #0f1115;
+  --bg-surface: #1a1d24;
+  --border-color: #2b313c;
+  --border-hover: #404856;
+  --border-focus: #70b5f9;
+  
+  --primary-blue: #0a66c2;
+  --primary-blue-hover: #004e99;
+  --accent-rust: #ff8162;
+  --accent-emerald: #45c586;
+  --accent-navy: #70b5f9;
+  --text-primary: #f3f6f8;
+  --text-muted: #9aa1b2;
+  --input-bg: #12141a;
 }
 
 * {
@@ -28,6 +46,7 @@ body {
   overflow-x: hidden;
   line-height: 1.5;
   letter-spacing: -0.005em;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 code, pre, .font-mono, .mono-data {
@@ -36,24 +55,24 @@ code, pre, .font-mono, .mono-data {
 
 /* LinkedIn Corporate Modern Cards */
 .card-corporate {
-  background: #ffffff;
-  border: 1px solid #e0e0e0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: none;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.2s ease;
 }
 
 .card-corporate:hover {
-  border-color: #c1c6d4;
+  border-color: var(--border-hover);
 }
 
 /* Backward-compatible card aliases */
 .glass-panel, .glass-card, .glass-command-bar {
-  background: #ffffff;
-  border: 1px solid #e0e0e0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: none;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.2s ease;
 }
 
 /* Corporate Buttons */
@@ -83,7 +102,7 @@ code, pre, .font-mono, .mono-data {
 }
 
 .btn-secondary-corporate {
-  background-color: #ffffff;
+  background-color: var(--bg-surface);
   color: #0a66c2;
   font-weight: 600;
   font-size: 0.875rem;
@@ -134,7 +153,7 @@ code, pre, .font-mono, .mono-data {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  background-color: #ffffff;
+  background-color: var(--bg-surface);
   color: #0a66c2;
   font-weight: 600;
   font-size: 0.875rem;
@@ -154,7 +173,7 @@ code, pre, .font-mono, .mono-data {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  background-color: #ffffff;
+  background-color: var(--bg-surface);
   color: #057642;
   font-weight: 600;
   font-size: 0.85rem;
@@ -172,43 +191,43 @@ code, pre, .font-mono, .mono-data {
 
 /* Corporate Form Inputs */
 .input-corporate {
-  background-color: #ffffff;
-  border: 1px solid #e0e0e0;
+  background-color: var(--input-bg);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   padding: 8px 12px;
   font-size: 0.875rem;
-  color: #000000;
+  color: var(--text-primary);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   outline: none;
 }
 
 .input-corporate::placeholder {
-  color: #666666;
+  color: var(--text-muted);
 }
 
 .input-corporate:focus {
-  border-color: #0a66c2;
+  border-color: var(--border-focus);
   box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.2);
 }
 
 .input-field {
   width: 100%;
-  background-color: #ffffff;
-  border: 1px solid #e0e0e0;
+  background-color: var(--input-bg);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   padding: 8px 12px;
   font-size: 0.875rem;
-  color: #000000;
+  color: var(--text-primary);
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .input-field::placeholder {
-  color: #666666;
+  color: var(--text-muted);
 }
 
 .input-field:focus {
-  border-color: #0a66c2;
+  border-color: var(--border-focus);
   box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.2);
 }
 
@@ -221,9 +240,9 @@ code, pre, .font-mono, .mono-data {
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 600;
-  background: #f3f6f8;
-  color: #000000;
-  border: 1px solid #e0e0e0;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
   transition: all 0.15s ease;
 }
 
@@ -235,9 +254,9 @@ code, pre, .font-mono, .mono-data {
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 600;
-  background: #f3f6f8;
-  color: #000000;
-  border: 1px solid #e0e0e0;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
   transition: all 0.15s ease;
 }
 
@@ -254,9 +273,9 @@ code, pre, .font-mono, .mono-data {
 }
 
 .badge-keyword {
-  background: #f3f6f8;
-  color: #000000;
-  border: 1px solid #e0e0e0;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
 }
 
 .badge-keyword:hover {
@@ -267,7 +286,7 @@ code, pre, .font-mono, .mono-data {
 }
 
 /* Status Badges */
-.status-wishlist { background: #f3f6f8; color: #666666; border: 1px solid #e0e0e0; }
+.status-wishlist { background: var(--bg-canvas); color: var(--text-muted); border: 1px solid var(--border-color); }
 .status-applied { background: rgba(10, 102, 194, 0.1); color: #0a66c2; border: 1px solid rgba(10, 102, 194, 0.25); }
 .status-interviewing { background: rgba(0, 78, 153, 0.1); color: #004e99; border: 1px solid rgba(0, 78, 153, 0.25); }
 .status-offered { background: rgba(5, 118, 66, 0.1); color: #057642; border: 1px solid rgba(5, 118, 66, 0.25); font-weight: 700; }
@@ -283,18 +302,151 @@ code, pre, .font-mono, .mono-data {
   animation: fadeIn 0.15s ease-out forwards;
 }
 
-/* Corporate Light Scrollbar */
+/* Corporate Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #f3f6f8;
+  background: var(--bg-canvas);
 }
 ::-webkit-scrollbar-thumb {
-  background: #c1c6d4;
+  background: var(--border-hover);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #8c93a4;
+}
+
+/* ------------------------------------------------------------- */
+/* Comprehensive Dark Mode Overrides                             */
+/* ------------------------------------------------------------- */
+.dark body {
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+}
+
+.dark .bg-white {
+  background-color: var(--bg-surface) !important;
+}
+
+.dark .bg-\[\#f3f6f8\] {
+  background-color: #12141a !important;
+}
+
+.dark .bg-\[\#f0f7fe\] {
+  background-color: #141c28 !important;
+}
+
+.dark .border-\[\#e0e0e0\] {
+  border-color: var(--border-color) !important;
+}
+
+.dark .text-\[\#000000\] {
+  color: #f3f6f8 !important;
+}
+
+.dark .text-\[\#666666\] {
+  color: #9aa1b2 !important;
+}
+
+.dark .hover\:bg-\[\#f3f6f8\]:hover {
+  background-color: #232832 !important;
+}
+
+.dark .hover\:bg-\[\#f9fafb\]:hover {
+  background-color: #232832 !important;
+}
+
+.dark .hover\:bg-white:hover {
+  background-color: #232832 !important;
+}
+
+.dark .hover\:text-\[\#000000\]:hover {
+  color: #ffffff !important;
+}
+
+.dark .hover\:border-\[\#c1c6d4\]:hover {
+  border-color: var(--border-hover) !important;
+}
+
+.dark .btn-secondary-corporate,
+.dark .btn-secondary {
+  background-color: var(--bg-surface) !important;
+  color: #70b5f9 !important;
+  border-color: #70b5f9 !important;
+}
+
+.dark .btn-secondary-corporate:hover:not(:disabled),
+.dark .btn-secondary:hover:not(:disabled) {
+  background-color: rgba(112, 181, 249, 0.12) !important;
+  border-color: #93c5fd !important;
+}
+
+.dark .btn-excel {
+  background-color: var(--bg-surface) !important;
+  color: #45c586 !important;
+  border-color: #45c586 !important;
+}
+
+.dark .btn-excel:hover {
+  background-color: rgba(69, 197, 134, 0.12) !important;
+}
+
+.dark table thead tr {
+  background-color: #12141a !important;
+  border-color: var(--border-color) !important;
+}
+
+.dark table thead th {
+  color: #f3f6f8 !important;
+}
+
+.dark table tbody tr {
+  border-color: var(--border-color) !important;
+}
+
+.dark table tbody tr:hover {
+  background-color: #21252f !important;
+}
+
+.dark select option {
+  background-color: #1a1d24 !important;
+  color: #f3f6f8 !important;
+}
+
+.dark .badge-keyword:hover {
+  background-color: #232832 !important;
+  color: #70b5f9 !important;
+  border-color: #70b5f9 !important;
+}
+
+.dark .status-wishlist {
+  background-color: #15181f !important;
+  color: #9aa1b2 !important;
+  border-color: var(--border-color) !important;
+}
+
+.dark .status-applied {
+  background-color: rgba(10, 102, 194, 0.2) !important;
+  color: #70b5f9 !important;
+  border-color: rgba(112, 181, 249, 0.3) !important;
+}
+
+.dark .status-interviewing {
+  background-color: rgba(0, 78, 153, 0.25) !important;
+  color: #93c5fd !important;
+  border-color: rgba(147, 197, 253, 0.3) !important;
+}
+
+.dark .status-offered {
+  background-color: rgba(5, 118, 66, 0.2) !important;
+  color: #45c586 !important;
+  border-color: rgba(69, 197, 134, 0.3) !important;
+}
+
+.dark .status-rejected {
+  background-color: rgba(178, 64, 32, 0.2) !important;
+  color: #ff8162 !important;
+  border-color: rgba(255, 129, 98, 0.3) !important;
 }
