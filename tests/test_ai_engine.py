@@ -1,11 +1,17 @@
 import pytest
-from backend.services.ai_engine import AIEngine
+from backend.services.ai_engine import AIEngine, extract_json_from_llm_response
 from backend.models import (
     BulletOptimizationRequest,
     ClaimStatus,
     Resume,
     JobAnalysisResult,
 )
+
+def test_extract_json_from_llm_response_with_think_tags():
+    raw_llm = "<think>Analyzing candidates skills...</think>\n```json\n{\"company\": \"Google\", \"title\": \"SWE\"}\n```"
+    parsed = extract_json_from_llm_response(raw_llm)
+    assert parsed["company"] == "Google"
+    assert parsed["title"] == "SWE"
 
 def test_bulletskill_optimization_fallback():
     # When no API key is provided, AIEngine must use Bulletskill.md rules offline
@@ -192,3 +198,18 @@ def test_ai_engine_offline_heuristic_mode_bypasses_api():
     # Must succeed cleanly offline
     job = engine.analyze_job("Software Engineer at Google. Requirements: Python, Go, Docker.")
     assert "Python" in job.required_skills or "Python" in job.tech_stack
+
+
+def test_ai_engine_extracts_experience_required_offline():
+    engine = AIEngine(api_key=None)
+    text = "Senior Python Engineer at Datadog. Requires 3-5 years of backend experience."
+    res = engine.analyze_job(text)
+    assert res.experience_required == "3-5 years"
+
+
+def test_ai_engine_extracts_experience_required_new_grad_offline():
+    engine = AIEngine(api_key=None)
+    text = "Software Engineer - New Grad 2026. Looking for university graduates."
+    res = engine.analyze_job(text)
+    assert res.experience_required == "New Grad"
+

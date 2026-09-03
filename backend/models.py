@@ -111,6 +111,7 @@ class JobAnalysisResult(BaseModel):
     work_mode: str = "Unknown"  # Remote, Hybrid, Onsite, Unknown
     salary_range: str = "Not specified"
     experience_level: str = "Not specified"  # Entry, Mid, Senior, Lead
+    experience_required: str = "Not specified"  # e.g. "1-4 years", "3+ years", "New Grad", "Not specified"
     is_new_grad_role: bool = False
     new_grad_criteria: Optional[str] = None
     required_skills: List[str] = Field(default_factory=list)
@@ -195,3 +196,30 @@ class OutreachResponse(BaseModel):
     subject_line: str
     cover_letter_pitch: str
     connection_note: str
+
+
+class User(BaseModel):
+    id: str
+    email: str
+    name: str
+    avatar_url: Optional[str] = None
+    provider: str = "email"
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+
+class UserRegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str
+
+
+class UserLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    token: str
+    user: User
+

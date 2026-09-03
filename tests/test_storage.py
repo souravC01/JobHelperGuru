@@ -108,3 +108,40 @@ def test_application_deduplication(tmp_path):
     assert len(storage.get_applications()) == 1
     assert third_app.status == ApplicationStatus.APPLIED
 
+
+def test_deduplicate_applications_preserves_multi_tenant_isolation(tmp_path):
+    db_path = str(tmp_path / "dedup_isolation_test.db")
+    storage = StorageService(db_path=db_path)
+    app_data = ApplicationCreate(
+        company="Google",
+        role="SWE",
+        url="https://google.com/jobs/1",
+        status=ApplicationStatus.APPLIED,
+    )
+    
+    # User Alpha and User Beta both apply to Google SWE
+    app_a = storage.add_application(app_data, user_id="user-alpha")
+    app_b = storage.add_application(app_data, user_id="user-beta")
+    
+    # Run the table-wide deduplication cleanup
+    storage.deduplicate_existing_applications()
+    
+    # Neither application should have been deleted because they belong to different users!
+    assert storage.get_application(app_a.id) is not None
+    assert storage.get_application(app_b.id) is not None
+    assert len(storage.get_applications(user_id="user-alpha")) == 1
+    assert len(storage.get_applications(user_id="user-beta")) == 1
+
+
+def test_storage_connection_pool_lifecycle(tmp_path):
+    db_path = str(tmp_path / "pool_test.db")
+    storage = StorageService(db_path=db_path, force_sqlite=True)
+    with storage._get_cursor() as cur:
+        cur.execute("SELECT 1")
+        row = cur.fetchone()
+        assert row[0] == 1
+    # Test close is safe
+    storage.close()
+
+
+

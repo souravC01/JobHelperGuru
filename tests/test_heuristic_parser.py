@@ -79,3 +79,32 @@ def test_new_grad_eligibility_window():
     el_2024 = parser.check_new_grad_eligibility(res_2024, ref_date)
     assert el_2024["eligible"] is False
     assert el_2024["months_diff"] < -6
+
+
+def test_heuristic_experience_required_range():
+    parser = HeuristicParser()
+    text = "We are seeking a Backend Engineer with 1-4 years of professional experience in Python."
+    res = parser.analyze_job_text(text)
+    assert res.experience_required == "1-4 years"
+
+
+def test_heuristic_experience_required_plus_notation():
+    parser = HeuristicParser()
+    text = "Senior DevOps Engineer. Must have 5+ years of experience with Kubernetes and AWS."
+    res = parser.analyze_job_text(text)
+    assert res.experience_required == "5+ years"
+
+
+def test_heuristic_experience_required_recent_grad():
+    parser = HeuristicParser()
+    text = "Associate Developer role open to recent grads and university graduates with strong Java skills."
+    res = parser.analyze_job_text(text)
+    assert res.experience_required == "New Grad"
+
+
+def test_heuristic_experience_required_not_specified():
+    parser = HeuristicParser()
+    text = "Software Developer at Acme. Build high quality web applications using React and Node.js."
+    res = parser.analyze_job_text(text)
+    assert res.experience_required == "Not specified"
+

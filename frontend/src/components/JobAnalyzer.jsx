@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronUp,
   Check,
+  Clock,
 } from 'lucide-react';
 import SkillsMatrix from './SkillsMatrix';
 import ATSKeywordBank from './ATSKeywordBank';
@@ -190,9 +191,23 @@ export default function JobAnalyzer({
 
         {/* Error Alert */}
         {error && (
-          <div className="mt-3 p-3 bg-rose-500/10 border border-rose-500/25 rounded-xl flex items-center gap-2 text-rose-300 text-xs animate-fade-in">
-            <AlertCircle size={15} className="shrink-0" />
-            <span>{error}</span>
+          <div className="mt-3 p-3 bg-rose-500/10 border border-rose-500/25 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-rose-300 text-xs animate-fade-in">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={15} className="shrink-0 text-rose-400" />
+              <span>{error}</span>
+            </div>
+            {mode === 'url' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('text');
+                  setError('');
+                }}
+                className="shrink-0 px-3 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 font-medium text-[11px] border border-rose-500/30 transition-colors"
+              >
+                Switch to Paste Job Text &rarr;
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -235,7 +250,33 @@ export default function JobAnalyzer({
                     </div>
                   )}
 
-                  {currentJob.experience_level && currentJob.experience_level !== 'Not specified' && (
+                  {/* Required Professional Work Experience Badge */}
+                  <div
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium border text-xs transition-colors ${
+                      (currentJob.experience_required === 'New Grad' || currentJob.is_new_grad_role)
+                        ? 'bg-cyan-500/10 border-cyan-500/25 text-cyan-300'
+                        : currentJob.experience_required && currentJob.experience_required !== 'Not specified'
+                        ? 'bg-amber-500/10 border-amber-500/25 text-amber-300 font-mono'
+                        : 'bg-white/[0.03] border-white/[0.08] text-zinc-400'
+                    }`}
+                    title="Required Professional Work Experience"
+                  >
+                    <Clock
+                      size={13}
+                      className={
+                        (currentJob.experience_required === 'New Grad' || currentJob.is_new_grad_role)
+                          ? 'text-cyan-400'
+                          : currentJob.experience_required && currentJob.experience_required !== 'Not specified'
+                          ? 'text-amber-400'
+                          : 'text-zinc-500'
+                      }
+                    />
+                    <span>
+                      Exp: {currentJob.experience_required || currentJob.experience_level || 'Not specified'}
+                    </span>
+                  </div>
+
+                  {currentJob.experience_level && currentJob.experience_level !== 'Not specified' && currentJob.experience_level !== currentJob.experience_required && (
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-300 font-medium">
                       <Briefcase size={13} />
                       <span>{currentJob.experience_level}</span>

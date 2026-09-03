@@ -1,12 +1,53 @@
 import re
 import json
 import urllib.parse
+from urllib.parse import urlparse
+import ipaddress
+import socket
 from typing import Optional
 import requests
 from bs4 import BeautifulSoup
 import trafilatura
 
+try:
+    from curl_cffi import requests as cffi_requests
+    CURL_CFFI_AVAILABLE = True
+except ImportError:
+    CURL_CFFI_AVAILABLE = False
+
 from backend.models import ScrapedJob
+
+
+def is_safe_url(url: str) -> bool:
+    """
+    Validates URL to protect against SSRF (Server-Side Request Forgery).
+    Blocks non-HTTP(S) schemes, private IP addresses, loopback, link-local, and cloud metadata endpoints.
+    """
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        if hostname.lower() in ("localhost", "127.0.0.1", "::1", "metadata.google.internal"):
+            return False
+
+        addr_info = socket.getaddrinfo(hostname, None)
+        for item in addr_info:
+            ip_str = item[4][0]
+            ip = ipaddress.ip_address(ip_str)
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_reserved
+                or not ip.is_global
+            ):
+                return False
+        return True
+    except Exception:
+        return False
 
 
 class ScraperService:
@@ -31,11 +72,47 @@ class ScraperService:
         if not clean_url.startswith("http://") and not clean_url.startswith("https://"):
             clean_url = "https://" + clean_url
 
-        try:
-            response = self.session.get(clean_url, timeout=timeout, allow_redirects=True)
-            response.raise_for_status()
-            html = response.text
+        if not is_safe_url(clean_url):
+            return ScrapedJob(
+                title="Invalid Target",
+                raw_text="Disallowed or private URL target blocked for security.",
+                source_url=clean_url,
+            )
 
+        html = None
+
+        # 1. Try TLS browser impersonation via curl_cffi for anti-bot protected sites (Indeed, Glassdoor, Cloudflare)
+        if CURL_CFFI_AVAILABLE:
+            for profile in ("safari17_0", "safari15_5", "chrome124"):
+                try:
+                    cffi_resp = cffi_requests.get(clean_url, impersonate=profile, timeout=timeout)
+                    if (
+                        cffi_resp.status_code == 200
+                        and "Authenticating..." not in cffi_resp.text
+                        and "Security Check" not in cffi_resp.text
+                    ):
+                        html = cffi_resp.text
+                        break
+                except Exception:
+                    continue
+
+        # 2. Fallback to standard requests.Session
+        if not html:
+            try:
+                response = self.session.get(clean_url, timeout=timeout, allow_redirects=True)
+                response.raise_for_status()
+                html = response.text
+            except Exception as e:
+                # If fetch fails (e.g. anti-bot or 403), return error info in raw_text so user knows
+                return ScrapedJob(
+                    title="",
+                    company="",
+                    location="",
+                    raw_text=f"Error fetching URL: {str(e)}. Please paste the job description text directly.",
+                    source_url=clean_url,
+                )
+
+        try:
             # Check if page is Workday or SmartRecruiters REST API
             workday_job = self._try_fetch_workday_cxs(clean_url, timeout=timeout)
             if workday_job and len(workday_job.raw_text.strip()) > 50:

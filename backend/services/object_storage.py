@@ -71,6 +71,7 @@ class ObjectStorageService:
         content_bytes: bytes,
         filename: str,
         content_type: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> Optional[str]:
         """
         Uploads file binary to Cloudflare R2 or local uploads folder.
@@ -78,7 +79,8 @@ class ObjectStorageService:
         """
         ext = Path(filename).suffix
         safe_name = Path(filename).stem.replace(" ", "_")
-        unique_key = f"resumes/{uuid.uuid4().hex}_{safe_name}{ext}"
+        prefix = f"resumes/{user_id}" if user_id else "resumes"
+        unique_key = f"{prefix}/{uuid.uuid4().hex}_{safe_name}{ext}"
 
         if not content_type:
             content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
@@ -96,9 +98,9 @@ class ObjectStorageService:
                 print(f"[ERROR] Cloudflare R2 upload error for {filename}: {e}")
 
         # Local filesystem fallback
-        local_dir = Path("data/uploads/resumes")
+        local_dir = Path("data/uploads") / prefix
         local_dir.mkdir(parents=True, exist_ok=True)
-        local_path = local_dir / Path(unique_key).name
+        local_path = local_dir / f"{Path(unique_key).name}"
         local_path.write_bytes(content_bytes)
         return unique_key
 
@@ -114,9 +116,13 @@ class ObjectStorageService:
             except Exception as e:
                 print(f"[WARN] R2 download failed for {object_key}: {e}")
 
-        local_path = Path("data/uploads/resumes") / Path(object_key).name
+        local_path = Path("data/uploads") / object_key
         if local_path.exists():
             return local_path.read_bytes()
+
+        legacy_path = Path("data/uploads/resumes") / Path(object_key).name
+        if legacy_path.exists():
+            return legacy_path.read_bytes()
 
         return None
 
@@ -152,9 +158,14 @@ class ObjectStorageService:
             except Exception as e:
                 print(f"[WARN] R2 delete failed for {object_key}: {e}")
 
-        local_path = Path("data/uploads/resumes") / Path(object_key).name
+        local_path = Path("data/uploads") / object_key
         if local_path.exists():
             local_path.unlink()
+            return True
+
+        legacy_path = Path("data/uploads/resumes") / Path(object_key).name
+        if legacy_path.exists():
+            legacy_path.unlink()
             return True
 
         return False
