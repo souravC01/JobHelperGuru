@@ -70,6 +70,7 @@ class StorageService:
                 )
             """)
             conn.commit()
+        self.deduplicate_existing_applications()
 
     # --- Resumes CRUD ---
     def add_resume(self, name: str, content: str) -> Resume:
@@ -126,7 +127,110 @@ class StorageService:
             return cursor.rowcount > 0
 
     # --- Applications CRUD ---
+    def find_existing_application(self, url: Optional[str], company: str, role: str) -> Optional[Application]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # 1. Match by exact or normalized URL (excluding blank and manual_paste)
+            clean_url = (url or "").strip().rstrip("/")
+            if clean_url and clean_url != "manual_paste":
+                cursor.execute(
+                    "SELECT * FROM applications WHERE TRIM(RTRIM(url, '/')) = ? AND url != '' AND url != 'manual_paste'",
+                    (clean_url,),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return self._row_to_application(row)
+
+            # 2. Match by exact normalized company & role
+            clean_comp = (company or "").strip().lower()
+            clean_r = (role or "").strip().lower()
+            if clean_comp and clean_r:
+                cursor.execute(
+                    "SELECT * FROM applications WHERE LOWER(TRIM(company)) = ? AND LOWER(TRIM(role)) = ?",
+                    (clean_comp, clean_r),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return self._row_to_application(row)
+
+                # 3. Match if company is a prefix or contains the other (e.g. 'MindBridge' vs 'MindBridge Analytics Inc.')
+                if len(clean_comp) >= 4:
+                    cursor.execute(
+                        """
+                        SELECT * FROM applications 
+                        WHERE LOWER(TRIM(role)) = ? 
+                          AND (
+                              LOWER(TRIM(company)) LIKE ? || '%' 
+                              OR ? LIKE LOWER(TRIM(company)) || '%'
+                          )
+                        """,
+                        (clean_r, clean_comp, clean_comp),
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        return self._row_to_application(row)
+
+            return None
+
+    def deduplicate_existing_applications(self):
+        """Removes existing duplicate applications, preserving the most recently updated record."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, company, role, url, updated_at FROM applications ORDER BY updated_at DESC")
+            rows = cursor.fetchall()
+            seen_urls = set()
+            seen_roles = set()
+            ids_to_delete = []
+
+            for row in rows:
+                clean_url = (row["url"] or "").strip().rstrip("/")
+                comp_role_key = f"{row['company'].strip().lower()}:::{row['role'].strip().lower()}"
+
+                is_dup = False
+                if clean_url and clean_url != "manual_paste" and clean_url in seen_urls:
+                    is_dup = True
+                if comp_role_key in seen_roles:
+                    is_dup = True
+
+                if is_dup:
+                    ids_to_delete.append(row["id"])
+                else:
+                    if clean_url and clean_url != "manual_paste":
+                        seen_urls.add(clean_url)
+                    seen_roles.add(comp_role_key)
+
+            if ids_to_delete:
+                placeholders = ",".join("?" for _ in ids_to_delete)
+                cursor.execute(f"DELETE FROM applications WHERE id IN ({placeholders})", ids_to_delete)
+                conn.commit()
+
     def add_application(self, app_data: ApplicationCreate) -> Application:
+        # Check if this application already exists in the pipeline
+        existing = self.find_existing_application(app_data.url, app_data.company, app_data.role)
+        if existing:
+            status_val = app_data.status.value if isinstance(app_data.status, ApplicationStatus) else str(app_data.status)
+            final_status = existing.status
+            if status_val != ApplicationStatus.WISHLIST.value or existing.status == ApplicationStatus.WISHLIST:
+                final_status = ApplicationStatus(status_val)
+
+            merged_skills = list(dict.fromkeys((existing.required_skills or []) + (app_data.required_skills or [])))
+            merged_keywords = list(dict.fromkeys((existing.ats_keywords or []) + (app_data.ats_keywords or [])))
+
+            updates = {
+                "location": app_data.location if app_data.location and app_data.location != "Unknown" else existing.location,
+                "salary": app_data.salary if app_data.salary and app_data.salary != "Not specified" else existing.salary,
+                "url": app_data.url if app_data.url and app_data.url != "manual_paste" else existing.url,
+                "required_skills": merged_skills,
+                "ats_keywords": merged_keywords,
+                "status": final_status,
+                "notes": app_data.notes if app_data.notes else existing.notes,
+                "best_resume_id": app_data.best_resume_id or existing.best_resume_id,
+            }
+            updated = self.update_application(existing.id, updates)
+            if updated:
+                return updated
+            return existing
+
         now = datetime.now().isoformat()
         date_added = datetime.now().strftime("%Y-%m-%d")
         app_id = str(uuid.uuid4())

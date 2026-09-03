@@ -273,6 +273,7 @@ export default function App() {
           <div className="space-y-8">
             <JobAnalyzer
               currentJob={currentJob}
+              applications={applications}
               onJobAnalyzed={handleJobAnalyzed}
               onOpenBulletOptimizer={(kw) => handleOpenOptimizer(kw)}
               onOpenCoverLetter={() => setIsCoverLetterOpen(true)}

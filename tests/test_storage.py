@@ -56,3 +56,55 @@ def test_storage_crud(tmp_path):
     assert len(storage.get_applications()) == 0
     assert storage.delete_resume(r.id) is True
     assert len(storage.get_resumes()) == 0
+
+
+def test_application_deduplication(tmp_path):
+    db_path = str(tmp_path / "test_tracker_dedup.db")
+    storage = StorageService(db_path=db_path)
+
+    # 1. Add first application
+    app_data1 = ApplicationCreate(
+        company="MindBridge",
+        role="QA & Test Automation Developer",
+        status=ApplicationStatus.WISHLIST,
+        location="London, ON",
+        salary="$120k",
+        url="https://jobs.dayforcehcm.com/en-CA/mindbridge/CANDIDATEPORTAL/jobs/217",
+        required_skills=["Selenium", "Playwright"],
+        ats_keywords=["Test Automation"],
+    )
+    first_app = storage.add_application(app_data1)
+    assert first_app.id is not None
+    assert len(storage.get_applications()) == 1
+
+    # 2. Add same job by same URL (e.g. user clicks Add to Pipeline again)
+    app_data_same_url = ApplicationCreate(
+        company="MindBridge Analytics Inc.",
+        role="QA & Test Automation Developer",
+        status=ApplicationStatus.WISHLIST,
+        location="London, ON / Remote",
+        salary="$120k - $140k",
+        url="https://jobs.dayforcehcm.com/en-CA/mindbridge/CANDIDATEPORTAL/jobs/217",
+        required_skills=["Selenium", "Playwright", "TypeScript"],
+        ats_keywords=["Test Automation", "CI/CD"],
+    )
+    second_app = storage.add_application(app_data_same_url)
+    assert second_app.id == first_app.id  # Same ID, updated in place!
+    apps = storage.get_applications()
+    assert len(apps) == 1  # No duplicate row created!
+    assert "TypeScript" in second_app.required_skills
+
+    # 3. Add same job with slightly different URL or text paste (matching company & role)
+    app_data_same_company_role = ApplicationCreate(
+        company="mindbridge",  # case-insensitive check
+        role="qa & test automation developer",
+        status=ApplicationStatus.APPLIED,
+        location="Remote",
+        url="https://www.linkedin.com/jobs/view/4462448668/",
+        required_skills=["Python", "Playwright"],
+    )
+    third_app = storage.add_application(app_data_same_company_role)
+    assert third_app.id == first_app.id  # Still same ID!
+    assert len(storage.get_applications()) == 1
+    assert third_app.status == ApplicationStatus.APPLIED
+

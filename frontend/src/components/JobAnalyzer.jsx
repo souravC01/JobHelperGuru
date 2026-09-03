@@ -16,6 +16,7 @@ import {
   GraduationCap,
   ChevronDown,
   ChevronUp,
+  Check,
 } from 'lucide-react';
 import SkillsMatrix from './SkillsMatrix';
 import ATSKeywordBank from './ATSKeywordBank';
@@ -24,6 +25,7 @@ import { analyzeJob, addApplication } from '../api/client';
 export default function JobAnalyzer({
   onJobAnalyzed,
   currentJob,
+  applications = [],
   onOpenBulletOptimizer,
   onOpenCoverLetter,
   onApplicationSaved,
@@ -36,6 +38,23 @@ export default function JobAnalyzer({
   const [error, setError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showPasteText, setShowPasteText] = useState(false);
+
+  const isAlreadyInPipeline = Boolean(
+    currentJob &&
+    applications &&
+    applications.some((app) => {
+      const jobUrl = (currentJob.source_url || urlInput || '').trim().replace(/\/+$/, '');
+      const appUrl = (app.url || '').trim().replace(/\/+$/, '');
+      const matchUrl = jobUrl && jobUrl !== 'manual_paste' && appUrl && appUrl === jobUrl;
+      const matchCompanyRole = (
+        app.company && currentJob.company &&
+        app.company.trim().toLowerCase() === currentJob.company.trim().toLowerCase() &&
+        app.role && currentJob.title &&
+        app.role.trim().toLowerCase() === currentJob.title.trim().toLowerCase()
+      );
+      return matchUrl || matchCompanyRole;
+    })
+  );
 
   const handleAnalyze = async (e) => {
     e?.preventDefault();
@@ -264,10 +283,29 @@ export default function JobAnalyzer({
 
                 <button
                   onClick={() => handleSaveToTracker('Wishlist')}
-                  className="btn-gradient text-xs"
+                  className={`text-xs flex items-center gap-1.5 transition-all ${
+                    isAlreadyInPipeline
+                      ? 'btn-secondary text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/10'
+                      : 'btn-gradient'
+                  }`}
+                  title={isAlreadyInPipeline ? 'Job is already in your application pipeline. Click to refresh details.' : 'Save to your application pipeline'}
                 >
-                  <PlusCircle size={13} />
-                  <span>{saveSuccess ? 'Saved to Pipeline! ✓' : 'Add to Pipeline'}</span>
+                  {saveSuccess ? (
+                    <>
+                      <Check size={13} className="text-emerald-400 stroke-[3]" />
+                      <span>{isAlreadyInPipeline ? 'Updated in Pipeline! ✓' : 'Saved to Pipeline! ✓'}</span>
+                    </>
+                  ) : isAlreadyInPipeline ? (
+                    <>
+                      <Check size={13} className="text-emerald-400 stroke-[2.5]" />
+                      <span>In Pipeline (Update)</span>
+                    </>
+                  ) : (
+                    <>
+                      <PlusCircle size={13} />
+                      <span>Add to Pipeline</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
