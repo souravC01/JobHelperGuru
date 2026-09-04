@@ -200,7 +200,7 @@ git commit -m "feat(api): add resume parse-file and patch update endpoints"
 - `parseResumeFile(file)`: posts to `/api/resumes/parse-file`, returns `{ filename, suggested_title, text }`
 - `updateResume(id, { name, content })`: patches to `/api/resumes/{id}`, returns updated `Resume`
 
-- [ ] **Step 1: Add `parseResumeFile` and `updateResume` in `frontend/src/api/client.js`**
+- [x] **Step 1: Add `parseResumeFile` and `updateResume` in `frontend/src/api/client.js`**
 
 ```javascript
 export async function parseResumeFile(file) {
@@ -231,12 +231,12 @@ export async function updateResume(id, { name, content }) {
 }
 ```
 
-- [ ] **Step 2: Verify frontend compilation**
+- [x] **Step 2: Verify frontend compilation**
 
 Run: `npm --prefix frontend run build`
 Expected: PASS
 
-- [ ] **Step 3: Commit Task 2 changes**
+- [x] **Step 3: Commit Task 2 changes**
 
 ```bash
 git add frontend/src/api/client.js
