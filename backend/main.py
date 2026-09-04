@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, HTTPException, Response, Depends
+from fastapi import FastAPI, HTTPException, Response, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -20,6 +20,7 @@ from backend.models import (
     BulletOptimizationRequest,
     BulletOptimizationResponse,
     OutreachResponse,
+    User,
 )
 from backend.storage import StorageService
 from backend.services.scraper import ScraperService
@@ -183,7 +184,6 @@ def analyze_job(req: JobAnalyzeRequest, current_user: Optional[User] = Depends(g
     }
 
 
-from fastapi import FastAPI, HTTPException, Response, Depends, UploadFile, File, Form
 from backend.services.document_parser import extract_text_from_file
 
 # --- Resumes ---

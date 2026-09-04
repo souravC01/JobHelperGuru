@@ -158,3 +158,12 @@ def test_applications_crud_and_excel_export():
     # 4. Delete Application
     del_res = client.delete(f"/api/applications/{app_id}", headers=headers)
     assert del_res.status_code == 200
+
+
+def test_all_route_type_annotations_resolve():
+    import typing
+    for route in app.routes:
+        endpoint = getattr(route, "endpoint", None)
+        if endpoint and callable(endpoint):
+            hints = typing.get_type_hints(endpoint)
+            assert isinstance(hints, dict)
