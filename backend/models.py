@@ -227,4 +227,5 @@ class UserLoginRequest(BaseModel):
 class AuthResponse(BaseModel):
     token: str
     user: User
+    is_new_user: bool = False
 

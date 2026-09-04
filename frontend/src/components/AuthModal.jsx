@@ -43,7 +43,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
     setError('');
     try {
       const data = await googleAuthUser(response.credential);
-      if (onSuccess) onSuccess(data.user);
+      if (onSuccess) onSuccess(data.user, Boolean(data.is_new_user));
       onClose();
     } catch (err) {
       setError(err.message || 'Google sign-in failed. Please try again or use email login.');
@@ -161,7 +161,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
       } else {
         data = await registerUser({ email, password, name });
       }
-      if (onSuccess) onSuccess(data.user);
+      if (onSuccess) onSuccess(data.user, Boolean(data.is_new_user || mode === 'register'));
       onClose();
     } catch (err) {
       setError(err.message || 'Authentication failed. Please try again.');

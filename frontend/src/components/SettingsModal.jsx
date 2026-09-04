@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { getSettings, updateSettings, testAISettings } from '../api/client';
 
-export default function SettingsModal({ isOpen, onClose }) {
+export default function SettingsModal({ isOpen, onClose, currentUser = null, isOnboarding = false }) {
   // Form fields
   const [keyName, setKeyName] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
@@ -69,20 +69,23 @@ export default function SettingsModal({ isOpen, onClose }) {
         }
       }
 
-      // Fallback to localStorage if backend saved_keys is empty
+      // Fallback to localStorage if backend saved_keys is empty (scoped to currentUser to prevent cross-account leaks)
       if (!parsedSavedKeys || parsedSavedKeys.length === 0) {
-        const local = localStorage.getItem('jobhelperguru_saved_keys');
-        if (local) {
-          try {
-            parsedSavedKeys = JSON.parse(local);
-          } catch (e) {
-            parsedSavedKeys = [];
+        const localKey = currentUser?.id ? `jobhelperguru_saved_keys_${currentUser.id}` : null;
+        if (localKey) {
+          const local = localStorage.getItem(localKey);
+          if (local) {
+            try {
+              parsedSavedKeys = JSON.parse(local);
+            } catch (e) {
+              parsedSavedKeys = [];
+            }
           }
         }
       }
 
-      // If still empty but an active key exists, auto-populate the first saved profile
-      if (parsedSavedKeys.length === 0 && (data.api_base_url || data.api_key)) {
+      // If still empty but an active key exists (non-blank), auto-populate the first saved profile
+      if (parsedSavedKeys.length === 0 && data.api_key && data.api_key.trim()) {
         const initialProfile = {
           id: 'key-' + Date.now(),
           name: data.model_name || 'Active AI Key',
@@ -100,7 +103,7 @@ export default function SettingsModal({ isOpen, onClose }) {
 
       // Find active key
       let currentActiveId = null;
-      if (!data.use_offline_mode) {
+      if (!data.use_offline_mode && data.api_key && data.api_key.trim()) {
         const activeMatch = parsedSavedKeys.find(
           (k) =>
             (k.api_base_url || '').trim() === (data.api_base_url || '').trim() &&
@@ -117,8 +120,8 @@ export default function SettingsModal({ isOpen, onClose }) {
 
       setActiveKeyId(currentActiveId);
 
-      // Populate form with current active or first profile
-      const target = parsedSavedKeys.find((k) => k.id === currentActiveId) || parsedSavedKeys[0];
+      // Populate form with current active or first profile, or leave blank for new users
+      const target = parsedSavedKeys.find((k) => k.id === currentActiveId);
       if (target) {
         setEditingId(target.id);
         setKeyName(target.name || '');
@@ -127,8 +130,9 @@ export default function SettingsModal({ isOpen, onClose }) {
         setApiKey(target.api_key || '');
       } else {
         setEditingId(null);
-        setBaseUrl(data.api_base_url || '');
-        setModelName(data.model_name || '');
+        setKeyName('');
+        setBaseUrl(data.api_base_url || 'https://generativelanguage.googleapis.com/v1beta/openai/');
+        setModelName(data.model_name || 'gemini-2.0-flash');
         setApiKey(data.api_key || '');
       }
 
@@ -285,7 +289,9 @@ export default function SettingsModal({ isOpen, onClose }) {
 
     updatedList = deduplicateKeys(updatedList);
     setSavedKeys(updatedList);
-    localStorage.setItem('jobhelperguru_saved_keys', JSON.stringify(updatedList));
+    if (currentUser?.id) {
+      localStorage.setItem(`jobhelperguru_saved_keys_${currentUser.id}`, JSON.stringify(updatedList));
+    }
 
     try {
       await updateSettings({
@@ -355,6 +361,31 @@ export default function SettingsModal({ isOpen, onClose }) {
             ✕
           </button>
         </div>
+
+        {/* Onboarding Welcome Banner */}
+        {(isOnboarding || (!isOfflineActive && !apiKey.trim() && savedKeys.length === 0)) && (
+          <div className="p-4 rounded-xl bg-gradient-to-r from-[#0a66c2]/10 via-[#0a66c2]/5 to-[#057642]/10 border border-[#0a66c2]/30 space-y-2.5 animate-fade-in">
+            <div className="flex items-center gap-2 text-[#0a66c2] font-bold text-sm">
+              <Sparkles size={17} />
+              <span>Welcome to JobHelperGuru! Set Up Your AI Engine</span>
+            </div>
+            <p className="text-xs text-[#000000] leading-relaxed">
+              To analyze jobs, match resumes, and optimize bullet points, please configure your preferred AI provider below or click <strong>Use Built-in Offline Engine</strong> to get started immediately for free with zero API keys.
+            </p>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleSwitchToOffline}
+                disabled={saving}
+                className="btn-primary-corporate text-xs py-1.5 px-3.5 bg-[#057642] hover:bg-[#046235] flex items-center gap-1.5"
+              >
+                <Zap size={13} />
+                <span>Use Built-in Offline Engine (Free)</span>
+              </button>
+              <span className="text-[11px] text-[#666666]">or paste an API key below</span>
+            </div>
+          </div>
+        )}
 
         {/* 1. Built-in Offline Heuristic Engine Option */}
         <div
