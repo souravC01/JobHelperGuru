@@ -1,6 +1,12 @@
 # JobHelperGuru 🚀
 ### Intelligent Job Application Assistant, ATS Optimizer & Excel Tracker
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-jobhelperguru.onrender.com-0a66c2?style=for-the-badge&logo=render&logoColor=white)](https://jobhelperguru.onrender.com)
+[![Tests](https://img.shields.io/badge/Tests-62%2F62%20Passing-057642?style=for-the-badge)](tests/)
+[![Status](https://img.shields.io/badge/Uptime-24%2F7%20Monitored-blue?style=for-the-badge)](https://jobhelperguru.onrender.com/api/health)
+
+🌐 **Live Website:** [https://jobhelperguru.onrender.com](https://jobhelperguru.onrender.com)
+
 **JobHelperGuru** is an AI-powered pairs-programmer for your job hunt. Paste any job posting URL or description to extract required qualifications, identify missing ATS keywords, rank multiple resumes to find the best fit, optimize resume bullet points using the **Resume Guide 2.0 / BulletSkill** framework, and track your applications with 1-click **Excel (.xlsx)** export.
 
 ---
@@ -55,14 +61,25 @@
 
 ---
 
-## Quick Start (Single-Command Launch)
+## 🌐 Live Application
+
+JobHelperGuru is live and accessible online:
+- **Web Application:** **[https://jobhelperguru.onrender.com](https://jobhelperguru.onrender.com)**
+- **API Health Check:** **[https://jobhelperguru.onrender.com/api/health](https://jobhelperguru.onrender.com/api/health)**
+- **Uptime Monitoring:** Monitored 24/7 via UptimeRobot on Render Free Tier with zero cold starts.
+
+---
+
+## Local Development & Self-Hosting
+
+If you prefer to run or develop JobHelperGuru locally on your machine:
 
 ### 1. Install Backend Dependencies
 ```bash
 pip install -r backend/requirements.txt
 ```
 
-### 2. Launch the Application
+### 2. Launch the Application Locally
 ```bash
 python run.py
 ```
@@ -72,7 +89,7 @@ Open your browser to: **[http://localhost:8000](http://localhost:8000)**
 
 ## Development Mode (Live Hot Reload)
 
-If you want live hot-reloading on both frontend and backend:
+If you want live hot-reloading for local frontend and backend development:
 
 1. Start backend server:
    ```bash
