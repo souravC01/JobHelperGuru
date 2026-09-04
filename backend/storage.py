@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+load_dotenv()
 
 try:
     import psycopg2
@@ -352,6 +352,39 @@ class StorageService:
             else:
                 cursor.execute(self._format_sql("DELETE FROM resumes WHERE id = ?"), (resume_id,))
             return cursor.rowcount > 0
+
+    def update_resume(
+        self,
+        resume_id: str,
+        name: Optional[str] = None,
+        content: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> Optional[Resume]:
+        existing = self.get_resume(resume_id, user_id=user_id)
+        if not existing:
+            return None
+
+        new_name = name.strip() if (name and name.strip()) else existing.name
+        new_content = content if content is not None else existing.content
+        now = datetime.now().isoformat()
+
+        with self._get_cursor() as cursor:
+            if user_id:
+                cursor.execute(
+                    self._format_sql(
+                        "UPDATE resumes SET name = ?, content = ?, updated_at = ? WHERE id = ? AND user_id = ?"
+                    ),
+                    (new_name, new_content, now, resume_id, user_id),
+                )
+            else:
+                cursor.execute(
+                    self._format_sql(
+                        "UPDATE resumes SET name = ?, content = ?, updated_at = ? WHERE id = ?"
+                    ),
+                    (new_name, new_content, now, resume_id),
+                )
+
+        return self.get_resume(resume_id, user_id=user_id)
 
     # --- Applications CRUD ---
     def find_existing_application(

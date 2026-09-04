@@ -160,6 +160,20 @@ export async function addResume({ name, content }) {
   return res.json();
 }
 
+export async function parseResumeFile(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await authFetch(`${API_BASE}/resumes/parse-file`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to extract text from document' }));
+    throw new Error(err.detail || 'Failed to extract text from document');
+  }
+  return res.json();
+}
+
 export async function uploadResumeFile(file, name = '') {
   const formData = new FormData();
   formData.append('file', file);
@@ -177,11 +191,25 @@ export async function uploadResumeFile(file, name = '') {
   return res.json();
 }
 
+export async function updateResume(id, { name, content }) {
+  const res = await authFetch(`${API_BASE}/resumes/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, content }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to update resume' }));
+    throw new Error(err.detail || 'Failed to update resume');
+  }
+  return res.json();
+}
+
 export async function deleteResume(id) {
   const res = await authFetch(`${API_BASE}/resumes/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to delete resume');
   return res.json();
 }
+
 
 export async function matchResumes(payload) {
   const job = payload?.job || (payload?.title || payload?.required_skills ? payload : null);

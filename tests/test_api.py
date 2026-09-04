@@ -177,3 +177,40 @@ def test_all_route_type_annotations_resolve():
         if endpoint and callable(endpoint):
             hints = typing.get_type_hints(endpoint)
             assert isinstance(hints, dict)
+
+
+def test_parse_resume_file_endpoint():
+    headers = get_auth_headers()
+    file_content = b"John Doe\nSoftware Engineer\nPython, React, AWS."
+    files = {"file": ("test_resume.txt", file_content, "text/plain")}
+    res = client.post("/api/resumes/parse-file", files=files, headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["filename"] == "test_resume.txt"
+    assert data["suggested_title"] == "test_resume"
+    assert "Software Engineer" in data["text"]
+
+
+def test_update_resume_endpoint():
+    headers = get_auth_headers()
+    create_res = client.post(
+        "/api/resumes",
+        json={"name": "Initial Title", "content": "Sample content"},
+        headers=headers,
+    )
+    assert create_res.status_code == 200
+    resume_id = create_res.json()["id"]
+
+    patch_res = client.patch(
+        f"/api/resumes/{resume_id}",
+        json={"name": "Updated Custom Title"},
+        headers=headers,
+    )
+    assert patch_res.status_code == 200
+    assert patch_res.json()["name"] == "Updated Custom Title"
+
+    # Verify updated name in list
+    get_res = client.get("/api/resumes", headers=headers)
+    assert get_res.status_code == 200
+    updated = next(r for r in get_res.json() if r["id"] == resume_id)
+    assert updated["name"] == "Updated Custom Title"
