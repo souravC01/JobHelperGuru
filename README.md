@@ -15,9 +15,12 @@
    - Separates **Required Must-Haves**, **Preferred Nice-to-Haves**, **Tech Stack & Tools**, and **Soft Skills**.
    - Generates a high-frequency **ATS Keyword Bank** with a 1-click "Copy All" button.
 
-3. **Multi-Resume Library & Best-Fit Matcher:**
-   - Upload and store multiple tailored resumes (e.g. *Backend*, *Full-Stack*, *Machine Learning*).
-   - Automatically compares all your resumes against the job, computes a match percentage (0–100%), highlights why the top resume is recommended, and details matched vs. missing skills.
+3. **Multi-Resume Vault & Best-Fit Matcher:**
+   - Upload and store multiple tailored resumes (.pdf, .docx, .doc, .txt, .rtf) backed by Cloudflare R2 object storage or local storage.
+   - **Custom Title Retention:** Specify custom resume profile titles (e.g. *Senior Backend Engineer*, *Full-Stack Lead*) without raw filename overwriting.
+   - **Inline Renaming:** Rename existing vault resumes directly on each card with an edit pencil icon and keyboard shortcuts (Enter to save, Escape to cancel).
+   - **Full-Screen Quick View Reader:** Inspect complete extracted text in a clean reader modal with live word count, 1-click copy-to-clipboard, and direct file download.
+   - **Intelligent Best-Fit Ranking:** Automatically compare all vault resumes against target job postings, compute a match percentage (0-100%), highlight why the top resume is recommended, and detail matched vs. missing skills.
 
 4. **BulletSkill 2.0 Resume Bullet Optimizer (powered by `Bulletskill.md`):**
    - Click any missing keyword to generate revised resume bullet points.
@@ -40,9 +43,15 @@
    - 1-click export of a styled, multi-sheet Excel workbook (`job_tracker.xlsx`).
    - Includes frozen headers, deep navy styling, auto-fitted column widths, clickable hyperlinks, and color-coded status pills.
 
-7. **Universal OpenAI-Compatible Model Support + Zero-Key Offline Mode:**
+7. **Universal Model Support + Zero-Key Offline Mode:**
    - Connect to **MiniMax M3**, **NVIDIA Nemotron 3/4**, **Local Ollama**, or **OpenRouter** in the Settings modal.
-   - Built-in **offline heuristic NLP engine** with 600+ skills taxonomy—works 100% free even without any API key or internet access!
+   - Built-in **offline heuristic NLP engine** with 600+ skills taxonomy - works 100% free even without any API key or internet access!
+
+8. **Multi-Tenant Security & Cloud Storage:**
+   - Secure user authentication via Google One-Tap / OAuth 2.0 or email/password (JWT + bcrypt).
+   - Multi-tenant data isolation on Neon Serverless PostgreSQL with automated fallback to local SQLite.
+   - Secure Cloudflare R2 document storage with time-limited signed download URLs.
+   - AES-256 encrypted-at-rest user API keys.
 
 ---
 
