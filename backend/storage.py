@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+load_dotenv()
 
 try:
     import psycopg2

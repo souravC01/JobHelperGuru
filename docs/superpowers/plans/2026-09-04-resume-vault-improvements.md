@@ -255,7 +255,7 @@ git commit -m "feat(api): add parseResumeFile and updateResume client functions"
 - Only auto-fill title from filename if title input is empty.
 - Provide sticky action footer that stays visible on all viewport heights.
 
-- [ ] **Step 1: Refactor file processing and creation logic in `ResumeLibrary.jsx`**
+- [x] **Step 1: Refactor file processing and creation logic in `ResumeLibrary.jsx`**
   - Add state `selectedFile` (`useState(null)`).
   - When a file is dropped or selected in `handleProcessFile`:
     - Call `parseResumeFile(file)` for binary files or `file.text()` for `.txt`/`.md`.
@@ -270,7 +270,7 @@ git commit -m "feat(api): add parseResumeFile and updateResume client functions"
   - When user clicks Cancel or closes modal:
     - Reset `selectedFile`, `newName`, `newContent`, `error`, close modal. No records saved.
 
-- [ ] **Step 2: Update Add Modal container for responsive view**
+- [x] **Step 2: Update Add Modal container for responsive view**
   - Change modal container to:
     ```jsx
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -294,12 +294,12 @@ git commit -m "feat(api): add parseResumeFile and updateResume client functions"
     </div>
     ```
 
-- [ ] **Step 3: Verify frontend build**
+- [x] **Step 3: Verify frontend build**
 
 Run: `npm --prefix frontend run build`
 Expected: PASS
 
-- [ ] **Step 4: Commit Task 3 changes**
+- [x] **Step 4: Commit Task 3 changes**
 
 ```bash
 git add frontend/src/components/ResumeLibrary.jsx
@@ -317,7 +317,7 @@ git commit -m "fix(ui): preserve custom resume title and add sticky modal action
 - Inline renaming: click pencil button, edit title input, submit on Enter or Check button, cancel on Escape or X button.
 - Quick View modal: click Eye button, view complete formatted text, download file button, copy text button.
 
-- [ ] **Step 1: Implement inline renaming on resume cards**
+- [x] **Step 1: Implement inline renaming on resume cards**
   - Add state: `editingId` (`useState(null)`), `editingName` (`useState('')`), `updatingId` (`useState(null)`).
   - Add handlers:
     - `handleStartEdit(resume)`: `setEditingId(resume.id)`, `setEditingName(resume.name)`.
@@ -327,7 +327,7 @@ git commit -m "fix(ui): preserve custom resume title and add sticky modal action
     - If `editingId === resume.id`: render inline `<input>` with Check (`Check`) and Cancel (`X`) buttons.
     - If not editing: render title with edit button (`Pencil` icon, size 13) right beside it.
 
-- [ ] **Step 2: Implement Quick View modal**
+- [x] **Step 2: Implement Quick View modal**
   - Add state: `viewingResume` (`useState(null)`), `copied` (`useState(false)`).
   - Add Quick View button (`Eye` icon) on each card.
   - When `viewingResume` is set, render a preview modal:
@@ -337,17 +337,17 @@ git commit -m "fix(ui): preserve custom resume title and add sticky modal action
     - Full scrollable reader container (`font-mono text-xs whitespace-pre-wrap p-4 bg-[#f8fafc] border rounded-lg max-h-[60vh] overflow-y-auto`).
     - Close button.
 
-- [ ] **Step 3: Verify complete test suite**
+- [x] **Step 3: Verify complete test suite**
 
 Run: `python -m pytest -v`
-Expected: 61/61 tests pass.
+Expected: 62/62 tests pass.
 
-- [ ] **Step 4: Verify frontend production build**
+- [x] **Step 4: Verify frontend production build**
 
 Run: `npm --prefix frontend run build`
 Expected: PASS
 
-- [ ] **Step 5: Commit Task 4 changes**
+- [x] **Step 5: Commit Task 4 changes**
 
 ```bash
 git add frontend/src/components/ResumeLibrary.jsx

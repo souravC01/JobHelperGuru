@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+load_dotenv()
 
 try:
     import boto3
