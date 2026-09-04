@@ -13,6 +13,7 @@ from backend.models import (
     ApplicationUpdate,
     Resume,
     ResumeCreate,
+    ResumeUpdate,
     Settings,
     SettingsUpdate,
     JobAnalysisResult,
@@ -253,6 +254,52 @@ def upload_resume_file(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
 
+
+@app.post("/api/resumes/parse-file")
+def parse_resume_file(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ALLOWED_RESUME_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{ext}'. Allowed formats: .pdf, .docx, .doc, .txt, .rtf",
+        )
+    content_bytes = file.file.read(MAX_RESUME_SIZE_BYTES + 1)
+    if len(content_bytes) > MAX_RESUME_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="File exceeds maximum allowed size of 10MB.",
+        )
+    extracted_text = extract_text_from_file(content_bytes, file.filename)
+    if not extracted_text.strip():
+        raise HTTPException(status_code=400, detail="No readable text could be extracted from this document.")
+
+    return {
+        "filename": file.filename,
+        "suggested_title": Path(file.filename).stem,
+        "text": extracted_text,
+    }
+
+
+@app.patch("/api/resumes/{resume_id}", response_model=Resume)
+def update_resume(
+    resume_id: str,
+    req: ResumeUpdate,
+    current_user: User = Depends(get_current_user),
+):
+    updated = storage.update_resume(
+        resume_id,
+        name=req.name,
+        content=req.content,
+        user_id=current_user.id,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Resume not found.")
+    if updated.file_key:
+        updated.download_url = object_storage.generate_download_url(updated.file_key)
+    return updated
 
 
 @app.delete("/api/resumes/{resume_id}")

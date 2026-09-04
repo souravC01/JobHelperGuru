@@ -78,6 +78,11 @@ class ResumeCreate(BaseModel):
     file_key: Optional[str] = None
 
 
+class ResumeUpdate(BaseModel):
+    name: Optional[str] = None
+    content: Optional[str] = None
+
+
 class Settings(BaseModel):
     api_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: str = ""
