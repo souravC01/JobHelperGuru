@@ -3,9 +3,8 @@
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-jobhelperguru.onrender.com-0a66c2?style=for-the-badge&logo=render&logoColor=white)](https://jobhelperguru.onrender.com)
 [![Tests](https://img.shields.io/badge/Tests-62%2F62%20Passing-057642?style=for-the-badge)](tests/)
-[![Status](https://img.shields.io/badge/Uptime-24%2F7%20Monitored-blue?style=for-the-badge)](https://jobhelperguru.onrender.com/api/health)
 
-🌐 **Live Website:** [https://jobhelperguru.onrender.com](https://jobhelperguru.onrender.com)
+🌐 **Live Application:** [https://jobhelperguru.onrender.com](https://jobhelperguru.onrender.com)
 
 **JobHelperGuru** is an AI-powered pairs-programmer for your job hunt. Paste any job posting URL or description to extract required qualifications, identify missing ATS keywords, rank multiple resumes to find the best fit, optimize resume bullet points using the **Resume Guide 2.0 / BulletSkill** framework, and track your applications with 1-click **Excel (.xlsx)** export.
 
@@ -61,18 +60,9 @@
 
 ---
 
-## 🌐 Live Application
+## Quick Start (Run Locally)
 
-JobHelperGuru is live and accessible online:
-- **Web Application:** **[https://jobhelperguru.onrender.com](https://jobhelperguru.onrender.com)**
-- **API Health Check:** **[https://jobhelperguru.onrender.com/api/health](https://jobhelperguru.onrender.com/api/health)**
-- **Uptime Monitoring:** Monitored 24/7 via UptimeRobot on Render Free Tier with zero cold starts.
-
----
-
-## Local Development & Self-Hosting
-
-If you prefer to run or develop JobHelperGuru locally on your machine:
+If you want to run or develop JobHelperGuru locally on your machine:
 
 ### 1. Install Backend Dependencies
 ```bash
@@ -113,12 +103,12 @@ python -m pytest tests/ -v
 
 ---
 
-## Production Deployment (Render Free Tier)
+## Production Deployment
 
-JobHelperGuru is configured for 1-click zero-cost deployment on Render Free Tier with automated 24/7 keep-alive monitoring via UptimeRobot.
+JobHelperGuru is configured for 1-click deployment on Render with automated Docker builds.
 
-For complete step-by-step instructions on environment variables, Google OAuth configuration, and keep-alive setup, see:
-- **[Render Deployment & Keep-Alive Guide](docs/RENDER_DEPLOYMENT_GUIDE.md)**
+For step-by-step instructions on environment variables, Google OAuth configuration, and deployment setup, see:
+- **[Render Deployment Guide](docs/RENDER_DEPLOYMENT_GUIDE.md)**
 - **[Render Blueprint Specification](render.yaml)**
 - **[Production Environment Template](.env.production.example)**
 
@@ -127,4 +117,4 @@ For complete step-by-step instructions on environment variables, Google OAuth co
 ## Tech Stack
 - **Backend:** Python, FastAPI, Neon PostgreSQL / SQLite, Cloudflare R2 / Local Storage, OpenAI SDK, cryptography
 - **Frontend:** React 18, Vite, Tailwind CSS v4, Lucide Icons, Google Identity Services (OAuth 2.0)
-- **Deployment:** Render Web Service, Multi-stage Docker, UptimeRobot (Keep-Alive)
+- **Deployment:** Render Web Service, Multi-stage Docker
