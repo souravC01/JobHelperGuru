@@ -109,7 +109,7 @@ def register(req: UserRegisterRequest):
         provider="email",
     )
     token = create_access_token(user.id, user.email, user.name)
-    return AuthResponse(token=token, user=user)
+    return AuthResponse(token=token, user=user, is_new_user=True)
 
 
 @router.post("/login", response_model=AuthResponse)
@@ -133,7 +133,7 @@ def login(req: UserLoginRequest):
 
     user = storage.get_user_by_id(raw_user["id"])
     token = create_access_token(user.id, user.email, user.name)
-    return AuthResponse(token=token, user=user)
+    return AuthResponse(token=token, user=user, is_new_user=False)
 
 
 @router.post("/google", response_model=AuthResponse)
@@ -173,7 +173,9 @@ def google_auth(req: GoogleAuthRequest):
 
     storage = get_storage()
     raw_user = storage.get_user_by_email(email)
+    is_new = False
     if not raw_user:
+        is_new = True
         user = storage.create_user(
             email=email,
             hashed_password=None,
@@ -185,7 +187,7 @@ def google_auth(req: GoogleAuthRequest):
         user = storage.get_user_by_id(raw_user["id"])
 
     access_token = create_access_token(user.id, user.email, user.name)
-    return AuthResponse(token=access_token, user=user)
+    return AuthResponse(token=access_token, user=user, is_new_user=is_new)
 
 
 @router.get("/me", response_model=User)

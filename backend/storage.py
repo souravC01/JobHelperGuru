@@ -686,7 +686,7 @@ class StorageService:
             if user_id:
                 cursor.execute(self._format_sql("SELECT key, value FROM user_settings WHERE user_id = ?"), (user_id,))
                 rows = cursor.fetchall()
-            if not rows:
+            else:
                 cursor.execute("SELECT key, value FROM settings")
                 rows = cursor.fetchall()
 

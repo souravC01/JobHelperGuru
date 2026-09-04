@@ -28,6 +28,7 @@ import {
   getCurrentUser,
   getMe,
   getToken,
+  getSettings,
 } from './api/client';
 
 export default function App() {
@@ -64,6 +65,7 @@ export default function App() {
   const [optimizerSectionType, setOptimizerSectionType] = useState('work_history');
   const [isCoverLetterOpen, setIsCoverLetterOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isOnboardingSettings, setIsOnboardingSettings] = useState(false);
   const [selectedResumeForJob, setSelectedResumeForJob] = useState(null);
   // Potentially added skills: { [resumeId]: string[] }
   const [adoptedSkillsMap, setAdoptedSkillsMap] = useState({});
@@ -287,6 +289,7 @@ export default function App() {
                   setIsAuthOpen(true);
                   return;
                 }
+                setIsOnboardingSettings(false);
                 setIsSettingsOpen(true);
               }}
               className="p-2 rounded-full bg-white hover:bg-[#f3f6f8] border border-[#e0e0e0] hover:border-[#c1c6d4] text-[#666666] hover:text-[#000000] transition-all"
@@ -301,7 +304,10 @@ export default function App() {
                 setAuthMode(mode);
                 setIsAuthOpen(true);
               }}
-              onOpenSettings={() => setIsSettingsOpen(true)}
+              onOpenSettings={() => {
+                setIsOnboardingSettings(false);
+                setIsSettingsOpen(true);
+              }}
               applicationsCount={applications.length}
               resumesCount={resumes.length}
             />
@@ -491,9 +497,21 @@ export default function App() {
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
         initialMode={authMode}
-        onSuccess={(user) => {
+        onSuccess={async (user, isNewUser = false) => {
           setCurrentUser(user);
-          loadInitialData();
+          await loadInitialData();
+          try {
+            const settings = await getSettings();
+            if (isNewUser || (!settings?.api_key?.trim() && !settings?.use_offline_mode)) {
+              setIsOnboardingSettings(true);
+              setIsSettingsOpen(true);
+            }
+          } catch (e) {
+            if (isNewUser) {
+              setIsOnboardingSettings(true);
+              setIsSettingsOpen(true);
+            }
+          }
         }}
       />
 
@@ -518,7 +536,12 @@ export default function App() {
 
       <SettingsModal
         isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={() => {
+          setIsSettingsOpen(false);
+          setIsOnboardingSettings(false);
+        }}
+        currentUser={currentUser}
+        isOnboarding={isOnboardingSettings}
       />
 
       <OfflineSwitchModal
