@@ -85,7 +85,8 @@ def get_ai_engine(user_id: Optional[str] = None) -> AIEngine:
 
 
 # --- Health ---
-@app.get("/api/health")
+@app.api_route("/api/health", methods=["GET", "HEAD"])
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {
         "status": "ok",

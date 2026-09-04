@@ -29,6 +29,16 @@ def test_api_health():
     assert res.status_code == 200
     assert res.json()["status"] == "ok"
 
+    res_head = client.head("/api/health")
+    assert res_head.status_code == 200
+
+    res_alt_get = client.get("/health")
+    assert res_alt_get.status_code == 200
+    assert res_alt_get.json()["status"] == "ok"
+
+    res_alt_head = client.head("/health")
+    assert res_alt_head.status_code == 200
+
 
 def test_analyze_job_text_endpoint():
     res = client.post(
