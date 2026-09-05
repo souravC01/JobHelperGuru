@@ -25,7 +25,7 @@ from backend.models import (
 )
 from backend.storage import StorageService
 from backend.services.scraper import ScraperService
-from backend.services.ai_engine import AIEngine
+from backend.services.ai_engine import AIEngine, extract_raw_content_from_response
 from backend.services.excel_exporter import ExcelExporter
 from backend.services.object_storage import ObjectStorageService
 from backend.routers.auth import router as auth_router, get_current_user, get_optional_user, set_storage_service
@@ -452,11 +452,13 @@ def test_ai(req: SettingsUpdate):
         resp = client.chat.completions.create(
             model=ai.model_name,
             messages=[{"role": "user", "content": "Ping. Respond with 'pong'"}],
-            max_tokens=10,
+            max_tokens=100,
         )
+        content = extract_raw_content_from_response(resp)
+        response_preview = f" Response: {content}" if content else ""
         return {
             "success": True,
-            "message": f"Successfully connected to {ai.model_name}! Response: {resp.choices[0].message.content.strip()}",
+            "message": f"Successfully connected to {ai.model_name}!{response_preview}",
         }
     except Exception as e:
         return {

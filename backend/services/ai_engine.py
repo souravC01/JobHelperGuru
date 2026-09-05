@@ -19,6 +19,9 @@ from backend.services.heuristic_parser import HeuristicParser, filter_skills, ex
 
 def extract_json_from_llm_response(text: str) -> Any:
     """Robustly extracts JSON from an LLM response, stripping reasoning tags (<think>...</think>) and code fences."""
+    if not text or not str(text).strip():
+        raise ValueError("Empty or null response content returned from AI provider")
+
     # 1. Remove <think>...</think> reasoning tags
     text = re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.DOTALL).strip()
 
@@ -44,6 +47,25 @@ def extract_json_from_llm_response(text: str) -> Any:
     clean_text = re.sub(r"^```\s*", "", clean_text)
     clean_text = re.sub(r"\s*```$", "", clean_text)
     return json.loads(clean_text)
+
+
+def extract_raw_content_from_response(resp: Any) -> str:
+    """Safely extracts message content or reasoning content from an OpenAI response choice."""
+    if not resp or not getattr(resp, "choices", None) or len(resp.choices) == 0:
+        return ""
+    choice = resp.choices[0]
+    message = getattr(choice, "message", None)
+    if not message:
+        return ""
+    # Standard message content
+    content = getattr(message, "content", None)
+    # Reasoning content for thinking/reasoning models (e.g. GLM-5.3, DeepSeek-R1)
+    reasoning = getattr(message, "reasoning_content", None)
+    if not reasoning and hasattr(message, "model_extra") and isinstance(message.model_extra, dict):
+        reasoning = message.model_extra.get("reasoning_content")
+
+    val = content if (content is not None) else (reasoning if reasoning is not None else "")
+    return str(val).strip()
 
 
 class AIEngine:
@@ -99,7 +121,7 @@ Do not wrap in markdown quotes. Return only raw JSON.
                     ],
                     temperature=0.1,
                 )
-                raw_content = resp.choices[0].message.content.strip()
+                raw_content = extract_raw_content_from_response(resp)
                 data = extract_json_from_llm_response(raw_content)
                 # Sanitize skills from non-skills (e.g. New Grad, Degree, etc.)
                 data["required_skills"] = filter_skills(data.get("required_skills", []))
@@ -173,7 +195,7 @@ Return strict JSON:
                     ],
                     temperature=0.2,
                 )
-                raw_content = resp.choices[0].message.content.strip()
+                raw_content = extract_raw_content_from_response(resp)
                 ai_evals = extract_json_from_llm_response(raw_content)
 
                 eval_map = {item["resume_id"]: item for item in ai_evals}
@@ -245,10 +267,10 @@ Return strict JSON:
 
         lines = [l.strip() for l in normalized.splitlines() if l.strip()]
         for line in lines:
-            is_bullet_start = bool(re.match(r'^(?:[•*–]|-(?=\s)|\d+\.)\s*', line))
+            is_bullet_start = bool(re.match(r'^(?:[•*\u2013]|-(?=\s)|\d+\.)\s*', line))
             
             is_known_header = any(h in line.lower() for h in ['education & certificates', 'education', 'work history', 'professional experience', 'experience', 'projects', 'skills', 'certif']) and len(line) < 60 and not is_bullet_start
-            has_tech_stack_or_dash = ((' - ' in line or ' – ' in line or ' | ' in line) and any(t in line.lower() for t in ['java', 'python', 'react', 'spring', 'docker', 'cloud', 'sql', 'aws', 'c++', 'javascript', 'simulator', 'platform', 'app', 'developer', 'engineer', 'analyst'])) and len(line) < 140 and not is_bullet_start
+            has_tech_stack_or_dash = ((' - ' in line or ' \u2013 ' in line or ' | ' in line) and any(t in line.lower() for t in ['java', 'python', 'react', 'spring', 'docker', 'cloud', 'sql', 'aws', 'c++', 'javascript', 'simulator', 'platform', 'app', 'developer', 'engineer', 'analyst'])) and len(line) < 140 and not is_bullet_start
             has_job_pattern = (bool(re.search(r'\b(at|@)\b.*(?:19|20)\d{2}', line, re.IGNORECASE)) or bool(re.search(r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(?:19|20)\d{2}', line))) and not is_bullet_start
             
             is_title = (is_known_header or has_tech_stack_or_dash or has_job_pattern) and not is_bullet_start
@@ -264,7 +286,7 @@ Return strict JSON:
                 if current_bullet_text:
                     current_bullets.append(' '.join(current_bullet_text))
                     current_bullet_text = []
-                clean_b = re.sub(r'^(?:[•*–]|-(?=\s)|\d+\.)\s*', '', line).strip()
+                clean_b = re.sub(r'^(?:[•*\u2013]|-(?=\s)|\d+\.)\s*', '', line).strip()
                 current_bullet_text.append(clean_b)
             else:
                 if current_bullet_text:
@@ -460,7 +482,7 @@ Claim Status: {claim_status.value}
                     ],
                     temperature=0.3,
                 )
-                raw_content = resp.choices[0].message.content.strip()
+                raw_content = extract_raw_content_from_response(resp)
                 data = extract_json_from_llm_response(raw_content)
 
                 def_proj = target_section_bullets[0]["section"] if target_section_bullets else (f"Recommended New {'Project' if is_project else 'Role'}: {request.target_job_title}")
@@ -616,14 +638,14 @@ Return strict JSON:
                     ],
                     temperature=0.4,
                 )
-                raw = resp.choices[0].message.content.strip()
+                raw = extract_raw_content_from_response(resp)
                 data = extract_json_from_llm_response(raw)
                 return OutreachResponse(**data)
             except Exception as e:
                 raise RuntimeError(f"AI API Provider Failed ({self.model_name}): {str(e)}") from e
 
         # Offline fallback pitch
-        subject = f"Application: {job.title} — {resume.name}"
+        subject = f"Application: {job.title} - {resume.name}"
         skills_str = ", ".join(job.required_skills[:3]) if job.required_skills else "software engineering"
         pitch = (
             f"Dear Hiring Team at {job.company},\n\n"
