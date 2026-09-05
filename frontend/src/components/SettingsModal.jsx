@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { getSettings, updateSettings, testAISettings } from '../api/client';
 
-export default function SettingsModal({ isOpen, onClose, currentUser = null, isOnboarding = false }) {
+export default function SettingsModal({ isOpen, onClose, currentUser = null, isOnboarding = false, onSettingsChanged = null }) {
   // Form fields
   const [keyName, setKeyName] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
@@ -99,9 +99,8 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
 
       // Clean up any duplicates from earlier saves
       parsedSavedKeys = deduplicateKeys(parsedSavedKeys);
-      setSavedKeys(parsedSavedKeys);
 
-      // Find active key
+      // Find active key accurately based on backend database state
       let currentActiveId = null;
       if (!data.use_offline_mode && data.api_key && data.api_key.trim()) {
         const activeMatch = parsedSavedKeys.find(
@@ -113,14 +112,25 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
 
         if (activeMatch) {
           currentActiveId = activeMatch.id;
-        } else if (parsedSavedKeys.length > 0) {
-          currentActiveId = parsedSavedKeys[0].id;
+        } else {
+          // The database has an active key that wasn't in parsedSavedKeys. Add it so the user sees it accurately!
+          const dbProfile = {
+            id: 'key-' + Date.now(),
+            name: data.model_name || 'Active AI Key',
+            api_base_url: data.api_base_url || '',
+            model_name: data.model_name || '',
+            api_key: data.api_key || '',
+            created_at: new Date().toISOString(),
+          };
+          parsedSavedKeys.unshift(dbProfile);
+          currentActiveId = dbProfile.id;
         }
       }
 
+      setSavedKeys(parsedSavedKeys);
       setActiveKeyId(currentActiveId);
 
-      // Populate form with current active or first profile, or leave blank for new users
+      // Populate form with current active profile or clear for new users
       const target = parsedSavedKeys.find((k) => k.id === currentActiveId);
       if (target) {
         setEditingId(target.id);
@@ -162,6 +172,7 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
         success: true,
         message: 'Active engine switched to Built-in Offline Heuristic. Zero API keys used.',
       });
+      if (onSettingsChanged) onSettingsChanged();
     } catch (err) {
       alert('Failed to switch to offline engine: ' + err.message);
     } finally {
@@ -191,6 +202,7 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
         success: true,
         message: `Active provider switched to ${profile.name} (${profile.model_name})!`,
       });
+      if (onSettingsChanged) onSettingsChanged();
     } catch (err) {
       alert('Failed to activate key: ' + err.message);
     } finally {
@@ -207,10 +219,14 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
     setTestResult(null);
   };
 
+  const activeProfile = savedKeys.find((k) => k.id === activeKeyId);
+
   const handleDeleteKey = async (idToDelete) => {
     const updated = savedKeys.filter((k) => k.id !== idToDelete);
     setSavedKeys(updated);
-    localStorage.setItem('jobhelperguru_saved_keys', JSON.stringify(updated));
+    if (currentUser?.id) {
+      localStorage.setItem(`jobhelperguru_saved_keys_${currentUser.id}`, JSON.stringify(updated));
+    }
 
     try {
       await updateSettings({
@@ -218,6 +234,10 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
       });
     } catch (e) {
       console.error('Failed to update saved keys after delete:', e);
+    }
+
+    if (activeKeyId === idToDelete) {
+      setActiveKeyId(null);
     }
 
     if (editingId === idToDelete) {
@@ -306,6 +326,7 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
       setEditingId(savedId);
       setIsOfflineActive(false);
       setSaveSuccess(true);
+      if (onSettingsChanged) onSettingsChanged();
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (err) {
       alert('Failed to save settings: ' + err.message);
@@ -360,6 +381,37 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
           >
             ✕
           </button>
+        </div>
+
+        {/* Current Active Engine Status Summary */}
+        <div className="p-3 rounded-lg border bg-[#f3f6f8] border-[#e0e0e0] flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                isOfflineActive ? 'bg-[#057642]' : activeKeyId ? 'bg-[#0a66c2]' : 'bg-[#b24020]'
+              }`}
+            />
+            <span className="text-[#666666] shrink-0 font-medium">Active Engine:</span>
+            <span className="font-bold text-[#000000] truncate">
+              {isOfflineActive
+                ? 'Built-in Offline Heuristic Engine (Free, Zero API)'
+                : activeProfile
+                ? `${activeProfile.name || activeProfile.model_name} (${activeProfile.model_name})`
+                : apiKey.trim()
+                ? `${modelName || 'Online AI'} (${modelName})`
+                : 'None configured (Offline fallback)'}
+            </span>
+          </div>
+          {!isOfflineActive && (activeKeyId || apiKey.trim()) && (
+            <span className="badge-corporate bg-[#0a66c2]/10 border border-[#0a66c2]/25 text-[#0a66c2] text-[10px] py-0.5 px-2 font-semibold shrink-0">
+              Live Online AI
+            </span>
+          )}
+          {isOfflineActive && (
+            <span className="badge-corporate bg-[#057642]/10 border border-[#057642]/25 text-[#057642] text-[10px] py-0.5 px-2 font-semibold shrink-0">
+              Offline Active
+            </span>
+          )}
         </div>
 
         {/* Onboarding Welcome Banner */}
@@ -458,13 +510,15 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
                 return (
                   <div
                     key={item.id}
-                    className={`p-3 rounded-lg border transition-all text-xs flex items-center justify-between gap-3 ${
+                    onClick={() => handleActivateKey(item)}
+                    className={`p-3 rounded-lg border transition-all text-xs flex items-center justify-between gap-3 cursor-pointer ${
                       isActive
-                        ? 'bg-[#0a66c2]/5 border-2 border-[#0a66c2]'
+                        ? 'bg-[#0a66c2]/5 border-2 border-[#0a66c2] shadow-sm'
                         : isBeingEdited
-                        ? 'bg-[#f3f6f8] border border-[#0a66c2]'
-                        : 'bg-[#f3f6f8] border border-[#e0e0e0] hover:border-[#c1c6d4]'
+                        ? 'bg-[#f3f6f8] border border-[#0a66c2] hover:border-[#0a66c2]'
+                        : 'bg-[#f3f6f8] border border-[#e0e0e0] hover:border-[#0a66c2] hover:bg-white'
                     }`}
+                    title={isActive ? 'Active AI Provider' : 'Click to activate this saved key'}
                   >
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <div className="flex items-center gap-2">
@@ -495,20 +549,32 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
 
                     {/* Actions */}
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {!isActive && (
+                      {!isActive ? (
                         <button
                           type="button"
-                          onClick={() => handleActivateKey(item)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleActivateKey(item);
+                          }}
+                          disabled={saving}
                           className="btn-primary-corporate text-xs py-1 px-3"
                           title="Use this saved key as active AI provider"
                         >
                           Activate
                         </button>
+                      ) : (
+                        <span className="text-[11px] font-bold text-[#057642] px-2 py-1 flex items-center gap-1">
+                          <Check size={12} className="stroke-[3]" />
+                          <span>Active</span>
+                        </span>
                       )}
 
                       <button
                         type="button"
-                        onClick={() => handleEditKey(item)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditKey(item);
+                        }}
                         className="p-1.5 rounded hover:bg-white text-[#666666] hover:text-[#000000] transition-colors"
                         title="Edit this saved key in form"
                       >
@@ -517,7 +583,10 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
 
                       <button
                         type="button"
-                        onClick={() => handleDeleteKey(item.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteKey(item.id);
+                        }}
                         className="p-1.5 rounded hover:bg-white text-[#666666] hover:text-[#b24020] transition-colors"
                         title="Delete this saved key"
                       >
@@ -623,18 +692,32 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
           {/* Test Connection Result */}
           {testResult && (
             <div
-              className={`p-3 rounded-lg border text-xs flex items-start gap-2 ${
+              className={`p-3 rounded-lg border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 ${
                 testResult.success
                   ? 'bg-[#057642]/10 border-[#057642]/25 text-[#057642]'
                   : 'bg-[#b24020]/10 border-[#b24020]/25 text-[#b24020]'
               }`}
             >
-              {testResult.success ? (
-                <Check size={16} className="text-[#057642] shrink-0 mt-0.5" />
-              ) : (
-                <AlertCircle size={16} className="text-[#b24020] shrink-0 mt-0.5" />
+              <div className="flex items-start gap-2">
+                {testResult.success ? (
+                  <Check size={16} className="text-[#057642] shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle size={16} className="text-[#b24020] shrink-0 mt-0.5" />
+                )}
+                <span className="leading-relaxed">{testResult.message}</span>
+              </div>
+
+              {testResult.success && (
+                <button
+                  type="button"
+                  onClick={handleSaveForm}
+                  disabled={saving}
+                  className="btn-primary-corporate text-xs py-1 px-3 bg-[#057642] hover:bg-[#046235] shrink-0 flex items-center gap-1.5"
+                >
+                  <Check size={13} />
+                  <span>Set as Active Key Now ✓</span>
+                </button>
               )}
-              <span className="leading-relaxed">{testResult.message}</span>
             </div>
           )}
 
