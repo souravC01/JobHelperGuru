@@ -21,6 +21,7 @@ export default function ResumeFitRanker({
   currentJob,
   resumes = [],
   adoptedSkillsMap = {},
+  refreshKey = 0,
   onAdoptSkills = null,
   onRemoveAdoptedSkill = null,
   onSelectKeywordForOptimization,
@@ -59,7 +60,7 @@ export default function ResumeFitRanker({
     if (currentJob && resumes.length > 0) {
       runRanking();
     }
-  }, [currentJob, resumes.length]);
+  }, [currentJob, resumes.length, refreshKey]);
 
   if (!currentJob || resumes.length === 0) {
     return null;

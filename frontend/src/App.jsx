@@ -58,6 +58,7 @@ export default function App() {
   const [resumes, setResumes] = useState([]);
   const [applications, setApplications] = useState([]);
   const [refreshTrackerTrigger, setRefreshTrackerTrigger] = useState(0);
+  const [rankingRefreshKey, setRankingRefreshKey] = useState(0);
 
   // Modals state
   const [isOptimizerOpen, setIsOptimizerOpen] = useState(false);
@@ -418,6 +419,7 @@ export default function App() {
                 currentJob={currentJob}
                 resumes={resumes}
                 adoptedSkillsMap={adoptedSkillsMap}
+                refreshKey={rankingRefreshKey}
                 onAdoptSkills={handleAdoptSkills}
                 onRemoveAdoptedSkill={handleRemoveAdoptedSkill}
                 onSelectKeywordForOptimization={(skills, rank, sectionType) => {
@@ -542,6 +544,10 @@ export default function App() {
         }}
         currentUser={currentUser}
         isOnboarding={isOnboardingSettings}
+        onSettingsChanged={() => {
+          setAiErrorState({ isOpen: false, errorMsg: '', modelName: '', retryAction: null });
+          setRankingRefreshKey((prev) => prev + 1);
+        }}
       />
 
       <OfflineSwitchModal
@@ -550,11 +556,16 @@ export default function App() {
         errorMessage={aiErrorState.errorMsg}
         modelName={aiErrorState.modelName}
         onSwitchToOffline={async () => {
+          setAiErrorState({ isOpen: false, errorMsg: '', modelName: '', retryAction: null });
+          setRankingRefreshKey((prev) => prev + 1);
           if (aiErrorState.retryAction) {
             await aiErrorState.retryAction();
           }
         }}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={() => {
+          setAiErrorState({ isOpen: false, errorMsg: '', modelName: '', retryAction: null });
+          setIsSettingsOpen(true);
+        }}
       />
 
       {/* Corporate Footer (Zero Em-Dash) */}
