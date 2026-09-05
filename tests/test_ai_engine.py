@@ -213,3 +213,65 @@ def test_ai_engine_extracts_experience_required_new_grad_offline():
     res = engine.analyze_job(text)
     assert res.experience_required == "New Grad"
 
+
+def test_extract_raw_content_from_response_with_reasoning_and_null_content():
+    from backend.services.ai_engine import extract_raw_content_from_response
+    from unittest.mock import MagicMock
+
+    # 1. Standard message with content
+    mock_msg1 = MagicMock(content="pong", reasoning_content=None, model_extra={})
+    mock_resp1 = MagicMock(choices=[MagicMock(message=mock_msg1)])
+    assert extract_raw_content_from_response(mock_resp1) == "pong"
+
+    # 2. Reasoning model (GLM-5.3, DeepSeek-R1) with content=None and reasoning_content set
+    mock_msg2 = MagicMock(content=None, reasoning_content="Thinking about ping...", model_extra={})
+    mock_resp2 = MagicMock(choices=[MagicMock(message=mock_msg2)])
+    assert extract_raw_content_from_response(mock_resp2) == "Thinking about ping..."
+
+    # 3. Model extra dict reasoning_content
+    mock_msg3 = MagicMock(content=None, reasoning_content=None, model_extra={"reasoning_content": "Extra thought"})
+    mock_resp3 = MagicMock(choices=[MagicMock(message=mock_msg3)])
+    assert extract_raw_content_from_response(mock_resp3) == "Extra thought"
+
+    # 4. Completely null / empty choices
+    mock_msg4 = MagicMock(content=None, reasoning_content=None, model_extra={})
+    mock_resp4 = MagicMock(choices=[MagicMock(message=mock_msg4)])
+    assert extract_raw_content_from_response(mock_resp4) == ""
+
+    assert extract_raw_content_from_response(None) == ""
+    assert extract_raw_content_from_response(MagicMock(choices=[])) == ""
+
+
+def test_settings_test_ai_endpoint_with_reasoning_model(monkeypatch):
+    from unittest.mock import MagicMock
+    from fastapi.testclient import TestClient
+    from backend.main import app
+
+    client = TestClient(app)
+
+    mock_msg = MagicMock(content=None, reasoning_content="Thinking about pong...", model_extra={})
+    mock_resp = MagicMock(choices=[MagicMock(message=mock_msg)])
+
+    class MockCompletions:
+        def create(self, **kwargs):
+            return mock_resp
+
+    class MockClient:
+        chat = type("Chat", (), {"completions": MockCompletions()})()
+
+    monkeypatch.setattr("backend.services.ai_engine.AIEngine._get_client", lambda self: MockClient())
+
+    res = client.post(
+        "/api/settings/test-ai",
+        json={
+            "api_base_url": "https://api.tokenrouter.com/v1",
+            "api_key": "tr-test-key",
+            "model_name": "z-ai/glm-5.3",
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is True
+    assert "Successfully connected to z-ai/glm-5.3!" in data["message"]
+    assert "Thinking about pong..." in data["message"]
+
