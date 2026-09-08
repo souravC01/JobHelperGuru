@@ -6,7 +6,7 @@ def test_encrypt_and_decrypt():
     secret = "nvapi-secr3t-token-xyz-123"
     cipher = encrypt_value(secret)
     assert cipher != secret
-    assert cipher.startswith("gAAAAA")
+    assert cipher.startswith("v1:gAAAAA") or cipher.startswith("gAAAAA")
 
     decrypted = decrypt_value(cipher)
     assert decrypted == secret

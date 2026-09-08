@@ -25,7 +25,7 @@ def test_api_key_encrypted_at_rest(tmp_path):
 
     # Must NOT be stored in plain text!
     assert raw_db_value != plain_api_key
-    assert raw_db_value.startswith("gAAAAA")
+    assert raw_db_value.startswith("v1:gAAAAA") or raw_db_value.startswith("gAAAAA")
 
     # 3. get_settings must return decrypted API key
     retrieved = storage.get_settings(user_id=test_user_id)

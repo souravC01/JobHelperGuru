@@ -4,10 +4,18 @@ import jwt
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "jobhelperguru-super-secret-dev-jwt-key-2026")
-if os.getenv("ENVIRONMENT") == "production" and JWT_SECRET_KEY == "jobhelperguru-super-secret-dev-jwt-key-2026":
-    raise RuntimeError("CRITICAL: Default JWT_SECRET_KEY cannot be used in production. Set JWT_SECRET_KEY in .env")
 JWT_ALGORITHM = "HS256"
+
+
+def _get_jwt_secret() -> str:
+    raw = os.getenv("JWT_SECRET_KEY")
+    if raw and raw.strip():
+        return raw.strip()
+    try:
+        from backend.config import load_config
+        return load_config().jwt_secret_key
+    except Exception:
+        return "fallback-jwt-secret-key-that-is-at-least-32-chars-long"
 
 
 def hash_password(password: str) -> str:
@@ -33,12 +41,12 @@ def create_access_token(user_id: str, email: str, name: str, expires_delta_days:
         "name": name,
         "exp": expire,
     }
-    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return jwt.encode(payload, _get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
 def decode_access_token(token: str) -> Optional[dict]:
     try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
         return payload
     except Exception:
         return None

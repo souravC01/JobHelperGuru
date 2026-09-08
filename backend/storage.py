@@ -32,7 +32,7 @@ from backend.models import (
     SettingsUpdate,
 )
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
-from backend.services.encryption import encrypt_value, decrypt_value
+from backend.services.encryption import encrypt_value, decrypt_value, DecryptionError
 
 TRACKING_QUERY_PARAMS = {
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
@@ -857,10 +857,16 @@ class StorageService:
         use_offline_mode = use_offline_raw.lower() in ["true", "1", "yes"]
 
         raw_key = settings_map.get("api_key", defaults.api_key)
-        api_key = decrypt_value(raw_key) or ""
+        try:
+            api_key = decrypt_value(raw_key) or ""
+        except DecryptionError:
+            api_key = ""
 
         raw_saved = settings_map.get("saved_keys", defaults.saved_keys)
-        saved_keys = decrypt_value(raw_saved) or "[]"
+        try:
+            saved_keys = decrypt_value(raw_saved) or "[]"
+        except DecryptionError:
+            saved_keys = "[]"
 
         return Settings(
             api_base_url=settings_map.get("api_base_url", defaults.api_base_url),
