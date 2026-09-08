@@ -2,7 +2,7 @@ import os
 import uuid
 import mimetypes
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -29,6 +29,7 @@ class ObjectStorageService:
         secret_access_key: Optional[str] = None,
         bucket_name: Optional[str] = None,
         endpoint_url: Optional[str] = None,
+        upload_dir: Optional[Union[str, Path]] = None,
     ):
         self.account_id = account_id or os.getenv("R2_ACCOUNT_ID")
         self.access_key_id = access_key_id or os.getenv("R2_ACCESS_KEY_ID")
@@ -45,6 +46,7 @@ class ObjectStorageService:
 
         self.client = None
         self.is_configured = False
+        self._upload_dir = Path(upload_dir or "data/uploads").resolve()
 
         if (
             BOTO3_AVAILABLE
@@ -66,6 +68,44 @@ class ObjectStorageService:
                 print(f"[WARN] Failed to initialize Cloudflare R2 client: {e}")
                 self.is_configured = False
 
+    @property
+    def upload_dir(self) -> Path:
+        return self._upload_dir
+
+    @upload_dir.setter
+    def upload_dir(self, val: Union[str, Path]):
+        self._upload_dir = Path(val).resolve()
+
+    def _resolve_safe_path(self, object_key: str, user_id: Optional[str] = None) -> Optional[Path]:
+        """
+        Validates object_key against path traversal and enforces strict directory containment.
+        If user_id is given, ensures the file does not belong to another user namespace.
+        """
+        if not object_key or not isinstance(object_key, str):
+            return None
+
+        # Normalize slashes and reject traversal tokens / absolute patterns
+        clean_key = object_key.replace("\\", "/").strip()
+        parts = clean_key.split("/")
+        if ".." in parts or "." in parts or clean_key.startswith("/") or ":" in clean_key:
+            return None
+
+        try:
+            target = (self._upload_dir / clean_key).resolve()
+            if not target.is_relative_to(self._upload_dir):
+                return None
+
+            # Enforce user boundary if user_id is provided
+            if user_id:
+                user_root = (self._upload_dir / "resumes" / user_id).resolve()
+                resumes_root = (self._upload_dir / "resumes").resolve()
+                if target.is_relative_to(resumes_root) and not target.is_relative_to(user_root):
+                    return None
+
+            return target
+        except Exception:
+            return None
+
     def upload_file(
         self,
         content_bytes: bytes,
@@ -76,6 +116,7 @@ class ObjectStorageService:
         """
         Uploads file binary to Cloudflare R2 or local uploads folder.
         Returns the unique storage object key.
+        In R2 mode, raises RuntimeError if upload fails (no silent fallback to ephemeral disk).
         """
         ext = Path(filename).suffix
         safe_name = Path(filename).stem.replace(" ", "_")
@@ -96,15 +137,18 @@ class ObjectStorageService:
                 return unique_key
             except Exception as e:
                 print(f"[ERROR] Cloudflare R2 upload error for {filename}: {e}")
+                raise RuntimeError(f"Cloudflare R2 upload error for {filename}: {e}")
 
-        # Local filesystem fallback
-        local_dir = Path("data/uploads") / prefix
-        local_dir.mkdir(parents=True, exist_ok=True)
-        local_path = local_dir / f"{Path(unique_key).name}"
-        local_path.write_bytes(content_bytes)
+        # Local filesystem mode
+        safe_path = self._resolve_safe_path(unique_key, user_id=user_id)
+        if not safe_path:
+            raise ValueError(f"Invalid object storage key generated: {unique_key}")
+
+        safe_path.parent.mkdir(parents=True, exist_ok=True)
+        safe_path.write_bytes(content_bytes)
         return unique_key
 
-    def get_file(self, object_key: str) -> Optional[bytes]:
+    def get_file(self, object_key: str, user_id: Optional[str] = None) -> Optional[bytes]:
         """Downloads file binary from Cloudflare R2 or local filesystem."""
         if not object_key:
             return None
@@ -115,14 +159,14 @@ class ObjectStorageService:
                 return response["Body"].read()
             except Exception as e:
                 print(f"[WARN] R2 download failed for {object_key}: {e}")
+                return None
 
-        local_path = Path("data/uploads") / object_key
-        if local_path.exists():
-            return local_path.read_bytes()
-
-        legacy_path = Path("data/uploads/resumes") / Path(object_key).name
-        if legacy_path.exists():
-            return legacy_path.read_bytes()
+        safe_path = self._resolve_safe_path(object_key, user_id=user_id)
+        if safe_path and safe_path.is_file():
+            try:
+                return safe_path.read_bytes()
+            except Exception:
+                return None
 
         return None
 
@@ -146,7 +190,7 @@ class ObjectStorageService:
 
         return None
 
-    def delete_file(self, object_key: str) -> bool:
+    def delete_file(self, object_key: str, user_id: Optional[str] = None) -> bool:
         """Deletes file from Cloudflare R2 or local disk."""
         if not object_key:
             return False
@@ -157,15 +201,14 @@ class ObjectStorageService:
                 return True
             except Exception as e:
                 print(f"[WARN] R2 delete failed for {object_key}: {e}")
+                return False
 
-        local_path = Path("data/uploads") / object_key
-        if local_path.exists():
-            local_path.unlink()
-            return True
-
-        legacy_path = Path("data/uploads/resumes") / Path(object_key).name
-        if legacy_path.exists():
-            legacy_path.unlink()
-            return True
+        safe_path = self._resolve_safe_path(object_key, user_id=user_id)
+        if safe_path and safe_path.is_file():
+            try:
+                safe_path.unlink()
+                return True
+            except Exception:
+                return False
 
         return False

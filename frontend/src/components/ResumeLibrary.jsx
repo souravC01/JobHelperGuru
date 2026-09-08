@@ -21,6 +21,7 @@ import {
   uploadResumeFile,
   parseResumeFile,
   updateResume,
+  downloadResumeFile,
 } from '../api/client';
 
 export default function ResumeLibrary({ onResumesUpdated }) {
@@ -567,16 +568,14 @@ export default function ResumeLibrary({ onResumesUpdated }) {
                 </button>
 
                 {viewingResume.download_url && (
-                  <a
-                    href={viewingResume.download_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={() => downloadResumeFile(viewingResume.id, viewingResume.name || 'resume').catch((err) => alert(err.message))}
                     className="btn-secondary-corporate text-xs py-1 px-3 flex items-center gap-1.5"
                     title="Download original uploaded file"
                   >
                     <Download size={13} />
                     <span>Download File</span>
-                  </a>
+                  </button>
                 )}
 
                 <button

@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, HTTPException, Response, Depends, UploadFile, File, Form
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -193,8 +194,8 @@ from backend.services.document_parser import extract_text_from_file
 def get_resumes(current_user: User = Depends(get_current_user)):
     resumes = storage.get_resumes(user_id=current_user.id)
     for r in resumes:
-        if r.file_key:
-            r.download_url = object_storage.generate_download_url(r.file_key)
+        if r.file_key or r.attachment_id:
+            r.download_url = f"/api/resumes/{r.id}/download"
     return resumes
 
 
@@ -202,7 +203,7 @@ def get_resumes(current_user: User = Depends(get_current_user)):
 def add_resume(req: ResumeCreate, current_user: User = Depends(get_current_user)):
     if not req.name.strip() or not req.content.strip():
         raise HTTPException(status_code=400, detail="Resume name and content are required.")
-    return storage.add_resume(name=req.name, content=req.content, file_key=req.file_key, user_id=current_user.id)
+    return storage.add_resume(name=req.name, content=req.content, file_key=None, user_id=current_user.id)
 
 
 ALLOWED_RESUME_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".rtf"}
@@ -234,18 +235,42 @@ def upload_resume_file(
         if not extracted_text.strip():
             raise HTTPException(status_code=400, detail="No readable text could be extracted from this document.")
 
-        # Upload raw binary (.pdf / .docx) to Cloudflare R2 or local uploads scoped by user_id
-        file_key = object_storage.upload_file(
-            content_bytes=content_bytes,
-            filename=file.filename,
-            content_type=file.content_type,
+        # Upload binary to Cloudflare R2 or local directory scoped to user_id
+        try:
+            file_key = object_storage.upload_file(
+                content_bytes=content_bytes,
+                filename=file.filename,
+                content_type=file.content_type,
+                user_id=current_user.id,
+            )
+        except RuntimeError as re:
+            raise HTTPException(status_code=503, detail="Storage service temporarily unavailable.")
+
+        storage_backend = "r2" if object_storage.is_configured else "local"
+        attachment = storage.create_attachment(
             user_id=current_user.id,
+            storage_backend=storage_backend,
+            object_key=file_key,
+            original_filename=file.filename,
+            content_type=file.content_type,
+            size_bytes=len(content_bytes),
         )
 
         resume_name = name.strip() if (name and name.strip()) else Path(file.filename).stem
-        resume = storage.add_resume(name=resume_name, content=extracted_text, file_key=file_key, user_id=current_user.id)
-        if file_key:
-            resume.download_url = object_storage.generate_download_url(file_key)
+        try:
+            resume = storage.add_resume(
+                name=resume_name,
+                content=extracted_text,
+                file_key=file_key,
+                user_id=current_user.id,
+                attachment_id=attachment.id,
+            )
+        except Exception as e:
+            object_storage.delete_file(file_key, user_id=current_user.id)
+            storage.update_attachment_deletion_state(attachment.id, "failed", user_id=current_user.id)
+            raise HTTPException(status_code=500, detail="Failed to save resume record.")
+
+        resume.download_url = f"/api/resumes/{resume.id}/download"
         return resume
     except HTTPException:
         raise
@@ -283,6 +308,50 @@ def parse_resume_file(
     }
 
 
+@app.get("/api/resumes/{resume_id}/download")
+def download_resume_file(
+    resume_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    resume = storage.get_resume(resume_id, user_id=current_user.id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found.")
+
+    if not resume.file_key and not resume.attachment_id:
+        raise HTTPException(status_code=404, detail="No document file attached to this resume.")
+
+    attachment = None
+    if resume.attachment_id:
+        attachment = storage.get_attachment(resume.attachment_id, user_id=current_user.id)
+    elif resume.file_key:
+        attachment = storage.get_attachment_by_key(resume.file_key, user_id=current_user.id)
+
+    if attachment and attachment.deletion_state != "active":
+        raise HTTPException(status_code=404, detail="File is no longer available.")
+
+    storage_backend = attachment.storage_backend if attachment else ("r2" if object_storage.is_configured else "local")
+    object_key = attachment.object_key if attachment else resume.file_key
+    original_filename = (attachment.original_filename if attachment else None) or f"{resume.name}.pdf"
+    content_type = (attachment.content_type if attachment else None) or "application/octet-stream"
+
+    if storage_backend == "r2":
+        download_url = object_storage.generate_download_url(object_key)
+        if not download_url:
+            raise HTTPException(status_code=503, detail="Unable to generate download link.")
+        return RedirectResponse(url=download_url, status_code=307)
+    else:
+        file_bytes = object_storage.get_file(object_key, user_id=current_user.id)
+        if not file_bytes:
+            raise HTTPException(status_code=404, detail="File not found in storage.")
+        return Response(
+            content=file_bytes,
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{original_filename}"'
+            },
+        )
+
+
 @app.patch("/api/resumes/{resume_id}", response_model=Resume)
 def update_resume(
     resume_id: str,
@@ -297,8 +366,8 @@ def update_resume(
     )
     if not updated:
         raise HTTPException(status_code=404, detail="Resume not found.")
-    if updated.file_key:
-        updated.download_url = object_storage.generate_download_url(updated.file_key)
+    if updated.file_key or updated.attachment_id:
+        updated.download_url = f"/api/resumes/{updated.id}/download"
     return updated
 
 
@@ -307,9 +376,25 @@ def delete_resume(resume_id: str, current_user: User = Depends(get_current_user)
     resume = storage.get_resume(resume_id, user_id=current_user.id)
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found.")
-    if resume.file_key:
-        object_storage.delete_file(resume.file_key)
-    success = storage.delete_resume(resume_id, user_id=current_user.id)
+
+    if resume.attachment_id or resume.file_key:
+        attachment = None
+        if resume.attachment_id:
+            attachment = storage.get_attachment(resume.attachment_id, user_id=current_user.id)
+        elif resume.file_key:
+            attachment = storage.get_attachment_by_key(resume.file_key, user_id=current_user.id)
+
+        if attachment:
+            storage.update_attachment_deletion_state(attachment.id, "pending", user_id=current_user.id)
+            deleted = object_storage.delete_file(attachment.object_key, user_id=current_user.id)
+            if not deleted:
+                storage.update_attachment_deletion_state(attachment.id, "failed", user_id=current_user.id)
+                raise HTTPException(status_code=500, detail="Failed to delete associated storage file.")
+            storage.delete_attachment(attachment.id, user_id=current_user.id)
+        elif resume.file_key:
+            object_storage.delete_file(resume.file_key, user_id=current_user.id)
+
+    storage.delete_resume(resume_id, user_id=current_user.id)
     return {"success": True}
 
 

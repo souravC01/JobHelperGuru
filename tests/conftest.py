@@ -51,6 +51,8 @@ class FakeObjectStorage:
         self.root = Path(root)
 
     def upload_file(self, content_bytes, filename, content_type=None, user_id=None):
+        if self.is_configured and self.client:
+            self.client.put_object(Bucket="fake", Key="fake", Body=content_bytes)
         key = f"resumes/{user_id or 'anonymous'}/{secrets.token_hex(12)}_{Path(filename).name}"
         target = self.root / key
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -58,13 +60,15 @@ class FakeObjectStorage:
         return key
 
     def generate_download_url(self, object_key, expires_in=3600):
+        if self.is_configured and self.client:
+            return f"https://r2.fake.test/{object_key}"
         return None
 
-    def get_file(self, object_key):
+    def get_file(self, object_key, user_id=None):
         target = self.root / object_key
         return target.read_bytes() if target.is_file() else None
 
-    def delete_file(self, object_key):
+    def delete_file(self, object_key, user_id=None):
         target = self.root / object_key
         if not target.is_file():
             return False

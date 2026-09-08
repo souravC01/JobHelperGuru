@@ -315,6 +315,20 @@ export async function downloadExcelReport() {
   document.body.removeChild(a);
 }
 
+export async function downloadResumeFile(resumeId, filename = 'resume') {
+  const res = await authFetch(`${API_BASE}/resumes/${resumeId}/download`);
+  if (!res.ok) throw new Error('Failed to download resume file');
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
 // --- Settings ---
 export async function getSettings() {
   const res = await authFetch(`${API_BASE}/settings`);

@@ -27,6 +27,7 @@ from backend.models import (
     ApplicationStatus,
     Resume,
     ResumeCreate,
+    ResumeAttachment,
     Settings,
     SettingsUpdate,
 )
@@ -217,6 +218,22 @@ class StorageService:
                     name TEXT NOT NULL,
                     content TEXT NOT NULL,
                     file_key TEXT,
+                    attachment_id TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+            # Attachments table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS attachments (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    storage_backend TEXT NOT NULL,
+                    object_key TEXT NOT NULL,
+                    original_filename TEXT,
+                    content_type TEXT,
+                    size_bytes INTEGER DEFAULT 0,
+                    deletion_state TEXT DEFAULT 'active',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
@@ -225,6 +242,7 @@ class StorageService:
             if self.is_postgres:
                 cursor.execute("ALTER TABLE resumes ADD COLUMN IF NOT EXISTS file_key TEXT")
                 cursor.execute("ALTER TABLE resumes ADD COLUMN IF NOT EXISTS user_id TEXT")
+                cursor.execute("ALTER TABLE resumes ADD COLUMN IF NOT EXISTS attachment_id TEXT")
                 cursor.execute("ALTER TABLE applications ADD COLUMN IF NOT EXISTS user_id TEXT")
             else:
                 try:
@@ -233,6 +251,10 @@ class StorageService:
                     pass
                 try:
                     cursor.execute("ALTER TABLE resumes ADD COLUMN user_id TEXT")
+                except Exception:
+                    pass
+                try:
+                    cursor.execute("ALTER TABLE resumes ADD COLUMN attachment_id TEXT")
                 except Exception:
                     pass
                 try:
@@ -313,17 +335,32 @@ class StorageService:
             )
 
     # --- Resumes CRUD ---
-    def add_resume(self, name: str, content: str, file_key: Optional[str] = None, user_id: Optional[str] = None) -> Resume:
+    def add_resume(
+        self,
+        name: str,
+        content: str,
+        file_key: Optional[str] = None,
+        user_id: Optional[str] = None,
+        attachment_id: Optional[str] = None,
+    ) -> Resume:
         now = datetime.now().isoformat()
         resume_id = str(uuid.uuid4())
         with self._get_cursor() as cursor:
             cursor.execute(
                 self._format_sql(
-                    "INSERT INTO resumes (id, user_id, name, content, file_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+                    "INSERT INTO resumes (id, user_id, name, content, file_key, attachment_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
                 ),
-                (resume_id, user_id, name, content, file_key, now, now),
+                (resume_id, user_id, name, content, file_key, attachment_id, now, now),
             )
-        return Resume(id=resume_id, name=name, content=content, file_key=file_key, created_at=now, updated_at=now)
+        return Resume(
+            id=resume_id,
+            name=name,
+            content=content,
+            file_key=file_key,
+            attachment_id=attachment_id,
+            created_at=now,
+            updated_at=now,
+        )
 
     def get_resumes(self, user_id: Optional[str] = None) -> List[Resume]:
         with self._get_cursor() as cursor:
@@ -338,6 +375,7 @@ class StorageService:
                     name=row["name"],
                     content=row["content"],
                     file_key=row.get("file_key") if isinstance(row, dict) else (row["file_key"] if "file_key" in row.keys() else None),
+                    attachment_id=row.get("attachment_id") if isinstance(row, dict) else (row["attachment_id"] if "attachment_id" in row.keys() else None),
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
                 )
@@ -358,6 +396,7 @@ class StorageService:
                 name=row["name"],
                 content=row["content"],
                 file_key=row.get("file_key") if isinstance(row, dict) else (row["file_key"] if "file_key" in row.keys() else None),
+                attachment_id=row.get("attachment_id") if isinstance(row, dict) else (row["attachment_id"] if "attachment_id" in row.keys() else None),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -368,6 +407,114 @@ class StorageService:
                 cursor.execute(self._format_sql("DELETE FROM resumes WHERE id = ? AND user_id = ?"), (resume_id, user_id))
             else:
                 cursor.execute(self._format_sql("DELETE FROM resumes WHERE id = ?"), (resume_id,))
+            return cursor.rowcount > 0
+
+    # --- Attachments CRUD ---
+    def create_attachment(
+        self,
+        user_id: str,
+        storage_backend: str,
+        object_key: str,
+        original_filename: Optional[str] = None,
+        content_type: Optional[str] = None,
+        size_bytes: int = 0,
+    ) -> ResumeAttachment:
+        now = datetime.now().isoformat()
+        att_id = str(uuid.uuid4())
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                self._format_sql(
+                    "INSERT INTO attachments (id, user_id, storage_backend, object_key, original_filename, content_type, size_bytes, deletion_state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                ),
+                (att_id, user_id, storage_backend, object_key, original_filename, content_type, size_bytes, "active", now, now),
+            )
+        return ResumeAttachment(
+            id=att_id,
+            user_id=user_id,
+            storage_backend=storage_backend,
+            object_key=object_key,
+            original_filename=original_filename,
+            content_type=content_type,
+            size_bytes=size_bytes,
+            deletion_state="active",
+            created_at=now,
+            updated_at=now,
+        )
+
+    def get_attachment(self, attachment_id: str, user_id: Optional[str] = None) -> Optional[ResumeAttachment]:
+        with self._get_cursor() as cursor:
+            if user_id:
+                cursor.execute(
+                    self._format_sql("SELECT * FROM attachments WHERE id = ? AND user_id = ?"),
+                    (attachment_id, user_id),
+                )
+            else:
+                cursor.execute(self._format_sql("SELECT * FROM attachments WHERE id = ?"), (attachment_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return ResumeAttachment(
+                id=row["id"],
+                user_id=row["user_id"],
+                storage_backend=row["storage_backend"],
+                object_key=row["object_key"],
+                original_filename=row["original_filename"],
+                content_type=row["content_type"],
+                size_bytes=row["size_bytes"],
+                deletion_state=row["deletion_state"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
+
+    def get_attachment_by_key(self, object_key: str, user_id: Optional[str] = None) -> Optional[ResumeAttachment]:
+        with self._get_cursor() as cursor:
+            if user_id:
+                cursor.execute(
+                    self._format_sql("SELECT * FROM attachments WHERE object_key = ? AND user_id = ?"),
+                    (object_key, user_id),
+                )
+            else:
+                cursor.execute(self._format_sql("SELECT * FROM attachments WHERE object_key = ?"), (object_key,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return ResumeAttachment(
+                id=row["id"],
+                user_id=row["user_id"],
+                storage_backend=row["storage_backend"],
+                object_key=row["object_key"],
+                original_filename=row["original_filename"],
+                content_type=row["content_type"],
+                size_bytes=row["size_bytes"],
+                deletion_state=row["deletion_state"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
+
+    def update_attachment_deletion_state(self, attachment_id: str, deletion_state: str, user_id: Optional[str] = None) -> bool:
+        now = datetime.now().isoformat()
+        with self._get_cursor() as cursor:
+            if user_id:
+                cursor.execute(
+                    self._format_sql("UPDATE attachments SET deletion_state = ?, updated_at = ? WHERE id = ? AND user_id = ?"),
+                    (deletion_state, now, attachment_id, user_id),
+                )
+            else:
+                cursor.execute(
+                    self._format_sql("UPDATE attachments SET deletion_state = ?, updated_at = ? WHERE id = ?"),
+                    (deletion_state, now, attachment_id),
+                )
+            return cursor.rowcount > 0
+
+    def delete_attachment(self, attachment_id: str, user_id: Optional[str] = None) -> bool:
+        with self._get_cursor() as cursor:
+            if user_id:
+                cursor.execute(
+                    self._format_sql("DELETE FROM attachments WHERE id = ? AND user_id = ?"),
+                    (attachment_id, user_id),
+                )
+            else:
+                cursor.execute(self._format_sql("DELETE FROM attachments WHERE id = ?"), (attachment_id,))
             return cursor.rowcount > 0
 
     def update_resume(

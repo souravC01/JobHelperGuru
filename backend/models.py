@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, field_validator, ValidationInfo
+from pydantic import BaseModel, Field, field_validator, ValidationInfo, ConfigDict
 
 
 class ApplicationStatus(str, Enum):
@@ -69,20 +69,34 @@ class ApplicationUpdate(BaseModel):
         return v
 
 
+class ResumeAttachment(BaseModel):
+    id: str
+    user_id: str
+    storage_backend: str  # local or r2
+    object_key: str
+    original_filename: Optional[str] = None
+    content_type: Optional[str] = None
+    size_bytes: Optional[int] = 0
+    deletion_state: str = "active"  # active, pending, failed
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+
 class Resume(BaseModel):
     id: str
     name: str
     content: str
     file_key: Optional[str] = None
+    attachment_id: Optional[str] = None
     download_url: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
 
 
 class ResumeCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     name: str
     content: str
-    file_key: Optional[str] = None
 
 
 class ResumeUpdate(BaseModel):
