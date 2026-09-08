@@ -326,6 +326,16 @@ class StorageService:
                     updated_at TEXT NOT NULL
                 )
             """)
+            # Rate limits table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS rate_limits (
+                    bucket TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    count INTEGER NOT NULL,
+                    reset_at REAL NOT NULL,
+                    PRIMARY KEY (bucket, subject)
+                )
+            """)
 
     # --- Users CRUD ---
     def create_user(
@@ -578,6 +588,31 @@ class StorageService:
             else:
                 cursor.execute(self._format_sql("DELETE FROM resumes WHERE id = ?"), (resume_id,))
             return cursor.rowcount > 0
+
+    def count_user_resumes(self, user_id: str) -> int:
+        with self._get_cursor() as cursor:
+            cursor.execute(self._format_sql("SELECT COUNT(*) as cnt FROM resumes WHERE user_id = ?"), (user_id,))
+            row = cursor.fetchone()
+            if not row:
+                return 0
+            if isinstance(row, dict):
+                return int(row.get("cnt", 0))
+            return int(row[0])
+
+    def get_user_upload_bytes(self, user_id: str) -> int:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                self._format_sql(
+                    "SELECT COALESCE(SUM(size_bytes), 0) as total_bytes FROM attachments WHERE user_id = ? AND deletion_state = 'active'"
+                ),
+                (user_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return 0
+            if isinstance(row, dict):
+                return int(row.get("total_bytes", 0))
+            return int(row[0])
 
     # --- Attachments CRUD ---
     def create_attachment(

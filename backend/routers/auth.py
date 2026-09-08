@@ -7,11 +7,12 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from backend.config import load_config
+from backend.services.rate_limiter import RateLimiter, get_client_ip, get_email_hash
 from backend.models import (
     AuthResponse,
     EmailVerificationConfirm,
@@ -125,22 +126,43 @@ def verify_google_id_token(token: str) -> Dict[str, Any]:
 
 
 @router.post("/register", response_model=AuthResponse)
-def register(req: UserRegisterRequest):
+def register(req: UserRegisterRequest, request: Request):
     email = req.email.strip().lower()
     name = req.name.strip()
     password = req.password
+
+    storage = get_storage()
+    cfg = load_config()
+
+    limiter = RateLimiter(storage)
+    client_ip = get_client_ip(request, trust_proxy_headers=getattr(cfg, "trust_proxy_headers", False))
+    email_h = get_email_hash(email)
+
+    allowed_ip, _, retry_ip = limiter.check("register_ip", client_ip, limit=5, window_seconds=3600)
+    if not allowed_ip:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many registration attempts. Please try again later.",
+            headers={"Retry-After": str(int(retry_ip))},
+        )
+
+    allowed_email, _, retry_email = limiter.check("register_email", email_h, limit=3, window_seconds=3600)
+    if not allowed_email:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many registration attempts for this email. Please try again later.",
+            headers={"Retry-After": str(int(retry_email))},
+        )
 
     if not re.match(r"^[^@]+@[^@]+\.[^@]+$", email):
         raise HTTPException(status_code=400, detail="Please enter a valid email address.")
     if not name:
         raise HTTPException(status_code=400, detail="Name is required.")
 
-    storage = get_storage()
     existing = storage.get_user_by_email(email)
     if existing:
         raise HTTPException(status_code=400, detail="An account with this email address already exists.")
 
-    cfg = load_config()
     hashed = hash_password(password)
     user = storage.create_user(
         email=email,
@@ -180,11 +202,33 @@ def register(req: UserRegisterRequest):
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(req: UserLoginRequest):
+def login(req: UserLoginRequest, request: Request):
     email = req.email.strip().lower()
     password = req.password
 
     storage = get_storage()
+    cfg = load_config()
+
+    limiter = RateLimiter(storage)
+    client_ip = get_client_ip(request, trust_proxy_headers=getattr(cfg, "trust_proxy_headers", False))
+    email_h = get_email_hash(email)
+
+    allowed_ip, _, retry_ip = limiter.check("login_ip", client_ip, limit=10, window_seconds=60)
+    if not allowed_ip:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Please try again later.",
+            headers={"Retry-After": str(int(retry_ip))},
+        )
+
+    allowed_email, _, retry_email = limiter.check("login_email", email_h, limit=10, window_seconds=60)
+    if not allowed_email:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts for this account. Please try again later.",
+            headers={"Retry-After": str(int(retry_email))},
+        )
+
     raw_user = storage.get_user_by_email(email)
     if not raw_user:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
@@ -198,7 +242,6 @@ def login(req: UserLoginRequest):
     if not verify_password(password, raw_user.get("hashed_password", "")):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
-    cfg = load_config()
     if cfg.require_email_verification and not raw_user.get("email_verified"):
         raise HTTPException(
             status_code=403,
@@ -211,10 +254,31 @@ def login(req: UserLoginRequest):
 
 
 @router.post("/verify-email/request")
-def request_email_verification(req: EmailVerificationRequest):
+def request_email_verification(req: EmailVerificationRequest, request: Request):
     email = req.email.strip().lower()
     storage = get_storage()
     cfg = load_config()
+
+    limiter = RateLimiter(storage)
+    client_ip = get_client_ip(request, trust_proxy_headers=getattr(cfg, "trust_proxy_headers", False))
+    email_h = get_email_hash(email)
+
+    allowed_ip, _, retry_ip = limiter.check("verify_ip", client_ip, limit=5, window_seconds=3600)
+    if not allowed_ip:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many verification requests. Please try again later.",
+            headers={"Retry-After": str(int(retry_ip))},
+        )
+
+    allowed_email, _, retry_email = limiter.check("verify_email", email_h, limit=3, window_seconds=3600)
+    if not allowed_email:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many verification requests for this email. Please try again later.",
+            headers={"Retry-After": str(int(retry_email))},
+        )
+
     raw_user = storage.get_user_by_email(email)
 
     if raw_user and not raw_user.get("email_verified"):
@@ -255,10 +319,31 @@ def confirm_email_verification(req: EmailVerificationConfirm):
 
 
 @router.post("/password-reset/request")
-def request_password_reset(req: PasswordResetRequest):
+def request_password_reset(req: PasswordResetRequest, request: Request):
     email = req.email.strip().lower()
     storage = get_storage()
     cfg = load_config()
+
+    limiter = RateLimiter(storage)
+    client_ip = get_client_ip(request, trust_proxy_headers=getattr(cfg, "trust_proxy_headers", False))
+    email_h = get_email_hash(email)
+
+    allowed_ip, _, retry_ip = limiter.check("reset_ip", client_ip, limit=5, window_seconds=3600)
+    if not allowed_ip:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many password reset requests. Please try again later.",
+            headers={"Retry-After": str(int(retry_ip))},
+        )
+
+    allowed_email, _, retry_email = limiter.check("reset_email", email_h, limit=3, window_seconds=3600)
+    if not allowed_email:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many password reset requests for this email. Please try again later.",
+            headers={"Retry-After": str(int(retry_email))},
+        )
+
     raw_user = storage.get_user_by_email(email)
 
     if raw_user:

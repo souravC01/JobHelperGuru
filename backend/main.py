@@ -2,12 +2,15 @@ import os
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, HTTPException, Response, Depends, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Response, Depends, UploadFile, File, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.types import ASGIApp, Receive, Scope, Send
 
+from backend.config import load_config
+from backend.services.rate_limiter import RateLimiter, get_client_ip
 from backend.models import (
     Application,
     ApplicationCreate,
@@ -35,8 +38,91 @@ from backend.services.object_storage import ObjectStorageService
 from backend.services.outbound_http import SSRFBlockedError
 from backend.routers.auth import router as auth_router, get_current_user, get_optional_user, set_storage_service
 
+
+class LimitBodySizeMiddleware:
+    """
+    ASGI middleware enforcing body size caps:
+    - 1 MiB for standard JSON / URL-encoded requests
+    - 12 MiB for multipart/form-data uploads
+    Rejects immediately via Content-Length or during streaming with HTTP 413.
+    """
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        max_json_bytes: int = 1024 * 1024,
+        max_multipart_bytes: int = 12 * 1024 * 1024,
+    ):
+        self.app = app
+        self.max_json_bytes = max_json_bytes
+        self.max_multipart_bytes = max_multipart_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers", []))
+        content_type = headers.get(b"content-type", b"").decode("latin-1").lower()
+        is_multipart = "multipart/form-data" in content_type
+        limit = self.max_multipart_bytes if is_multipart else self.max_json_bytes
+
+        content_length = headers.get(b"content-length")
+        if content_length:
+            try:
+                cl = int(content_length.decode("latin-1"))
+                if cl > limit:
+                    res = Response(
+                        content='{"detail":"Request body exceeds maximum allowed size."}',
+                        status_code=413,
+                        media_type="application/json",
+                    )
+                    await res(scope, receive, send)
+                    return
+            except ValueError:
+                pass
+
+        received_bytes = 0
+        response_started = False
+
+        class StreamingBodyTooLarge(Exception):
+            pass
+
+        async def limited_receive():
+            nonlocal received_bytes
+            message = await receive()
+            if message["type"] == "http.request":
+                body = message.get("body", b"")
+                received_bytes += len(body)
+                if received_bytes > limit:
+                    raise StreamingBodyTooLarge()
+            return message
+
+        async def monitored_send(message):
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, limited_receive, monitored_send)
+        except StreamingBodyTooLarge:
+            if not response_started:
+                res = Response(
+                    content='{"detail":"Request body exceeds maximum allowed size."}',
+                    status_code=413,
+                    media_type="application/json",
+                )
+                await res(scope, receive, send)
+            else:
+                raise
+
+
 app = FastAPI(title="JobHelperGuru API", version="1.0.0")
 app.include_router(auth_router)
+
+# Body size limit middleware
+app.add_middleware(LimitBodySizeMiddleware)
 
 # CORS Setup
 allowed_origins_raw = os.getenv(
@@ -112,12 +198,31 @@ def health():
 class JobAnalyzeRequest(BaseModel):
     url: Optional[str] = None
     text: Optional[str] = None
+    raw_text: Optional[str] = None
 
 
 @app.post("/api/jobs/analyze")
-def analyze_job(req: JobAnalyzeRequest, current_user: Optional[User] = Depends(get_optional_user)):
-    if not req.url and not req.text:
+@app.post("/api/analyze/job")
+def analyze_job(
+    req: JobAnalyzeRequest,
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    job_input_text = req.text or req.raw_text
+    if not req.url and not job_input_text:
         raise HTTPException(status_code=400, detail="Either a URL or job text must be provided.")
+
+    if not current_user:
+        limiter = RateLimiter(storage)
+        cfg = load_config()
+        client_ip = get_client_ip(request, trust_proxy_headers=getattr(cfg, "trust_proxy_headers", False))
+        allowed, _, retry_after = limiter.check("anon_analysis", client_ip, limit=10, window_seconds=60)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many analysis requests. Please try again later or sign in.",
+                headers={"Retry-After": str(int(retry_after))},
+            )
 
     scraped_title = ""
     scraped_company = ""
@@ -131,8 +236,8 @@ def analyze_job(req: JobAnalyzeRequest, current_user: Optional[User] = Depends(g
         scraped_company = scraped.company
         scraped_location = scraped.location
         job_text = scraped.raw_text
-    elif req.text:
-        parsed = scraper.parse_raw_text(req.text)
+    elif job_input_text:
+        parsed = scraper.parse_raw_text(job_input_text)
         scraped_title = parsed.title
         scraped_company = parsed.company
         scraped_location = parsed.location
@@ -213,6 +318,17 @@ def get_resumes(current_user: User = Depends(get_current_user)):
 def add_resume(req: ResumeCreate, current_user: User = Depends(get_current_user)):
     if not req.name.strip() or not req.content.strip():
         raise HTTPException(status_code=400, detail="Resume name and content are required.")
+    if len(req.content) > 100_000:
+        raise HTTPException(
+            status_code=422,
+            detail="Resume content exceeds maximum limit of 100,000 characters.",
+        )
+    user_resume_count = storage.count_user_resumes(current_user.id)
+    if user_resume_count >= 30:
+        raise HTTPException(
+            status_code=422,
+            detail="Maximum limit of 30 resumes reached per account.",
+        )
     return storage.add_resume(name=req.name, content=req.content, file_key=None, user_id=current_user.id)
 
 
@@ -227,6 +343,13 @@ def upload_resume_file(
     current_user: User = Depends(get_current_user),
 ):
     try:
+        user_resume_count = storage.count_user_resumes(current_user.id)
+        if user_resume_count >= 30:
+            raise HTTPException(
+                status_code=422,
+                detail="Maximum limit of 30 resumes reached per account.",
+            )
+
         ext = Path(file.filename).suffix.lower()
         if ext not in ALLOWED_RESUME_EXTENSIONS:
             raise HTTPException(
@@ -239,6 +362,13 @@ def upload_resume_file(
             raise HTTPException(
                 status_code=413,
                 detail="File exceeds maximum allowed size of 10MB.",
+            )
+
+        current_bytes = storage.get_user_upload_bytes(current_user.id)
+        if current_bytes + len(content_bytes) > 100 * 1024 * 1024:
+            raise HTTPException(
+                status_code=422,
+                detail="Maximum total storage limit of 100MB reached for resumes.",
             )
 
         extracted_text = extract_text_from_file(content_bytes, file.filename)
@@ -285,7 +415,7 @@ def upload_resume_file(
     except HTTPException:
         raise
     except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
+        raise HTTPException(status_code=422, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
 
@@ -295,27 +425,34 @@ def parse_resume_file(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
 ):
-    ext = Path(file.filename).suffix.lower()
-    if ext not in ALLOWED_RESUME_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type '{ext}'. Allowed formats: .pdf, .docx, .doc, .txt, .rtf",
-        )
-    content_bytes = file.file.read(MAX_RESUME_SIZE_BYTES + 1)
-    if len(content_bytes) > MAX_RESUME_SIZE_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail="File exceeds maximum allowed size of 10MB.",
-        )
-    extracted_text = extract_text_from_file(content_bytes, file.filename)
-    if not extracted_text.strip():
-        raise HTTPException(status_code=400, detail="No readable text could be extracted from this document.")
+    try:
+        ext = Path(file.filename).suffix.lower()
+        if ext not in ALLOWED_RESUME_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type '{ext}'. Allowed formats: .pdf, .docx, .doc, .txt, .rtf",
+            )
+        content_bytes = file.file.read(MAX_RESUME_SIZE_BYTES + 1)
+        if len(content_bytes) > MAX_RESUME_SIZE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail="File exceeds maximum allowed size of 10MB.",
+            )
+        extracted_text = extract_text_from_file(content_bytes, file.filename)
+        if not extracted_text.strip():
+            raise HTTPException(status_code=400, detail="No readable text could be extracted from this document.")
 
-    return {
-        "filename": file.filename,
-        "suggested_title": Path(file.filename).stem,
-        "text": extracted_text,
-    }
+        return {
+            "filename": file.filename,
+            "suggested_title": Path(file.filename).stem,
+            "text": extracted_text,
+        }
+    except HTTPException:
+        raise
+    except ValueError as ve:
+        raise HTTPException(status_code=422, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
 
 
 @app.get("/api/resumes/{resume_id}/download")
@@ -413,8 +550,20 @@ class MatchResumesRequest(BaseModel):
     resumes: Optional[List[Resume]] = None
 
 
+def _check_user_ai_rate_limit(user_id: str):
+    limiter = RateLimiter(storage)
+    allowed, _, retry_after = limiter.check("user_ai_ops", user_id, limit=30, window_seconds=60)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many AI operations requested. Please wait before retrying.",
+            headers={"Retry-After": str(int(retry_after))},
+        )
+
+
 @app.post("/api/resumes/match", response_model=List[RankedResume])
 def match_resumes(req: MatchResumesRequest, current_user: User = Depends(get_current_user)):
+    _check_user_ai_rate_limit(current_user.id)
     resumes = req.resumes or storage.get_resumes(user_id=current_user.id)
     ai = get_ai_engine(user_id=current_user.id)
     try:
@@ -434,6 +583,7 @@ def match_resumes(req: MatchResumesRequest, current_user: User = Depends(get_cur
 # --- Bulletskill Optimizer ---
 @app.post("/api/resumes/optimize-bullet", response_model=BulletOptimizationResponse)
 def optimize_bullet(req: BulletOptimizationRequest, current_user: User = Depends(get_current_user)):
+    _check_user_ai_rate_limit(current_user.id)
     ai = get_ai_engine(user_id=current_user.id)
     try:
         return ai.optimize_bullet(req)
@@ -458,6 +608,7 @@ class OutreachRequest(BaseModel):
 
 @app.post("/api/resumes/generate-outreach", response_model=OutreachResponse)
 def generate_outreach(req: OutreachRequest, current_user: User = Depends(get_current_user)):
+    _check_user_ai_rate_limit(current_user.id)
     resume = None
     if req.resume_id:
         resume = storage.get_resume(req.resume_id, user_id=current_user.id)
