@@ -105,9 +105,9 @@ class ResumeUpdate(BaseModel):
 
 
 class Settings(BaseModel):
-    api_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    api_base_url: str = ""
     api_key: str = ""
-    model_name: str = "gemini-2.0-flash"
+    model_name: str = ""
     default_follow_up_days: int = Field(default=7, ge=1, le=90)
     saved_keys: Optional[str] = "[]"
     use_offline_mode: bool = False

@@ -77,8 +77,8 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
       } else {
         setEditingId(null);
         setKeyName('');
-        setBaseUrl(settingsData.api_base_url || 'https://generativelanguage.googleapis.com/v1beta/openai/');
-        setModelName(settingsData.model_name || 'gemini-2.0-flash');
+        setBaseUrl('');
+        setModelName('');
         setApiKey('');
       }
 
