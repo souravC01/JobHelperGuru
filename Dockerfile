@@ -12,7 +12,7 @@ WORKDIR /app/frontend
 
 # Install dependencies
 COPY frontend/package*.json ./
-RUN npm install
+RUN npm ci
 
 # Build static bundle
 COPY frontend/ ./

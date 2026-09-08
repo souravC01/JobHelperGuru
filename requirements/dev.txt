@@ -1,0 +1,4 @@
+-r runtime.txt
+pytest>=8.3.0
+ruff>=0.5.0
+pip-audit>=2.7.0
