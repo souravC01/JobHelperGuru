@@ -184,6 +184,9 @@ class StorageService:
                     name TEXT NOT NULL,
                     avatar_url TEXT,
                     provider TEXT NOT NULL DEFAULT 'email',
+                    email_verified BOOLEAN DEFAULT FALSE,
+                    session_version INTEGER DEFAULT 1,
+                    google_sub TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
@@ -238,13 +241,40 @@ class StorageService:
                     updated_at TEXT NOT NULL
                 )
             """)
+            # Auth tokens table (verification and password recovery)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS auth_tokens (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    token_hash TEXT NOT NULL,
+                    token_type TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    used_at TEXT,
+                    created_at TEXT NOT NULL
+                )
+            """)
             # Column migrations for existing tables
             if self.is_postgres:
+                cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE")
+                cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER DEFAULT 1")
+                cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT")
                 cursor.execute("ALTER TABLE resumes ADD COLUMN IF NOT EXISTS file_key TEXT")
                 cursor.execute("ALTER TABLE resumes ADD COLUMN IF NOT EXISTS user_id TEXT")
                 cursor.execute("ALTER TABLE resumes ADD COLUMN IF NOT EXISTS attachment_id TEXT")
                 cursor.execute("ALTER TABLE applications ADD COLUMN IF NOT EXISTS user_id TEXT")
             else:
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT 0")
+                except Exception:
+                    pass
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1")
+                except Exception:
+                    pass
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN google_sub TEXT")
+                except Exception:
+                    pass
                 try:
                     cursor.execute("ALTER TABLE resumes ADD COLUMN file_key TEXT")
                 except Exception:
@@ -287,6 +317,9 @@ class StorageService:
         name: str,
         avatar_url: Optional[str] = None,
         provider: str = "email",
+        email_verified: bool = False,
+        session_version: int = 1,
+        google_sub: Optional[str] = None,
     ) -> User:
         now = datetime.now().isoformat()
         user_id = str(uuid.uuid4())
@@ -294,10 +327,10 @@ class StorageService:
         with self._get_cursor() as cursor:
             cursor.execute(
                 self._format_sql(
-                    "INSERT INTO users (id, email, hashed_password, name, avatar_url, provider, created_at, updated_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                    "INSERT INTO users (id, email, hashed_password, name, avatar_url, provider, email_verified, session_version, google_sub, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 ),
-                (user_id, clean_email, hashed_password, name, avatar_url, provider, now, now),
+                (user_id, clean_email, hashed_password, name, avatar_url, provider, email_verified, session_version, google_sub, now, now),
             )
         return User(
             id=user_id,
@@ -305,6 +338,9 @@ class StorageService:
             name=name,
             avatar_url=avatar_url,
             provider=provider,
+            email_verified=email_verified,
+            session_version=session_version,
+            google_sub=google_sub,
             created_at=now,
             updated_at=now,
         )
@@ -324,14 +360,130 @@ class StorageService:
             row = cursor.fetchone()
             if not row:
                 return None
+            d = dict(row)
             return User(
-                id=row["id"],
-                email=row["email"],
-                name=row["name"],
-                avatar_url=row["avatar_url"],
-                provider=row["provider"],
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
+                id=d["id"],
+                email=d["email"],
+                name=d["name"],
+                avatar_url=d.get("avatar_url"),
+                provider=d.get("provider", "email"),
+                email_verified=bool(d.get("email_verified", False)),
+                session_version=int(d.get("session_version", 1)),
+                google_sub=d.get("google_sub"),
+                created_at=d["created_at"],
+                updated_at=d["updated_at"],
+            )
+
+    def get_user_by_google_sub(self, google_sub: str) -> Optional[Dict[str, Any]]:
+        clean_sub = google_sub.strip()
+        with self._get_cursor() as cursor:
+            cursor.execute(self._format_sql("SELECT * FROM users WHERE google_sub = ?"), (clean_sub,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return dict(row)
+
+    def update_user_verification(self, user_id: str, verified: bool = True) -> None:
+        now = datetime.now().isoformat()
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                self._format_sql("UPDATE users SET email_verified = ?, updated_at = ? WHERE id = ?"),
+                (verified, now, user_id),
+            )
+
+    def update_user_password(self, user_id: str, hashed_password: Optional[str], increment_session: bool = True) -> None:
+        now = datetime.now().isoformat()
+        with self._get_cursor() as cursor:
+            if increment_session:
+                cursor.execute(
+                    self._format_sql(
+                        "UPDATE users SET hashed_password = ?, session_version = session_version + 1, updated_at = ? WHERE id = ?"
+                    ),
+                    (hashed_password, now, user_id),
+                )
+            else:
+                cursor.execute(
+                    self._format_sql("UPDATE users SET hashed_password = ?, updated_at = ? WHERE id = ?"),
+                    (hashed_password, now, user_id),
+                )
+
+    def link_google_identity(
+        self,
+        user_id: str,
+        google_sub: str,
+        clear_password: bool = False,
+        verify_email: bool = True,
+    ) -> None:
+        now = datetime.now().isoformat()
+        clean_sub = google_sub.strip()
+        with self._get_cursor() as cursor:
+            if clear_password:
+                cursor.execute(
+                    self._format_sql(
+                        "UPDATE users SET google_sub = ?, hashed_password = NULL, email_verified = ?, session_version = session_version + 1, updated_at = ? WHERE id = ?"
+                    ),
+                    (clean_sub, verify_email, now, user_id),
+                )
+            else:
+                cursor.execute(
+                    self._format_sql(
+                        "UPDATE users SET google_sub = ?, email_verified = ?, updated_at = ? WHERE id = ?"
+                    ),
+                    (clean_sub, verify_email, now, user_id),
+                )
+
+    def increment_user_session_version(self, user_id: str) -> int:
+        now = datetime.now().isoformat()
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                self._format_sql("UPDATE users SET session_version = session_version + 1, updated_at = ? WHERE id = ?"),
+                (now, user_id),
+            )
+            cursor.execute(self._format_sql("SELECT session_version FROM users WHERE id = ?"), (user_id,))
+            row = cursor.fetchone()
+            return int(row["session_version"]) if row else 1
+
+    # --- Auth Tokens (Verification & Password Recovery) ---
+    def create_auth_token(self, user_id: str, token_hash: str, token_type: str, expires_at: str) -> str:
+        token_id = str(uuid.uuid4())
+        now = datetime.now().isoformat()
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                self._format_sql(
+                    "INSERT INTO auth_tokens (id, user_id, token_hash, token_type, expires_at, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)"
+                ),
+                (token_id, user_id, token_hash, token_type, expires_at, now),
+            )
+        return token_id
+
+    def get_auth_token(self, token_hash: str, token_type: str) -> Optional[Dict[str, Any]]:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                self._format_sql(
+                    "SELECT * FROM auth_tokens WHERE token_hash = ? AND token_type = ? AND used_at IS NULL"
+                ),
+                (token_hash, token_type),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return dict(row)
+
+    def consume_auth_token(self, token_id: str) -> None:
+        now = datetime.now().isoformat()
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                self._format_sql("UPDATE auth_tokens SET used_at = ? WHERE id = ?"),
+                (now, token_id),
+            )
+
+    def invalidate_prior_auth_tokens(self, user_id: str, token_type: str) -> None:
+        now = datetime.now().isoformat()
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                self._format_sql("UPDATE auth_tokens SET used_at = ? WHERE user_id = ? AND token_type = ? AND used_at IS NULL"),
+                (now, user_id, token_type),
             )
 
     # --- Resumes CRUD ---

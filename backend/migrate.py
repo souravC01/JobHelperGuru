@@ -103,14 +103,17 @@ def run_migration(
                 if dst_cursor.fetchone():
                     continue
                 pwd = u["hashed_password"] if "hashed_password" in u.keys() else (u["password_hash"] if "password_hash" in u.keys() else None)
+                ev = bool(u["email_verified"]) if "email_verified" in u.keys() else False
+                sv = int(u["session_version"]) if "session_version" in u.keys() else 1
+                gsub = u["google_sub"] if "google_sub" in u.keys() else None
                 # Insert user
                 dst_cursor.execute(
                     dest_storage._format_sql(
-                        "INSERT INTO users (id, email, hashed_password, name, avatar_url, provider, created_at, updated_at) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                        "INSERT INTO users (id, email, hashed_password, name, avatar_url, provider, email_verified, session_version, google_sub, created_at, updated_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                         + ("ON CONFLICT (id) DO NOTHING" if dest_storage.is_postgres else "ON CONFLICT(id) DO NOTHING")
                     ),
-                    (u["id"], u["email"], pwd, u["name"], u["avatar_url"], u["provider"], u["created_at"], u["updated_at"]),
+                    (u["id"], u["email"], pwd, u["name"], u["avatar_url"], u["provider"], ev, sv, gsub, u["created_at"], u["updated_at"]),
                 )
                 dst_cursor.execute(
                     dest_storage._format_sql("INSERT INTO _migration_ledger VALUES (?, ?, ?, ?)"),

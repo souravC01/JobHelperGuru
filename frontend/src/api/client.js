@@ -81,7 +81,9 @@ export async function registerUser({ email, password, name }) {
     throw new Error(data.detail || 'Registration failed');
   }
   const data = await res.json();
-  setAuth(data.token, data.user);
+  if (data.token) {
+    setAuth(data.token, data.user);
+  }
   return data;
 }
 
@@ -98,6 +100,50 @@ export async function loginUser({ email, password }) {
   const data = await res.json();
   setAuth(data.token, data.user);
   return data;
+}
+
+export async function requestEmailVerification(email) {
+  const res = await fetch(`${API_BASE}/auth/verify-email/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  return res.json();
+}
+
+export async function confirmEmailVerification(token) {
+  const res = await fetch(`${API_BASE}/auth/verify-email/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ detail: 'Verification failed' }));
+    throw new Error(data.detail || 'Verification failed');
+  }
+  return res.json();
+}
+
+export async function requestPasswordReset(email) {
+  const res = await fetch(`${API_BASE}/auth/password-reset/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  return res.json();
+}
+
+export async function confirmPasswordReset(token, new_password) {
+  const res = await fetch(`${API_BASE}/auth/password-reset/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ detail: 'Password reset failed' }));
+    throw new Error(data.detail || 'Password reset failed');
+  }
+  return res.json();
 }
 
 export async function googleAuthUser(credential) {

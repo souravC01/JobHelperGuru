@@ -48,6 +48,7 @@ class AppConfig:
     allowed_provider_hosts: List[str] = field(default_factory=lambda: list(DEFAULT_ALLOWED_AI_HOSTS))
     local_ai_hosts: List[str] = field(default_factory=lambda: list(DEFAULT_LOCAL_AI_HOSTS))
     max_request_body_bytes: int = 10 * 1024 * 1024  # 10 MB
+    require_email_verification: bool = False
 
 
 def _get_or_create_local_secrets(secrets_dir: Optional[str] = None) -> dict:
@@ -91,6 +92,8 @@ def load_config() -> AppConfig:
     else:
         allowed_hosts = list(DEFAULT_ALLOWED_AI_HOSTS)
 
+    req_email = os.getenv("REQUIRE_EMAIL_VERIFICATION", "false").lower() in ("true", "1", "yes")
+
     if raw_mode == "production":
         jwt_key = (os.getenv("JWT_SECRET_KEY") or "").strip()
         if not jwt_key:
@@ -116,6 +119,7 @@ def load_config() -> AppConfig:
             google_client_id=google_client_id,
             allowed_provider_hosts=allowed_hosts,
             local_ai_hosts=[],  # Local AI loopback hosts disabled in production
+            require_email_verification=req_email,
         )
 
     elif raw_mode == "local":
@@ -131,6 +135,7 @@ def load_config() -> AppConfig:
             google_client_id=google_client_id,
             allowed_provider_hosts=allowed_hosts,
             local_ai_hosts=list(DEFAULT_LOCAL_AI_HOSTS),
+            require_email_verification=req_email,
         )
 
     else:  # test mode
@@ -145,4 +150,5 @@ def load_config() -> AppConfig:
             google_client_id=google_client_id or "test-google-client-id",
             allowed_provider_hosts=allowed_hosts,
             local_ai_hosts=list(DEFAULT_LOCAL_AI_HOSTS),
+            require_email_verification=req_email,
         )

@@ -230,6 +230,9 @@ class User(BaseModel):
     name: str
     avatar_url: Optional[str] = None
     provider: str = "email"
+    email_verified: bool = False
+    session_version: int = 1
+    google_sub: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
 
@@ -239,14 +242,50 @@ class UserRegisterRequest(BaseModel):
     password: str
     name: str
 
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long.")
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password must not exceed 72 UTF-8 bytes.")
+        return v
+
 
 class UserLoginRequest(BaseModel):
     email: str
     password: str
 
 
-class AuthResponse(BaseModel):
+class EmailVerificationRequest(BaseModel):
+    email: str
+
+
+class EmailVerificationConfirm(BaseModel):
     token: str
-    user: User
+
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long.")
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password must not exceed 72 UTF-8 bytes.")
+        return v
+
+
+class AuthResponse(BaseModel):
+    token: Optional[str] = None
+    user: Optional[User] = None
+    message: Optional[str] = None
     is_new_user: bool = False
 

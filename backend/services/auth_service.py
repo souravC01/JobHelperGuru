@@ -33,12 +33,19 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
-def create_access_token(user_id: str, email: str, name: str, expires_delta_days: int = 7) -> str:
+def create_access_token(
+    user_id: str,
+    email: str,
+    name: str,
+    session_version: int = 1,
+    expires_delta_days: int = 7,
+) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=expires_delta_days)
     payload = {
         "sub": user_id,
         "email": email,
         "name": name,
+        "session_version": session_version,
         "exp": expire,
     }
     return jwt.encode(payload, _get_jwt_secret(), algorithm=JWT_ALGORITHM)
