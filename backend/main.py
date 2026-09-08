@@ -332,7 +332,7 @@ def add_resume(req: ResumeCreate, current_user: User = Depends(get_current_user)
     return storage.add_resume(name=req.name, content=req.content, file_key=None, user_id=current_user.id)
 
 
-ALLOWED_RESUME_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".rtf"}
+ALLOWED_RESUME_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md", ".rtf"}
 MAX_RESUME_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
@@ -340,6 +340,7 @@ MAX_RESUME_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 def upload_resume_file(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
+    content_override: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
 ):
     try:
@@ -354,7 +355,7 @@ def upload_resume_file(
         if ext not in ALLOWED_RESUME_EXTENSIONS:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported file type '{ext}'. Allowed formats: .pdf, .docx, .doc, .txt, .rtf",
+                detail=f"Unsupported file type '{ext}'. Allowed formats: .pdf, .docx, .doc, .txt, .md, .rtf",
             )
 
         content_bytes = file.file.read(MAX_RESUME_SIZE_BYTES + 1)
@@ -371,9 +372,18 @@ def upload_resume_file(
                 detail="Maximum total storage limit of 100MB reached for resumes.",
             )
 
-        extracted_text = extract_text_from_file(content_bytes, file.filename)
-        if not extracted_text.strip():
-            raise HTTPException(status_code=400, detail="No readable text could be extracted from this document.")
+        if content_override and content_override.strip():
+            if len(content_override) > 100_000:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Resume content exceeds maximum limit of 100,000 characters.",
+                )
+            final_content = content_override.strip()
+        else:
+            extracted_text = extract_text_from_file(content_bytes, file.filename)
+            if not extracted_text.strip():
+                raise HTTPException(status_code=400, detail="No readable text could be extracted from this document.")
+            final_content = extracted_text.strip()
 
         # Upload binary to Cloudflare R2 or local directory scoped to user_id
         try:
@@ -400,7 +410,7 @@ def upload_resume_file(
         try:
             resume = storage.add_resume(
                 name=resume_name,
-                content=extracted_text,
+                content=final_content,
                 file_key=file_key,
                 user_id=current_user.id,
                 attachment_id=attachment.id,

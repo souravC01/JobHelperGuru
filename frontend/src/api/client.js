@@ -222,11 +222,14 @@ export async function parseResumeFile(file) {
   return res.json();
 }
 
-export async function uploadResumeFile(file, name = '') {
+export async function uploadResumeFile(file, name = '', content_override = '') {
   const formData = new FormData();
   formData.append('file', file);
   if (name) {
     formData.append('name', name);
+  }
+  if (content_override) {
+    formData.append('content_override', content_override);
   }
   const res = await authFetch(`${API_BASE}/resumes/upload`, {
     method: 'POST',
