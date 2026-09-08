@@ -1,10 +1,40 @@
 import io
-from typing import List
+import re
+import urllib.parse
+from typing import List, Any
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from backend.models import Application, ApplicationStatus
+
+MAX_EXCEL_CELL_CHARS = 32767
+TRUNCATION_MARKER = "... [TRUNCATED]"
+
+
+def sanitize_excel_text(val: Any) -> str:
+    """
+    Sanitizes untrusted spreadsheet cell text:
+    - Normalizes nulls to empty string
+    - Strips unsupported XML control characters
+    - Bounds values to Excel 32,767 character cell limit with visible marker
+    """
+    if val is None:
+        return ""
+    text = str(val)
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x84\x86-\x9f]", "", text)
+    if len(text) > MAX_EXCEL_CELL_CHARS:
+        text = text[: MAX_EXCEL_CELL_CHARS - len(TRUNCATION_MARKER)] + TRUNCATION_MARKER
+    return text
+
+
+def set_text_cell(cell, val: Any) -> None:
+    """
+    Assigns an untrusted value as text cell data type 's'.
+    Prevents spreadsheet formula injection (CSV/Excel injection).
+    """
+    cell.value = sanitize_excel_text(val)
+    cell.data_type = "s"
 
 
 class ExcelExporter:
@@ -63,7 +93,8 @@ class ExcelExporter:
         ]
 
         for col_idx, header in enumerate(headers1, 1):
-            cell = ws1.cell(row=1, column=col_idx, value=header)
+            cell = ws1.cell(row=1, column=col_idx)
+            set_text_cell(cell, header)
             cell.font = header_font
             cell.fill = header_fill
             cell.alignment = header_align
@@ -90,7 +121,8 @@ class ExcelExporter:
             ]
 
             for col_idx, val in enumerate(row_data, 1):
-                cell = ws1.cell(row=row_idx, column=col_idx, value=val)
+                cell = ws1.cell(row=row_idx, column=col_idx)
+                set_text_cell(cell, val)
                 cell.font = data_font
                 cell.border = cell_border
                 cell.alignment = left_align
@@ -108,10 +140,12 @@ class ExcelExporter:
                     hex_color = self.STATUS_COLORS.get(status_enum, "F1F5F9")
                     cell.fill = PatternFill(start_color=hex_color, end_color=hex_color, fill_type="solid")
 
-                # Job link hyperlink
-                if col_idx == 7 and val and (val.startswith("http://") or val.startswith("https://")):
-                    cell.font = url_font
-                    cell.hyperlink = val
+                # Job link hyperlink: only valid HTTP / HTTPS schemes
+                if col_idx == 7 and val:
+                    parsed = urllib.parse.urlparse(val)
+                    if parsed.scheme in ["http", "https"] and parsed.netloc:
+                        cell.font = url_font
+                        cell.hyperlink = val
 
         # Auto-adjust column widths for Sheet 1
         self._auto_fit_columns(ws1, min_width=12, max_width=45)
@@ -132,7 +166,8 @@ class ExcelExporter:
         ]
 
         for col_idx, header in enumerate(headers2, 1):
-            cell = ws2.cell(row=1, column=col_idx, value=header)
+            cell = ws2.cell(row=1, column=col_idx)
+            set_text_cell(cell, header)
             cell.font = header_font
             cell.fill = header_fill
             cell.alignment = header_align
@@ -147,7 +182,8 @@ class ExcelExporter:
                 app.notes or "",
             ]
             for col_idx, val in enumerate(row_data, 1):
-                cell = ws2.cell(row=row_idx, column=col_idx, value=val)
+                cell = ws2.cell(row=row_idx, column=col_idx)
+                set_text_cell(cell, val)
                 cell.font = data_font
                 cell.border = cell_border
                 cell.alignment = left_align
