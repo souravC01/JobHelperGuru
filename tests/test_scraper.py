@@ -98,6 +98,8 @@ def test_extract_embedded_greenhouse_ats(monkeypatch):
     def mock_get(url, *args, **kwargs):
         return MockResponse()
 
+    monkeypatch.setattr("backend.services.scraper.socket.getaddrinfo", lambda *args: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("backend.services.scraper.CURL_CFFI_AVAILABLE", False)
     monkeypatch.setattr(scraper.session, "get", mock_get)
 
     job = scraper.scrape_url("https://www.acme.com/careers?gh_jid=12345")
@@ -194,13 +196,26 @@ def test_scrape_url_blocks_internal_and_cloud_metadata():
         assert any(term in job.raw_text.lower() for term in ["blocked", "disallowed", "invalid", "security"])
 
 
-def test_scrape_indeed_url_with_tls_impersonation():
+def test_scrape_indeed_url_with_tls_impersonation(monkeypatch):
     scraper = ScraperService()
-    # Mock curl_cffi response or live test
+    captured_html = """
+    <html><head><title>Software Engineering Developer - Example Co</title></head>
+    <body><h1>Software Engineering Developer</h1><div class="company">Example Co</div>
+    <div class="description">Build reliable Java services and APIs with a collaborative engineering team.
+    This captured synthetic response is intentionally long enough for parser validation.</div></body></html>
+    """
+
+    class CapturedResponse:
+        status_code = 200
+        text = captured_html
+
+    monkeypatch.setattr("backend.services.scraper.socket.getaddrinfo", lambda *args: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("backend.services.scraper.CURL_CFFI_AVAILABLE", True)
+    monkeypatch.setattr("backend.services.scraper.cffi_requests.get", lambda *args, **kwargs: CapturedResponse())
+    monkeypatch.setattr(scraper.session, "get", lambda *args, **kwargs: pytest.fail("standard transport must not be used"))
     job = scraper.scrape_url("https://ca.indeed.com/viewjob?jk=d721d1b5ad371161&from=shareddesktop_copy")
-    # If network allows, it will parse job details
-    if not job.raw_text.startswith("Error fetching URL:"):
-        assert "Software Engineering" in job.title or "Java" in job.raw_text
-        assert len(job.raw_text) > 100
+    assert "Software Engineering" in job.title
+    assert "Java" in job.raw_text
+    assert len(job.raw_text) > 100
 
 
