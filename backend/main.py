@@ -400,7 +400,7 @@ def add_application(req: ApplicationCreate, current_user: User = Depends(get_cur
 
 @app.patch("/api/applications/{app_id}", response_model=Application)
 def update_application(app_id: str, req: ApplicationUpdate, current_user: User = Depends(get_current_user)):
-    updated = storage.update_application(app_id, req)
+    updated = storage.update_application(app_id, req, user_id=current_user.id)
     if not updated:
         raise HTTPException(status_code=404, detail="Application not found.")
     return updated

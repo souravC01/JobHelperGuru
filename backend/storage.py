@@ -30,8 +30,35 @@ from backend.models import (
     Settings,
     SettingsUpdate,
 )
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from backend.services.encryption import encrypt_value, decrypt_value
 
+TRACKING_QUERY_PARAMS = {
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "src", "ref", "fbclid", "gclid", "trk", "trackingid", "source"
+}
+
+
+def canonical_posting_url(url: Optional[str]) -> Optional[str]:
+    if not url:
+        return None
+    clean = url.strip()
+    if not clean or clean.lower() == "manual_paste":
+        return None
+    try:
+        parts = urlsplit(clean)
+        if not parts.scheme or not parts.netloc:
+            return clean.rstrip("/")
+        scheme = parts.scheme.lower()
+        netloc = parts.netloc.lower()
+        path = parts.path.rstrip("/")
+        query_pairs = parse_qsl(parts.query, keep_blank_values=False)
+        filtered_pairs = [(k, v) for k, v in query_pairs if k.lower() not in TRACKING_QUERY_PARAMS]
+        filtered_pairs.sort()
+        query = urlencode(filtered_pairs)
+        return urlunsplit((scheme, netloc, path, query, ""))
+    except Exception:
+        return clean.rstrip("/")
 
 
 class StorageService:
@@ -229,7 +256,6 @@ class StorageService:
                     PRIMARY KEY (user_id, key)
                 )
             """)
-        self.deduplicate_existing_applications()
 
     # --- Users CRUD ---
     def create_user(
@@ -250,15 +276,6 @@ class StorageService:
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
                 ),
                 (user_id, clean_email, hashed_password, name, avatar_url, provider, now, now),
-            )
-            # Claim unassigned historical records for the first registered user
-            cursor.execute(
-                self._format_sql("UPDATE applications SET user_id = ? WHERE user_id IS NULL"),
-                (user_id,),
-            )
-            cursor.execute(
-                self._format_sql("UPDATE resumes SET user_id = ? WHERE user_id IS NULL"),
-                (user_id,),
             )
         return User(
             id=user_id,
@@ -390,84 +407,51 @@ class StorageService:
     def find_existing_application(
         self, url: Optional[str], company: str, role: str, user_id: Optional[str] = None
     ) -> Optional[Application]:
+        canon_url = canonical_posting_url(url)
         with self._get_cursor() as cursor:
-            # 1. Match by exact or normalized URL (excluding blank and manual_paste)
-            clean_url = (url or "").strip().rstrip("/")
-            if clean_url and clean_url != "manual_paste":
+            # 1. Match by canonical posting URL if URL is present
+            if canon_url:
                 if user_id:
                     cursor.execute(
                         self._format_sql(
-                            "SELECT * FROM applications WHERE TRIM(RTRIM(url, '/')) = ? AND url != '' AND url != 'manual_paste' AND user_id = ?"
+                            "SELECT * FROM applications WHERE url != '' AND url != 'manual_paste' AND user_id = ?"
                         ),
-                        (clean_url, user_id),
+                        (user_id,),
                     )
                 else:
                     cursor.execute(
                         self._format_sql(
-                            "SELECT * FROM applications WHERE TRIM(RTRIM(url, '/')) = ? AND url != '' AND url != 'manual_paste'"
-                        ),
-                        (clean_url,),
+                            "SELECT * FROM applications WHERE url != '' AND url != 'manual_paste'"
+                        )
                     )
-                row = cursor.fetchone()
-                if row:
-                    return self._row_to_application(row)
+                rows = cursor.fetchall()
+                for row in rows:
+                    if canonical_posting_url(row["url"]) == canon_url:
+                        return self._row_to_application(row)
+                # If a canonical URL is present and didn't match, it is a distinct posting (Fixes B1)
+                return None
 
-            # 2. Match by exact normalized company & role
+            # 2. Match by exact normalized company & role ONLY for postings without a URL
             clean_comp = (company or "").strip().lower()
             clean_r = (role or "").strip().lower()
             if clean_comp and clean_r:
                 if user_id:
                     cursor.execute(
                         self._format_sql(
-                            "SELECT * FROM applications WHERE LOWER(TRIM(company)) = ? AND LOWER(TRIM(role)) = ? AND user_id = ?"
+                            "SELECT * FROM applications WHERE LOWER(TRIM(company)) = ? AND LOWER(TRIM(role)) = ? AND (url IS NULL OR url = '' OR url = 'manual_paste') AND user_id = ?"
                         ),
                         (clean_comp, clean_r, user_id),
                     )
                 else:
                     cursor.execute(
                         self._format_sql(
-                            "SELECT * FROM applications WHERE LOWER(TRIM(company)) = ? AND LOWER(TRIM(role)) = ?"
+                            "SELECT * FROM applications WHERE LOWER(TRIM(company)) = ? AND LOWER(TRIM(role)) = ? AND (url IS NULL OR url = '' OR url = 'manual_paste')"
                         ),
                         (clean_comp, clean_r),
                     )
                 row = cursor.fetchone()
                 if row:
                     return self._row_to_application(row)
-
-                # 3. Match if company is a prefix or contains the other (e.g. 'MindBridge' vs 'MindBridge Analytics Inc.')
-                if len(clean_comp) >= 4:
-                    if user_id:
-                        cursor.execute(
-                            self._format_sql(
-                                """
-                                SELECT * FROM applications 
-                                WHERE LOWER(TRIM(role)) = ? 
-                                  AND (
-                                      LOWER(TRIM(company)) LIKE ? || '%' 
-                                      OR ? LIKE LOWER(TRIM(company)) || '%'
-                                  )
-                                  AND user_id = ?
-                                """
-                            ),
-                            (clean_r, clean_comp, clean_comp, user_id),
-                        )
-                    else:
-                        cursor.execute(
-                            self._format_sql(
-                                """
-                                SELECT * FROM applications 
-                                WHERE LOWER(TRIM(role)) = ? 
-                                  AND (
-                                      LOWER(TRIM(company)) LIKE ? || '%' 
-                                      OR ? LIKE LOWER(TRIM(company)) || '%'
-                                  )
-                                """
-                            ),
-                            (clean_r, clean_comp, clean_comp),
-                        )
-                    row = cursor.fetchone()
-                    if row:
-                        return self._row_to_application(row)
 
             return None
 
@@ -534,7 +518,7 @@ class StorageService:
                 "notes": app_data.notes if app_data.notes else existing.notes,
                 "best_resume_id": app_data.best_resume_id or existing.best_resume_id,
             }
-            updated = self.update_application(existing.id, updates)
+            updated = self.update_application(existing.id, updates, user_id=user_id)
             if updated:
                 return updated
             return existing
@@ -620,14 +604,20 @@ class StorageService:
                 return None
             return self._row_to_application(row)
 
-    def update_application(self, app_id: str, updates: Dict[str, Any] | ApplicationUpdate) -> Optional[Application]:
+    def update_application(
+        self, app_id: str, updates: Dict[str, Any] | ApplicationUpdate, *, user_id: Optional[str] = None
+    ) -> Optional[Application]:
+        existing = self.get_application(app_id, user_id=user_id)
+        if not existing:
+            return None
+
         if isinstance(updates, ApplicationUpdate):
             update_dict = updates.model_dump(exclude_unset=True)
         else:
             update_dict = {k: v for k, v in updates.items() if v is not None}
 
         if not update_dict:
-            return self.get_application(app_id)
+            return existing
 
         now = datetime.now().isoformat()
         update_dict["updated_at"] = now
@@ -636,19 +626,23 @@ class StorageService:
         values = []
         for k, v in update_dict.items():
             if k in ["required_skills", "ats_keywords"]:
-                v = json.dumps(v)
+                v = json.dumps(v if v is not None else [])
             elif isinstance(v, ApplicationStatus):
                 v = v.value
             fields.append(f"{k} = ?")
             values.append(v)
 
         values.append(app_id)
-        query = f"UPDATE applications SET {', '.join(fields)} WHERE id = ?"
+        if user_id:
+            values.append(user_id)
+            query = f"UPDATE applications SET {', '.join(fields)} WHERE id = ? AND user_id = ?"
+        else:
+            query = f"UPDATE applications SET {', '.join(fields)} WHERE id = ?"
 
         with self._get_cursor() as cursor:
             cursor.execute(self._format_sql(query), values)
 
-        return self.get_application(app_id)
+        return self.get_application(app_id, user_id=user_id)
 
     def delete_application(self, app_id: str, user_id: Optional[str] = None) -> bool:
         with self._get_cursor() as cursor:
@@ -659,6 +653,26 @@ class StorageService:
             return cursor.rowcount > 0
 
     def _row_to_application(self, row: Any) -> Application:
+        raw_skills = row["required_skills"]
+        skills = []
+        if raw_skills:
+            try:
+                parsed = json.loads(raw_skills)
+                if isinstance(parsed, list):
+                    skills = parsed
+            except Exception:
+                skills = []
+
+        raw_keywords = row["ats_keywords"]
+        keywords = []
+        if raw_keywords:
+            try:
+                parsed = json.loads(raw_keywords)
+                if isinstance(parsed, list):
+                    keywords = parsed
+            except Exception:
+                keywords = []
+
         return Application(
             id=row["id"],
             company=row["company"],
@@ -667,8 +681,8 @@ class StorageService:
             location=row["location"] or "Unknown",
             salary=row["salary"] or "Not specified",
             url=row["url"] or "",
-            required_skills=json.loads(row["required_skills"]) if row["required_skills"] else [],
-            ats_keywords=json.loads(row["ats_keywords"]) if row["ats_keywords"] else [],
+            required_skills=skills,
+            ats_keywords=keywords,
             date_added=row["date_added"],
             application_date=row["application_date"] or "",
             follow_up_date=row["follow_up_date"] or "",

@@ -94,19 +94,31 @@ def test_application_deduplication(tmp_path):
     assert len(apps) == 1  # No duplicate row created!
     assert "TypeScript" in second_app.required_skills
 
-    # 3. Add same job with slightly different URL or text paste (matching company & role)
-    app_data_same_company_role = ApplicationCreate(
-        company="mindbridge",  # case-insensitive check
-        role="qa & test automation developer",
+    # 3. Add same job with tracking parameters on URL (canonical match)
+    app_data_tracking_url = ApplicationCreate(
+        company="MindBridge",
+        role="QA & Test Automation Developer",
         status=ApplicationStatus.APPLIED,
         location="Remote",
-        url="https://www.linkedin.com/jobs/view/4462448668/",
+        url="https://jobs.dayforcehcm.com/en-CA/mindbridge/CANDIDATEPORTAL/jobs/217?utm_source=linkedin&ref=share",
         required_skills=["Python", "Playwright"],
     )
-    third_app = storage.add_application(app_data_same_company_role)
-    assert third_app.id == first_app.id  # Still same ID!
+    third_app = storage.add_application(app_data_tracking_url)
+    assert third_app.id == first_app.id  # Same canonical ID, updated in place!
     assert len(storage.get_applications()) == 1
     assert third_app.status == ApplicationStatus.APPLIED
+
+    # 4. Add job with a distinct URL: must NOT merge even if company & role match (Fixes B1)
+    app_data_distinct_url = ApplicationCreate(
+        company="mindbridge",
+        role="qa & test automation developer",
+        status=ApplicationStatus.INTERVIEWING,
+        location="Toronto, ON",
+        url="https://www.linkedin.com/jobs/view/4462448668/",
+    )
+    fourth_app = storage.add_application(app_data_distinct_url)
+    assert fourth_app.id != first_app.id
+    assert len(storage.get_applications()) == 2
 
 
 def test_deduplicate_applications_preserves_multi_tenant_isolation(tmp_path):

@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, ValidationInfo
 
 
 class ApplicationStatus(str, Enum):
@@ -60,6 +60,13 @@ class ApplicationUpdate(BaseModel):
     follow_up_date: Optional[str] = None
     notes: Optional[str] = None
     best_resume_id: Optional[str] = None
+
+    @field_validator("company", "role", "status", "required_skills", "ats_keywords", mode="before")
+    @classmethod
+    def reject_null_fields(cls, v: Any, info: ValidationInfo) -> Any:
+        if v is None:
+            raise ValueError(f"{info.field_name} cannot be null")
+        return v
 
 
 class Resume(BaseModel):
