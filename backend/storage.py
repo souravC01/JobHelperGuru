@@ -1261,7 +1261,92 @@ class StorageService:
                         updated_at=row.get("updated_at"),
                     )
                 )
-            return results
+
+        if not results:
+            results = self._migrate_legacy_keys_to_provider_profiles(user_id)
+
+        return results
+
+    def _migrate_legacy_keys_to_provider_profiles(self, user_id: str) -> List[ProviderProfileMetadata]:
+        """
+        Backwards-compatibility: If provider_profiles is empty for user, checks
+        legacy user_settings for saved_keys or api_key, creates encrypted provider
+        profiles, and returns them.
+        """
+        try:
+            with self._get_cursor() as cursor:
+                cursor.execute(
+                    self._format_sql("SELECT key, value FROM user_settings WHERE user_id = ?"),
+                    (user_id,),
+                )
+                rows = cursor.fetchall()
+                if not rows:
+                    return []
+                settings_map = {row["key"]: row["value"] for row in rows}
+
+            raw_saved = settings_map.get("saved_keys")
+            saved_list = []
+            if raw_saved:
+                try:
+                    decrypted = decrypt_value(raw_saved)
+                    if decrypted:
+                        parsed = json.loads(decrypted)
+                        if isinstance(parsed, list):
+                            saved_list = parsed
+                except Exception:
+                    pass
+
+            migrated = []
+            if saved_list:
+                for idx, item in enumerate(saved_list):
+                    if not isinstance(item, dict):
+                        continue
+                    key_val = (item.get("api_key") or "").strip()
+                    url_val = (item.get("api_base_url") or "").strip()
+                    model_val = (item.get("model_name") or "").strip()
+                    name_val = (item.get("name") or model_val or f"Saved AI Key {idx + 1}").strip()
+                    if not url_val and not model_val and not key_val:
+                        continue
+                    profile = self.create_provider_profile(
+                        user_id=user_id,
+                        profile_in=ProviderProfileCreate(
+                            name=name_val,
+                            api_base_url=url_val or "https://generativelanguage.googleapis.com/v1beta/openai/",
+                            model_name=model_val or "gemini-2.0-flash",
+                            api_key=key_val or None,
+                            is_active=(idx == 0),
+                        ),
+                    )
+                    migrated.append(profile)
+
+            if not migrated:
+                raw_key = settings_map.get("api_key")
+                decrypted_key = ""
+                if raw_key:
+                    try:
+                        decrypted_key = (decrypt_value(raw_key) or "").strip()
+                    except Exception:
+                        decrypted_key = ""
+                url_val = (settings_map.get("api_base_url") or "").strip()
+                model_val = (settings_map.get("model_name") or "").strip()
+
+                if decrypted_key:
+                    profile = self.create_provider_profile(
+                        user_id=user_id,
+                        profile_in=ProviderProfileCreate(
+                            name=model_val or "Active AI Key",
+                            api_base_url=url_val or "https://generativelanguage.googleapis.com/v1beta/openai/",
+                            model_name=model_val or "gemini-2.0-flash",
+                            api_key=decrypted_key,
+                            is_active=True,
+                        ),
+                    )
+                    migrated.append(profile)
+
+            return migrated
+        except Exception:
+            return []
+
 
     def get_provider_profile(self, profile_id: str, user_id: str) -> Optional[ProviderProfileMetadata]:
         with self._get_cursor() as cursor:

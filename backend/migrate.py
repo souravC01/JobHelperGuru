@@ -55,6 +55,7 @@ def run_migration(
     attachments_count = get_count("attachments")
     user_settings_count = get_count("user_settings")
     global_settings_count = get_count("settings")
+    provider_profiles_count = get_count("provider_profiles")
 
     summary = {
         "success": True,
@@ -69,6 +70,7 @@ def run_migration(
         "attachments_count": attachments_count,
         "user_settings_count": user_settings_count,
         "global_settings_count": global_settings_count,
+        "provider_profiles_count": provider_profiles_count,
     }
 
     if dry_run:
@@ -251,6 +253,43 @@ def run_migration(
         except Exception:
             pass
 
+        # 7. Migrate Provider Profiles
+        try:
+            src_profiles = src_cursor.execute("SELECT * FROM provider_profiles").fetchall()
+            for p in src_profiles:
+                dst_cursor.execute(
+                    dest_storage._format_sql("SELECT 1 FROM _migration_ledger WHERE table_name = ? AND source_id = ?"),
+                    ("provider_profiles", p["id"]),
+                )
+                if dst_cursor.fetchone():
+                    continue
+                target_user_id = p["user_id"] or map_unowned_to
+                dst_cursor.execute(
+                    dest_storage._format_sql(
+                        "INSERT INTO provider_profiles (id, user_id, name, api_base_url, model_name, api_key_encrypted, key_suffix, is_active, created_at, updated_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                        + ("ON CONFLICT (id) DO NOTHING" if dest_storage.is_postgres else "ON CONFLICT(id) DO NOTHING")
+                    ),
+                    (
+                        p["id"],
+                        target_user_id,
+                        p["name"],
+                        p["api_base_url"],
+                        p["model_name"],
+                        p["api_key_encrypted"],
+                        p["key_suffix"],
+                        p["is_active"],
+                        p["created_at"],
+                        p["updated_at"],
+                    ),
+                )
+                dst_cursor.execute(
+                    dest_storage._format_sql("INSERT INTO _migration_ledger VALUES (?, ?, ?, ?)"),
+                    (p["id"], "provider_profiles", p["id"], now),
+                )
+        except Exception:
+            pass
+
     src_conn.close()
     return summary
 
@@ -283,6 +322,7 @@ def main():
         print(f"Attachments: {res['attachments_count']}")
         print(f"User Settings: {res['user_settings_count']}")
         print(f"Global Settings: {res['global_settings_count']}")
+        print(f"Provider Profiles: {res['provider_profiles_count']}")
     except Exception as e:
         print(f"Migration error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -290,3 +330,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

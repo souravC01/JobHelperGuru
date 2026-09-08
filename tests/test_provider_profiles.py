@@ -189,3 +189,47 @@ def test_settings_validation_rejects_invalid_follow_up_days(client):
     resp_ok = client.post("/api/settings", headers=headers, json={"default_follow_up_days": 14})
     assert resp_ok.status_code == 200
     assert resp_ok.json()["default_follow_up_days"] == 14
+
+
+def test_legacy_settings_keys_auto_migrated_to_profiles(client):
+    from backend.main import storage
+    from backend.services.encryption import encrypt_value
+
+    email = "legacy_user@example.test"
+    headers = get_user_headers(client, email)
+
+    user = storage.get_user_by_email(email)
+    assert user is not None
+
+    # Simulate legacy database state: keys stored in user_settings table
+    user_id = user["id"] if isinstance(user, dict) else user.id
+    with storage._get_cursor() as cursor:
+        cursor.execute(
+            storage._format_sql("INSERT INTO user_settings (user_id, key, value) VALUES (?, ?, ?)"),
+            (user_id, "api_key", encrypt_value("sk-legacy-key-9999")),
+        )
+        cursor.execute(
+            storage._format_sql("INSERT INTO user_settings (user_id, key, value) VALUES (?, ?, ?)"),
+            (user_id, "api_base_url", "https://api.legacy.test/v1"),
+        )
+        cursor.execute(
+            storage._format_sql("INSERT INTO user_settings (user_id, key, value) VALUES (?, ?, ?)"),
+            (user_id, "model_name", "legacy-model"),
+        )
+
+    # Calling GET /api/settings/profiles must auto-migrate the legacy key into provider_profiles
+    list_resp = client.get("/api/settings/profiles", headers=headers)
+    assert list_resp.status_code == 200
+    profiles = list_resp.json()
+    assert len(profiles) == 1
+    assert profiles[0]["name"] == "legacy-model"
+    assert profiles[0]["api_base_url"] == "https://api.legacy.test/v1"
+    assert profiles[0]["model_name"] == "legacy-model"
+    assert profiles[0]["has_api_key"] is True
+    assert profiles[0]["key_suffix"] == "9999"
+    assert profiles[0]["is_active"] is True
+
+    # Confirm settings now reflects active_profile_id
+    settings_resp = client.get("/api/settings", headers=headers).json()
+    assert settings_resp["active_profile_id"] == profiles[0]["id"]
+
