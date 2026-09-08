@@ -14,7 +14,13 @@ from backend.models import (
     BulletOptimizationResponse,
     OutreachResponse,
 )
-from backend.services.heuristic_parser import HeuristicParser, filter_skills, extract_experience_required
+from backend.services.heuristic_parser import (
+    HeuristicParser,
+    filter_skills,
+    extract_experience_required,
+    extract_employer_grad_criteria,
+)
+from backend.services.skill_matching import contains_skill, match_skills
 
 
 def extract_json_from_llm_response(text: str) -> Any:
@@ -142,7 +148,7 @@ Do not wrap in markdown quotes. Return only raw JSON.
                 is_ng = bool(re.search(r"\b(new grad|new graduate|recent grad|recent graduate|university graduate|class of (?:20\d{2})|fresh graduate)\b", text, re.I))
                 data["is_new_grad_role"] = data.get("is_new_grad_role", is_ng)
                 if data["is_new_grad_role"]:
-                    data["new_grad_criteria"] = "Graduating in the next 4 months or graduated within the last 6 months"
+                    data["new_grad_criteria"] = extract_employer_grad_criteria(text)
 
                 # Enrich and normalize experience_required
                 exp_req = data.get("experience_required")
@@ -211,7 +217,9 @@ Return strict JSON:
                 eval_map = {item["resume_id"]: item for item in ai_evals}
                 for r in resumes:
                     ev = eval_map.get(r.id, {})
-                    eligibility = self.heuristic.check_new_grad_eligibility(r.content)
+                    eligibility = self.heuristic.check_new_grad_eligibility(
+                        r.content, employer_criteria=job.new_grad_criteria
+                    )
                     matched_kws = filter_skills(ev.get("matched_keywords", []))
                     missing_kws = filter_skills(ev.get("missing_keywords", []))
 
@@ -356,8 +364,10 @@ Return strict JSON:
         - Candidate C (Technical/result-focused)
         """
         # Determine claim verification status from evidence context
+        existing_bullet = request.existing_bullet or ""
+        existing_blob = existing_bullet.lower()
         evidence_blob = " ".join(request.evidence_context).lower()
-        existing_blob = request.existing_bullet.lower()
+
         # 1. Collect keywords
         keywords = [k.strip() for k in request.target_keywords if k and k.strip()]
         if not keywords and request.target_keyword and request.target_keyword.strip():
@@ -367,15 +377,11 @@ Return strict JSON:
 
         primary_kw = ", ".join(keywords)
 
-        # Check evidence for verification
-        evidence_blob = " ".join(request.evidence_context).lower()
-        existing_blob = request.existing_bullet.lower() if request.existing_bullet else ""
-
         unverified_kws = []
         for kw in keywords:
             if not (
-                re.search(rf"\b{re.escape(kw.lower())}\b", evidence_blob)
-                or re.search(rf"\b{re.escape(kw.lower())}\b", existing_blob)
+                contains_skill(evidence_blob, kw)
+                or contains_skill(existing_blob, kw)
             ):
                 unverified_kws.append(kw)
 
@@ -498,14 +504,40 @@ Claim Status: {claim_status.value}
                 def_proj = target_section_bullets[0]["section"] if target_section_bullets else (f"Recommended New {'Project' if is_project else 'Role'}: {request.target_job_title}")
                 def_bullet = target_section_bullets[0]["bullet"] if target_section_bullets else f"Add as a new bullet point under your {'Projects' if is_project else 'Work History'} section."
 
+                raw_alts = data.get("alternatives", [])
+                processed_alts = []
+                for alt_dict in raw_alts:
+                    alt = BulletAlternative(**alt_dict)
+                    if not is_verified:
+                        alt.claim_status = claim_status
+                        alt.requires_confirmation = True
+                        if not alt.assumption:
+                            alt.assumption = assumption
+                    # Check for unverified numeric or percentage claims
+                    metric_matches = re.findall(r"\b\d+(?:\.\d+)?%|\b\d+x\b|\b\d{2,}\b", alt.bullet)
+                    has_unverified_metric = False
+                    for m_val in metric_matches:
+                        if m_val.lower() not in evidence_blob and m_val.lower() not in existing_blob:
+                            has_unverified_metric = True
+                            break
+                    if has_unverified_metric:
+                        if alt.claim_status == ClaimStatus.VERIFIED:
+                            alt.claim_status = ClaimStatus.UNVERIFIED_METRIC
+                        alt.requires_confirmation = True
+                        if not alt.assumption:
+                            alt.assumption = "Requires user to supply supported metric"
+                    processed_alts.append(alt)
+
+                any_unconfirmed = requires_confirmation or any(a.requires_confirmation for a in processed_alts)
+
                 return BulletOptimizationResponse(
-                    status="rewritten" if is_verified else "suggested",
+                    status="rewritten" if (is_verified and not any_unconfirmed) else "suggested",
                     target_keyword=primary_kw,
                     target_keywords=keywords,
-                    claim_status=claim_status,
+                    claim_status=claim_status if is_verified else ClaimStatus.UNVERIFIED_SKILL,
                     selected_bullet_index=0,
-                    alternatives=[BulletAlternative(**alt) for alt in data.get("alternatives", [])],
-                    requires_confirmation=requires_confirmation,
+                    alternatives=processed_alts,
+                    requires_confirmation=any_unconfirmed,
                     warning=warning,
                     validation=data.get("validation", {}),
                     target_project_name=data.get("target_project_name") or def_proj,
@@ -543,13 +575,13 @@ Claim Status: {claim_status.value}
 
             alt_c = BulletAlternative(
                 variant_name="Candidate C (Technical/result-focused)",
-                bullet=f"Architected an end-to-end service pipeline powered by {kw}, reducing execution latency by [X%] and achieving 99.9% pipeline reliability.",
+                bullet=f"Architected an end-to-end service pipeline powered by {kw}, reducing execution latency by [X%] and achieving [target%] pipeline reliability.",
                 what=kw,
                 how=f"Architected an end-to-end service pipeline powered by {kw}",
-                result_or_reason="Reducing execution latency by [X%] and achieving 99.9% reliability",
+                result_or_reason="Reducing execution latency by [X%] and achieving [target%] reliability",
                 claim_status=ClaimStatus.UNVERIFIED_METRIC if is_verified else claim_status,
                 requires_confirmation=True,
-                assumption="Requires user to supply supported metric for [X%]",
+                assumption="Requires user to supply supported metric for [X%] and [target%]",
             )
 
             if project_bullets:
@@ -628,11 +660,13 @@ Claim Status: {claim_status.value}
 
     # --- 4. Tailored Outreach Generator ---
     def generate_outreach(self, job: JobAnalysisResult, resume: Resume) -> OutreachResponse:
+        has_content = bool(resume.content and resume.content.strip())
         client = self._get_client()
         if client:
             try:
                 system_prompt = """
 You are an expert career coach. Write a tailored, punchy, 3-paragraph cover letter pitch and a concise LinkedIn connection note based on the candidate's matched skills and the target job.
+If the candidate resume content is empty or lacks evidence, DO NOT fabricate affirmative claims of hands-on experience; provide a draft template with placeholders like [insert relevant experience] requiring user confirmation.
 Return strict JSON:
 {
   "subject_line": "Subject line for application email",
@@ -644,7 +678,7 @@ Return strict JSON:
                     model=self.model_name,
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Company: {job.company}\nRole: {job.title}\nJob Skills: {', '.join(job.required_skills)}\n\nCandidate Resume:\n{resume.content[:2500]}"},
+                        {"role": "user", "content": f"Company: {job.company}\nRole: {job.title}\nJob Skills: {', '.join(job.required_skills)}\n\nCandidate Resume:\n{resume.content[:2500] if has_content else '[Resume content is empty]'}"},
                     ],
                     temperature=0.4,
                 )
@@ -655,18 +689,30 @@ Return strict JSON:
                 raise RuntimeError(f"AI API Provider Failed ({self.model_name}): {str(e)}") from e
 
         # Offline fallback pitch
-        subject = f"Application: {job.title} - {resume.name}"
         skills_str = ", ".join(job.required_skills[:3]) if job.required_skills else "software engineering"
-        pitch = (
-            f"Dear Hiring Team at {job.company},\n\n"
-            f"I am writing to express my strong interest in the {job.title} position. With hands-on experience in {skills_str}, "
-            f"I have built scalable solutions and driven technical delivery across similar domain challenges.\n\n"
-            f"Throughout my background, I have prioritized clean architecture, automated testing, and high-performance system design. "
-            f"I am eager to bring this momentum to {job.company} to help accelerate your current engineering roadmap.\n\n"
-            f"Thank you for your time and consideration. I welcome the opportunity to discuss how my experience aligns with your team's goals.\n\n"
-            f"Sincerely,\nCandidate"
-        )
-        note = f"Hi! I noticed the {job.title} opening at {job.company} and would love to connect. I bring strong experience in {skills_str} and look forward to sharing ideas!"
+        if not has_content:
+            subject = f"Application Draft: {job.title} - {resume.name or 'Candidate'}"
+            pitch = (
+                f"Dear Hiring Team at {job.company},\n\n"
+                f"I am writing to express my interest in the {job.title} position. "
+                f"[Draft note: Please review and insert your relevant experience related to {skills_str} before submitting].\n\n"
+                f"[Highlight 1-2 key technical accomplishments, architecture decisions, or domain expertise here].\n\n"
+                f"Thank you for your time and consideration. I welcome the opportunity to discuss how my background aligns with your team's goals.\n\n"
+                f"Sincerely,\n[Your Name]"
+            )
+            note = f"Hi! I noticed the {job.title} opening at {job.company} and would love to connect to learn more about the engineering team's current focus."
+        else:
+            subject = f"Application: {job.title} - {resume.name}"
+            pitch = (
+                f"Dear Hiring Team at {job.company},\n\n"
+                f"I am writing to express my strong interest in the {job.title} position. With hands-on experience in {skills_str}, "
+                f"I have built scalable solutions and driven technical delivery across similar domain challenges.\n\n"
+                f"Throughout my background, I have prioritized clean architecture, automated testing, and high-performance system design. "
+                f"I am eager to bring this momentum to {job.company} to help accelerate your current engineering roadmap.\n\n"
+                f"Thank you for your time and consideration. I welcome the opportunity to discuss how my experience aligns with your team's goals.\n\n"
+                f"Sincerely,\nCandidate"
+            )
+            note = f"Hi! I noticed the {job.title} opening at {job.company} and would love to connect. I bring strong experience in {skills_str} and look forward to sharing ideas!"
 
         return OutreachResponse(
             subject_line=subject,

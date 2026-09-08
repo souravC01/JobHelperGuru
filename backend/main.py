@@ -272,16 +272,25 @@ def analyze_job(
             },
         )
 
-    # Prefer scraped title/company if AI/heuristic couldn't detect specific ones
-    if (not analysis.title or analysis.title in ["Open Position", "Detected Role"]) and scraped_title and scraped_title not in ["Open Position", "Detected Role", "Unknown Role"]:
+    UNKNOWN_TITLES = {"", "Open Position", "Detected Role", "Unknown Role", "Role Title", "Exact Role Title"}
+    UNKNOWN_COMPANIES = {"", "Unknown Company", "Company", "Company Name", "Detected Company"}
+    UNKNOWN_LOCATIONS = {"", "Unknown", "Identified Location", "City, State or Remote/Hybrid", "Unknown Location"}
+
+    # Prefer scraped title/company/location if AI/heuristic returned generic placeholders
+    if (not analysis.title or analysis.title in UNKNOWN_TITLES) and scraped_title and scraped_title not in UNKNOWN_TITLES:
         analysis.title = scraped_title
-    if (not analysis.company or analysis.company in ["Unknown Company", "Company"]) and scraped_company and scraped_company not in ["Unknown Company"]:
+    if (not analysis.company or analysis.company in UNKNOWN_COMPANIES) and scraped_company and scraped_company not in UNKNOWN_COMPANIES:
         analysis.company = scraped_company
-    if (not analysis.location or analysis.location == "Unknown") and scraped_location and scraped_location not in ["Unknown"]:
+    if (not analysis.location or analysis.location in UNKNOWN_LOCATIONS) and scraped_location and scraped_location not in UNKNOWN_LOCATIONS:
         analysis.location = scraped_location
 
+    analysis_dict = analysis.model_dump()
+    analysis_dict["title"] = analysis.title
+    analysis_dict["company"] = analysis.company
+    analysis_dict["location"] = analysis.location
+
     return {
-        "analysis": analysis.model_dump(),
+        "analysis": analysis_dict,
         "raw_text": job_text,
         "source_url": source_url,
         "title": analysis.title,

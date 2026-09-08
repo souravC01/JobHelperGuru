@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List, Set, Tuple, Optional, Dict, Any
 
 from backend.models import JobAnalysisResult, ResumeMatchResult
+from backend.services.skill_matching import contains_skill, match_skills
 
 # Curated high-value technical and soft skills taxonomy
 SKILL_TAXONOMY = {
@@ -90,16 +91,80 @@ def extract_experience_required(text: str, is_new_grad: bool = False) -> str:
     return "Not specified"
 
 
+def extract_employer_grad_criteria(text: str) -> Optional[str]:
+    """
+    Extracts explicit employer graduation date criteria if specified.
+    Returns None when no explicit criteria is detected.
+    """
+    if not text:
+        return None
+
+    # 1. Between month-year and month-year
+    m_between = re.search(
+        r"(?:graduat(?:ing|ed|ion)(?:\s+date)?|completion|degrees?\s+conferred)\s+between\s+([A-Za-z]+\s+\d{4})\s+(?:and|-)\s+([A-Za-z]+\s+\d{4})",
+        text,
+        re.I,
+    )
+    if m_between:
+        return f"Between {m_between.group(1).strip()} and {m_between.group(2).strip()}"
+
+    # 2. Between year and year
+    m_years = re.search(
+        r"(?:graduat(?:ing|ed|ion)|degrees?|class\s+of)\s+between\s+(\d{4})\s+(?:and|-)\s+(\d{4})",
+        text,
+        re.I,
+    )
+    if m_years:
+        return f"Between {m_years.group(1).strip()} and {m_years.group(2).strip()}"
+
+    # 3. Class of YYYY
+    m_class = re.search(
+        r"\bclass\s+of\s+(\d{4}(?:\s*(?:or|/|-)\s*\d{4})*)\b",
+        text,
+        re.I,
+    )
+    if m_class:
+        return f"Class of {m_class.group(1).strip()}"
+
+    # 4. Within N months/years of graduation
+    m_within = re.search(
+        r"\bwithin\s+(\d+)\s*(months?|years?)\s+of\s+(?:graduation|graduating|degree\s+completion)\b",
+        text,
+        re.I,
+    )
+    if m_within:
+        return f"Within {m_within.group(1)} {m_within.group(2)} of graduation"
+
+    # 5. Graduating by Month Year
+    m_by = re.search(
+        r"(?:graduat(?:ing|ed|ion)|completion)\s+(?:by|before|no\s+later\s+than)\s+([A-Za-z]+\s+\d{4}|\d{4})",
+        text,
+        re.I,
+    )
+    if m_by:
+        return f"Graduating by {m_by.group(1).strip()}"
+
+    return None
+
+
 class HeuristicParser:
     def __init__(self, taxonomy: Set[str] = None):
         self.taxonomy = taxonomy or SKILL_TAXONOMY
 
-    def check_new_grad_eligibility(self, resume_text: str, ref_date: Optional[datetime] = None) -> Dict[str, Any]:
+    def check_new_grad_eligibility(
+        self,
+        resume_text: str,
+        employer_criteria: Optional[Any] = None,
+        ref_date: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
         """
-        Determines whether a candidate qualifies as a New Grad:
-        - Graduating in the next 4 months (0 <= months_diff <= 4)
-        - Graduated within the last 6 months (-6 <= months_diff < 0)
+        Determines candidate graduation eligibility against the employer criteria:
+        Returns:
+          eligible: True (meets timeline), False (outside window), None (unknown / criteria unspecified)
         """
+        if isinstance(employer_criteria, datetime):
+            ref_date = employer_criteria
+            employer_criteria = None
         ref_date = ref_date or datetime.now()
         months_map = {
             'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
@@ -133,25 +198,84 @@ class HeuristicParser:
                     break
 
         if not grad_date:
-            return {'eligible': False, 'status': 'Graduation date not detected', 'grad_date': None, 'months_diff': None}
+            return {'eligible': None, 'status': 'Graduation date not detected', 'grad_date': None, 'months_diff': None}
 
         months_diff = (grad_date.year - ref_date.year) * 12 + (grad_date.month - ref_date.month)
-        is_eligible = (-6 <= months_diff <= 4)
 
-        if 0 <= months_diff <= 4:
-            timing = f'graduating in {months_diff} month(s) ({grad_str})'
-            status = f'Eligible New Grad ({timing})'
-        elif -6 <= months_diff < 0:
-            timing = f'graduated {-months_diff} month(s) ago ({grad_str})'
-            status = f'Eligible New Grad ({timing})'
-        elif months_diff > 4:
-            timing = f'expected graduation in {months_diff} months ({grad_str})'
-            status = f'Current Student ({timing} - exceeds 4-month new grad window)'
-        else:
-            timing = f'graduated {-months_diff} months ago ({grad_str})'
-            status = f'Experienced Professional ({timing} - exceeds 6-month new grad window)'
+        if not employer_criteria or str(employer_criteria).strip().lower() in ("none", "not specified", "unknown"):
+            return {
+                'eligible': None,
+                'status': f'Graduation date detected ({grad_str}); employer window not specified',
+                'grad_date': grad_str,
+                'months_diff': months_diff,
+            }
 
-        return {'eligible': is_eligible, 'status': status, 'grad_date': grad_str, 'months_diff': months_diff}
+        crit_lower = employer_criteria.strip().lower()
+
+        # 1. Between dates
+        m_between = re.search(r"between\s+([a-z]+)?\s*(\d{4})\s+(?:and|-)\s+([a-z]+)?\s*(\d{4})", crit_lower)
+        if m_between:
+            m1_name, y1, m2_name, y2 = m_between.groups()
+            m1 = months_map.get(m1_name[:3], 1) if m1_name else 1
+            y1 = int(y1)
+            m2 = months_map.get(m2_name[:3], 12) if m2_name else 12
+            y2 = int(y2)
+            start_date = datetime(y1, m1, 1)
+            end_date = datetime(y2, m2, 28)
+            is_eligible = start_date <= grad_date <= end_date
+            if is_eligible:
+                status = f"Eligible New Grad ({grad_str} is within employer window {employer_criteria})"
+            else:
+                status = f"Ineligible for New Grad window ({grad_str} is outside employer window {employer_criteria})"
+            return {'eligible': is_eligible, 'status': status, 'grad_date': grad_str, 'months_diff': months_diff}
+
+        # 2. Class of
+        m_class = re.search(r"class\s+of\s+([\d\s/,or-]+)", crit_lower)
+        if m_class:
+            allowed_years = [int(y) for y in re.findall(r"\b20\d{2}\b", m_class.group(1))]
+            is_eligible = grad_date.year in allowed_years
+            if is_eligible:
+                status = f"Eligible New Grad (Class of {grad_date.year} matches employer criteria)"
+            else:
+                status = f"Ineligible for New Grad window (Class of {grad_date.year} does not match {employer_criteria})"
+            return {'eligible': is_eligible, 'status': status, 'grad_date': grad_str, 'months_diff': months_diff}
+
+        # 3. Within N months/years
+        m_within = re.search(r"within\s+(\d+)\s*(months?|years?)", crit_lower)
+        if m_within:
+            num = int(m_within.group(1))
+            unit = m_within.group(2)
+            n_months = num * 12 if "year" in unit else num
+            is_eligible = -n_months <= months_diff <= 4
+            if is_eligible:
+                status = f"Eligible New Grad ({grad_str} is within {num} {unit} of graduation)"
+            else:
+                status = f"Ineligible for New Grad window ({grad_str} exceeds {num} {unit} of graduation)"
+            return {'eligible': is_eligible, 'status': status, 'grad_date': grad_str, 'months_diff': months_diff}
+
+        # 4. Standard 4-month-ahead / 6-month-past window
+        if "4 months" in crit_lower and "6 months" in crit_lower:
+            is_eligible = (-6 <= months_diff <= 4)
+            if 0 <= months_diff <= 4:
+                timing = f'graduating in {months_diff} month(s) ({grad_str})'
+                status = f'Eligible New Grad ({timing})'
+            elif -6 <= months_diff < 0:
+                timing = f'graduated {-months_diff} month(s) ago ({grad_str})'
+                status = f'Eligible New Grad ({timing})'
+            elif months_diff > 4:
+                timing = f'expected graduation in {months_diff} months ({grad_str})'
+                status = f'Current Student ({timing} - exceeds 4-month new grad window)'
+            else:
+                timing = f'graduated {-months_diff} months ago ({grad_str})'
+                status = f'Experienced Professional ({timing} - exceeds 6-month new grad window)'
+            return {'eligible': is_eligible, 'status': status, 'grad_date': grad_str, 'months_diff': months_diff}
+
+        return {
+            'eligible': None,
+            'status': f'Candidate graduation detected ({grad_str}); verify against employer criteria: {employer_criteria}',
+            'grad_date': grad_str,
+            'months_diff': months_diff,
+        }
 
     def analyze_job_text(self, text: str) -> JobAnalysisResult:
         lowered = text.lower()
@@ -159,7 +283,7 @@ class HeuristicParser:
         # 1. Salary Detection
         salary_range = "Not specified"
         salary_match = re.search(
-            r"(\$\s?[0-9]{2,3}(?:,[0-9]{3})*(?:\s*[kK])?(?:\s*[-–to]+\s*\$\s?[0-9]{2,3}(?:,[0-9]{3})*(?:\s*[kK])?)?(?:\s*(?:/yr|/year|/hr|/hour|per year|annually))?)",
+            r"(\$\s?[0-9]{2,3}(?:,[0-9]{3})*(?:\s*[kK])?(?:\s*[-to]+\s*\$\s?[0-9]{2,3}(?:,[0-9]{3})*(?:\s*[kK])?)?(?:\s*(?:/yr|/year|/hr|/hour|per year|annually))?)",
             text,
             re.I,
         )
@@ -178,7 +302,7 @@ class HeuristicParser:
         # 3. Experience Level & New Grad Detection
         exp_level = "Not specified"
         is_new_grad = bool(re.search(r"\b(new grad|new graduate|recent grad|recent graduate|university graduate|class of (?:20\d{2})|fresh graduate)\b", lowered))
-        new_grad_criteria = "Graduating in the next 4 months or graduated within the last 6 months" if is_new_grad else None
+        new_grad_criteria = extract_employer_grad_criteria(text) if is_new_grad else None
 
         if is_new_grad or re.search(r"\b(entry level|junior|associate|intern)\b", lowered):
             exp_level = "Entry"
@@ -192,8 +316,7 @@ class HeuristicParser:
         # 4. Extract Skills from text matching taxonomy
         found_skills = []
         for skill in self.taxonomy:
-            pattern = rf"\b{re.escape(skill)}\b"
-            if re.search(pattern, text, re.I):
+            if contains_skill(text, skill):
                 found_skills.append(skill)
 
         # Separate required vs preferred vs tech stack
@@ -247,9 +370,9 @@ class HeuristicParser:
         summary = f"Role requiring proficiency in {', '.join(required_skills[:3]) if required_skills else 'software engineering'} with {work_mode} flexibility."
 
         return JobAnalysisResult(
-            company="Detected Company",
-            title="Detected Role",
-            location="Identified Location",
+            company="Unknown Company",
+            title="Open Position",
+            location="Unknown",
             work_mode=work_mode,
             salary_range=salary_range,
             experience_level=exp_level,
@@ -271,15 +394,7 @@ class HeuristicParser:
 
         target_skills = filter_skills(target_skills)
 
-        matched = []
-        missing = []
-
-        for skill in target_skills:
-            pattern = rf"\b{re.escape(skill)}\b"
-            if re.search(pattern, resume_text, re.I):
-                matched.append(skill)
-            else:
-                missing.append(skill)
+        matched, missing = match_skills(resume_text, target_skills)
 
         # Strict filter for missing and matched
         matched = filter_skills(matched)
@@ -292,7 +407,10 @@ class HeuristicParser:
             score = int((len(matched) / total_target) * 100)
 
         # Check New Grad eligibility
-        eligibility = self.check_new_grad_eligibility(resume_text)
+        eligibility = self.check_new_grad_eligibility(
+            resume_text,
+            employer_criteria=job_analysis.new_grad_criteria,
+        )
 
         fit_summary = (
             f"Matches {len(matched)} of {total_target} key target skills ({score}%). "
