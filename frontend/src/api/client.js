@@ -31,8 +31,10 @@ export async function authFetch(url, options = {}) {
   }
   const res = await fetch(url, { ...options, headers });
   if (res.status === 401) {
-    clearAuth();
-    window.dispatchEvent(new CustomEvent('jh_auth_unauthorized'));
+    if (token && token === getToken()) {
+      clearAuth();
+      window.dispatchEvent(new CustomEvent('jh_auth_unauthorized', { detail: { token } }));
+    }
   }
   return res;
 }
