@@ -29,6 +29,7 @@ from backend.services.scraper import ScraperService
 from backend.services.ai_engine import AIEngine, extract_raw_content_from_response
 from backend.services.excel_exporter import ExcelExporter
 from backend.services.object_storage import ObjectStorageService
+from backend.services.outbound_http import SSRFBlockedError
 from backend.routers.auth import router as auth_router, get_current_user, get_optional_user, set_storage_service
 
 app = FastAPI(title="JobHelperGuru API", version="1.0.0")
@@ -518,17 +519,17 @@ def update_settings(req: SettingsUpdate, current_user: User = Depends(get_curren
 
 
 @app.post("/api/settings/test-ai")
-def test_ai(req: SettingsUpdate):
-    ai = AIEngine(
-        api_base_url=req.api_base_url or "https://integrate.api.nvidia.com/v1",
-        api_key=req.api_key,
-        model_name=req.model_name or "nvidia/nemotron-4-340b-instruct",
-    )
-    client = ai._get_client()
-    if not client or not ai.api_key:
-        return {"success": False, "message": "No API key configured. App will use offline heuristic NLP."}
-
+def test_ai(req: SettingsUpdate, current_user: User = Depends(get_current_user)):
     try:
+        ai = AIEngine(
+            api_base_url=req.api_base_url or "https://integrate.api.nvidia.com/v1",
+            api_key=req.api_key,
+            model_name=req.model_name or "nvidia/nemotron-4-340b-instruct",
+        )
+        client = ai._get_client()
+        if not client or not ai.api_key:
+            return {"success": False, "message": "No API key configured. App will use offline heuristic NLP."}
+
         resp = client.chat.completions.create(
             model=ai.model_name,
             messages=[{"role": "user", "content": "Ping. Respond with 'pong'"}],
@@ -539,6 +540,11 @@ def test_ai(req: SettingsUpdate):
         return {
             "success": True,
             "message": f"Successfully connected to {ai.model_name}!{response_preview}",
+        }
+    except SSRFBlockedError as e:
+        return {
+            "success": False,
+            "message": f"Connection blocked by security policy: {str(e)}",
         }
     except Exception as e:
         return {

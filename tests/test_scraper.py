@@ -98,9 +98,10 @@ def test_extract_embedded_greenhouse_ats(monkeypatch):
     def mock_get(url, *args, **kwargs):
         return MockResponse()
 
-    monkeypatch.setattr("backend.services.scraper.socket.getaddrinfo", lambda *args: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("socket.getaddrinfo", lambda *args, **kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
     monkeypatch.setattr("backend.services.scraper.CURL_CFFI_AVAILABLE", False)
     monkeypatch.setattr(scraper.session, "get", mock_get)
+    monkeypatch.setattr(scraper.safe_client, "get", mock_get)
 
     job = scraper.scrape_url("https://www.acme.com/careers?gh_jid=12345")
     assert job.title == "Full Stack Engineer"
@@ -209,7 +210,7 @@ def test_scrape_indeed_url_with_tls_impersonation(monkeypatch):
         status_code = 200
         text = captured_html
 
-    monkeypatch.setattr("backend.services.scraper.socket.getaddrinfo", lambda *args: [(None, None, None, None, ("93.184.216.34", 0))])
+    monkeypatch.setattr("socket.getaddrinfo", lambda *args, **kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
     monkeypatch.setattr("backend.services.scraper.CURL_CFFI_AVAILABLE", True)
     monkeypatch.setattr("backend.services.scraper.cffi_requests.get", lambda *args, **kwargs: CapturedResponse())
     monkeypatch.setattr(scraper.session, "get", lambda *args, **kwargs: pytest.fail("standard transport must not be used"))
@@ -217,5 +218,21 @@ def test_scrape_indeed_url_with_tls_impersonation(monkeypatch):
     assert "Software Engineering" in job.title
     assert "Java" in job.raw_text
     assert len(job.raw_text) > 100
+
+
+def test_iframe_ssrf_attempt_is_rejected():
+    scraper = ScraperService()
+    malicious_html = """
+    <html>
+      <body>
+        <iframe src="http://127.0.0.1:8000/internal?dummy=greenhouse.io"></iframe>
+        <iframe src="http://evil.attacker.com/portal?ats=lever.co"></iframe>
+        <iframe src="https://evil-greenhouse.io.attacker.com/jobs/1"></iframe>
+      </body>
+    </html>
+    """
+    job = scraper._try_fetch_embedded_ats(malicious_html, source_url="https://example.com/job")
+    assert job is None
+
 
 

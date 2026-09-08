@@ -261,17 +261,27 @@ def test_settings_test_ai_endpoint_with_reasoning_model(monkeypatch):
 
     monkeypatch.setattr("backend.services.ai_engine.AIEngine._get_client", lambda self: MockClient())
 
-    res = client.post(
-        "/api/settings/test-ai",
-        json={
-            "api_base_url": "https://api.tokenrouter.com/v1",
-            "api_key": "tr-test-key",
-            "model_name": "z-ai/glm-5.3",
-        },
+    from backend.routers.auth import get_current_user
+    from backend.models import User
+
+    app.dependency_overrides[get_current_user] = lambda: User(
+        id="user-1", email="test@example.com", name="Tester", created_at="2026-09-07T00:00:00"
     )
-    assert res.status_code == 200
-    data = res.json()
-    assert data["success"] is True
-    assert "Successfully connected to z-ai/glm-5.3!" in data["message"]
-    assert "Thinking about pong..." in data["message"]
+
+    try:
+        res = client.post(
+            "/api/settings/test-ai",
+            json={
+                "api_base_url": "https://api.tokenrouter.com/v1",
+                "api_key": "tr-test-key",
+                "model_name": "z-ai/glm-5.3",
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["success"] is True
+        assert "Successfully connected to z-ai/glm-5.3!" in data["message"]
+        assert "Thinking about pong..." in data["message"]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
 

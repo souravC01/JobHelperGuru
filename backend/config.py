@@ -29,6 +29,7 @@ DEFAULT_ALLOWED_AI_HOSTS: List[str] = [
     "api.groq.com",
     "api.together.xyz",
     "api.tokenrouter.com",
+    "integrate.api.nvidia.com",
 ]
 
 DEFAULT_LOCAL_AI_HOSTS: List[str] = [

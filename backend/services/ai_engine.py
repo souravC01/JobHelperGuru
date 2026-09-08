@@ -83,6 +83,16 @@ class AIEngine:
     def _get_client(self) -> Optional[OpenAI]:
         if not self.api_key or not self.api_key.strip() or self.model_name in ["offline-heuristic", "offline"]:
             return None
+        from backend.config import load_config
+        from backend.services.outbound_http import OutboundPolicy, validate_destination_url
+        cfg = load_config()
+        policy = OutboundPolicy(
+            mode=cfg.app_mode,
+            allowed_provider_hosts=set(cfg.allowed_provider_hosts),
+            local_ai_hosts=set(cfg.local_ai_hosts),
+            is_ai_request=True,
+        )
+        validate_destination_url(self.api_base_url, policy)
         try:
             return OpenAI(base_url=self.api_base_url, api_key=self.api_key, timeout=30.0)
         except Exception as e:
