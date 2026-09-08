@@ -2,7 +2,6 @@ import io
 import re
 import zipfile
 from pathlib import Path
-from typing import Optional
 
 MAX_PDF_PAGES = 100
 MAX_EXTRACTED_CHARS = 100_000

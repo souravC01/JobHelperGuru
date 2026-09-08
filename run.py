@@ -1,6 +1,4 @@
 import os
-import sys
-import subprocess
 from pathlib import Path
 
 def main():
@@ -8,7 +6,7 @@ def main():
     host = os.environ.get("HOST", "127.0.0.1")
 
     print("=" * 60)
-    print("   JobHelperGuru — AI Job Assistant & Application Tracker")
+    print("   JobHelperGuru - AI Job Assistant & Application Tracker")
     print("=" * 60)
     print(f"Starting server at: http://{host}:{port}")
     print("Press Ctrl+C to stop.\n")

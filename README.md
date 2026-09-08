@@ -50,13 +50,13 @@
 
 7. **Universal Model Support + Zero-Key Offline Mode:**
    - Connect to **MiniMax M3**, **NVIDIA Nemotron 3/4**, **Local Ollama**, or **OpenRouter** in the Settings modal.
-   - Built-in **offline heuristic NLP engine** with 600+ skills taxonomy - works 100% free even without any API key or internet access!
+   - Built-in **heuristic NLP engine** with 600+ skills taxonomy - works free without an external AI API key for pasted jobs and local ranking!
 
 8. **Multi-Tenant Security & Cloud Storage:**
    - Secure user authentication via Google One-Tap / OAuth 2.0 or email/password (JWT + bcrypt).
    - Multi-tenant data isolation on Neon Serverless PostgreSQL with automated fallback to local SQLite.
    - Secure Cloudflare R2 document storage with time-limited signed download URLs.
-   - AES-256 encrypted-at-rest user API keys.
+   - Authenticated Fernet (AES-128-CBC + HMAC-SHA256) encrypted-at-rest user API keys.
 
 ---
 

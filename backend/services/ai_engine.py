@@ -7,7 +7,6 @@ from backend.models import (
     JobAnalysisResult,
     Resume,
     RankedResume,
-    ResumeMatchResult,
     ClaimStatus,
     BulletAlternative,
     BulletOptimizationRequest,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { CheckCircle2, Star, Wrench, Users } from 'lucide-react';
 
 export default function SkillsMatrix({

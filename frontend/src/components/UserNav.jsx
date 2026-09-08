@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { User as UserIcon, LogOut, Settings as SettingsIcon, ChevronDown } from 'lucide-react';
 import { logoutUser } from '../api/client';
 

@@ -66,10 +66,6 @@ async function parseApiError(res, defaultMsg) {
   return err;
 }
 
-export async function fetchHealth() {
-  const res = await fetch(`${API_BASE}/health`);
-  return res.json();
-}
 
 // --- Auth APIs ---
 export async function registerUser({ email, password, name }) {
@@ -347,10 +343,6 @@ export async function deleteApplication(id) {
   return res.json();
 }
 
-/** @deprecated Use downloadExcelReport() which sends authenticated JWT Bearer headers */
-export function getExcelExportUrl() {
-  return `${API_BASE}/export/excel`;
-}
 
 export async function downloadExcelReport() {
   const res = await authFetch(`${API_BASE}/export/excel`);

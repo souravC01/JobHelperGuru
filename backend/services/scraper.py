@@ -196,7 +196,7 @@ class ScraperService:
 
         # Clean title if it contains company separator (e.g. "Software Engineer - TechCorp")
         if title and company:
-            title = re.sub(rf"\s*[-|–]\s*{re.escape(company)}.*", "", title, flags=re.I).strip()
+            title = re.sub(rf"\s*[-|\u2013\u2014]\s*{re.escape(company)}.*", "", title, flags=re.I).strip()
         elif title and " - " in title:
             parts = title.split(" - ")
             title = parts[0].strip()
@@ -235,7 +235,7 @@ class ScraperService:
 
         # Check first 5 lines for common headline patterns like "Role at Company"
         for line in lines[:5]:
-            match = re.search(r"^(.*?)\s+at\s+(.*?)(?:\s*[-–(].*)?$", line, re.I)
+            match = re.search(r"^(.*?)\s+at\s+(.*?)(?:\s*[-\u2013\u2014(].*)?$", line, re.I)
             if match:
                 title = match.group(1).strip()
                 company = match.group(2).strip()
@@ -265,8 +265,6 @@ class ScraperService:
         Detects modern ATS widgets embedded on corporate career portals
         (e.g. Greenhouse API embed, Lever embed, Ashby embed, or embedded iframes).
         """
-        import html as html_lib
-
         # 1. Direct Greenhouse API Endpoint in HTML (e.g. IXL, Figma, Stripe, Airbnb)
         gh_match = re.search(
             r"boards-api\.greenhouse\.io[\\/]+v1[\\/]+boards[\\/]+([^\\/\"'\s]+)[\\/]+jobs[\\/]+(\d+)",
@@ -556,7 +554,7 @@ class ScraperService:
         if not match:
             return None
 
-        host, locale, portal, job_path = match.group(1), match.group(2), match.group(3), match.group(4)
+        host, _locale, portal, job_path = match.group(1), match.group(2), match.group(3), match.group(4)
         tenant = host.split(".")[0]
         job_slug = job_path.split("?")[0]
         if "/" in job_slug:

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Bell, Calendar } from 'lucide-react';
 import { localDate } from '../utils/localDate';
 

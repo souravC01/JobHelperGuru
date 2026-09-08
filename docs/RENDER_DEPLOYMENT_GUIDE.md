@@ -78,7 +78,7 @@ In your Render Service Dashboard, navigate to **Environment** and add the follow
 | Environment Variable | Description | Example / Generator |
 | :--- | :--- | :--- |
 | `DATABASE_URL` | Neon PostgreSQL pooled connection string | `postgresql://user:pass@ep-xyz-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require` |
-| `SETTINGS_ENCRYPTION_KEY` | AES-256 Fernet key for encrypting user API keys | Generate using command below |
+| `SETTINGS_ENCRYPTION_KEY` | Authenticated Fernet (AES-128-CBC + HMAC-SHA256) key for encrypting user API keys | Generate using command below |
 | `JWT_SECRET_KEY` | 64-char secret key for JWT session tokens | Generate using command below |
 | `ALLOWED_ORIGINS` | Comma-separated CORS origins | `https://jobhelperguru.onrender.com,http://localhost:5173,http://localhost:8000` |
 | `R2_ACCOUNT_ID` | Cloudflare Account ID | Found on Cloudflare Dashboard |

@@ -1,4 +1,3 @@
-import React from 'react';
 import { MapPin, DollarSign, Calendar, ExternalLink, ArrowRight, ArrowLeft } from 'lucide-react';
 
 const COLUMNS = [

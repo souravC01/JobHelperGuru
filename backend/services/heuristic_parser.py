@@ -1,7 +1,7 @@
 import re
 from collections import Counter
 from datetime import datetime
-from typing import List, Set, Tuple, Optional, Dict, Any
+from typing import List, Set, Optional, Dict, Any
 
 from backend.models import JobAnalysisResult, ResumeMatchResult
 from backend.services.skill_matching import contains_skill, match_skills

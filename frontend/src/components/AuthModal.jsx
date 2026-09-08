@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Mail, Lock, User as UserIcon, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, Briefcase, ArrowLeft } from 'lucide-react';
 import { loginUser, registerUser, googleAuthUser, requestEmailVerification, requestPasswordReset } from '../api/client';
 

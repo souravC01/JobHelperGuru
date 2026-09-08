@@ -26,7 +26,6 @@ from backend.models import (
     ApplicationUpdate,
     ApplicationStatus,
     Resume,
-    ResumeCreate,
     ResumeAttachment,
     Settings,
     SettingsUpdate,
