@@ -3,7 +3,7 @@ import os
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dotenv import load_dotenv
@@ -882,6 +882,20 @@ class StorageService:
         req_skills_json = json.dumps(app_data.required_skills or [])
         ats_keywords_json = json.dumps(app_data.ats_keywords or [])
 
+        app_date = app_data.application_date or ""
+        follow_up_date = app_data.follow_up_date or ""
+        if status_val == ApplicationStatus.APPLIED.value:
+            if not app_date:
+                app_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            if not follow_up_date:
+                user_settings = self.get_settings(user_id=user_id)
+                default_days = user_settings.default_follow_up_days if user_settings else 7
+                try:
+                    dt = datetime.strptime(app_date, "%Y-%m-%d")
+                    follow_up_date = (dt + timedelta(days=default_days)).strftime("%Y-%m-%d")
+                except ValueError:
+                    pass
+
         with self._get_cursor() as cursor:
             cursor.execute(
                 self._format_sql(
@@ -905,8 +919,8 @@ class StorageService:
                     req_skills_json,
                     ats_keywords_json,
                     date_added,
-                    app_data.application_date or "",
-                    app_data.follow_up_date or "",
+                    app_date,
+                    follow_up_date,
                     app_data.notes or "",
                     app_data.best_resume_id,
                     now,
@@ -968,8 +982,33 @@ class StorageService:
         else:
             update_dict = {k: v for k, v in updates.items() if v is not None}
 
-        if not update_dict:
-            return existing
+        # On transition to Applied, initialize application_date and follow_up_date if not set
+        new_status = update_dict.get("status")
+        if new_status in [ApplicationStatus.APPLIED, ApplicationStatus.APPLIED.value]:
+            effective_app_date = existing.application_date
+            if not effective_app_date:
+                client_date = update_dict.get("application_date")
+                valid_date = None
+                if client_date and isinstance(client_date, str):
+                    try:
+                        datetime.strptime(client_date.strip(), "%Y-%m-%d")
+                        valid_date = client_date.strip()
+                    except ValueError:
+                        valid_date = None
+                if not valid_date:
+                    valid_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                update_dict["application_date"] = valid_date
+                effective_app_date = valid_date
+
+            if not existing.follow_up_date and "follow_up_date" not in update_dict and effective_app_date:
+                user_settings = self.get_settings(user_id=user_id)
+                default_days = user_settings.default_follow_up_days if user_settings else 7
+                try:
+                    dt = datetime.strptime(effective_app_date, "%Y-%m-%d")
+                    follow_up = (dt + timedelta(days=default_days)).strftime("%Y-%m-%d")
+                    update_dict["follow_up_date"] = follow_up
+                except ValueError:
+                    pass
 
         now = datetime.now().isoformat()
         update_dict["updated_at"] = now

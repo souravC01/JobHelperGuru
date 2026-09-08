@@ -16,44 +16,33 @@ import {
 import KanbanBoard from './KanbanBoard';
 import FollowUpBanner from './FollowUpBanner';
 import {
-  getApplications,
   updateApplication,
   deleteApplication,
   downloadExcelReport,
 } from '../api/client';
+import { localDate } from '../utils/localDate';
 
 const STATUS_OPTIONS = ['Wishlist', 'Applied', 'Interviewing', 'Offered', 'Rejected', 'Archived'];
 
-export default function ApplicationsTracker({ refreshTrigger }) {
-  const [applications, setApplications] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function ApplicationsTracker({
+  applications = [],
+  onApplicationsChanged,
+}) {
   const [viewMode, setViewMode] = useState('table'); // 'table' or 'kanban'
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [editingNotesId, setEditingNotesId] = useState(null);
   const [tempNotes, setTempNotes] = useState('');
 
-  const loadApplications = async () => {
-    setLoading(true);
-    try {
-      const data = await getApplications();
-      setApplications(data);
-    } catch (err) {
-      console.error('Failed to load applications:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadApplications();
-  }, [refreshTrigger]);
-
   const handleStatusChange = async (appId, newStatus) => {
     try {
-      await updateApplication(appId, { status: newStatus });
-      setApplications((prev) =>
-        prev.map((app) => (app.id === appId ? { ...app, status: newStatus } : app))
+      const updates = { status: newStatus };
+      if (newStatus === 'Applied') {
+        updates.application_date = localDate();
+      }
+      const updated = await updateApplication(appId, updates);
+      onApplicationsChanged?.(
+        applications.map((app) => (app.id === appId ? updated : app))
       );
     } catch (err) {
       alert('Failed to update status');
@@ -62,9 +51,9 @@ export default function ApplicationsTracker({ refreshTrigger }) {
 
   const handleFollowUpDateChange = async (appId, newDate) => {
     try {
-      await updateApplication(appId, { follow_up_date: newDate });
-      setApplications((prev) =>
-        prev.map((app) => (app.id === appId ? { ...app, follow_up_date: newDate } : app))
+      const updated = await updateApplication(appId, { follow_up_date: newDate });
+      onApplicationsChanged?.(
+        applications.map((app) => (app.id === appId ? updated : app))
       );
     } catch (err) {
       alert('Failed to update follow-up date');
@@ -73,9 +62,9 @@ export default function ApplicationsTracker({ refreshTrigger }) {
 
   const handleSaveNotes = async (appId) => {
     try {
-      await updateApplication(appId, { notes: tempNotes });
-      setApplications((prev) =>
-        prev.map((app) => (app.id === appId ? { ...app, notes: tempNotes } : app))
+      const updated = await updateApplication(appId, { notes: tempNotes });
+      onApplicationsChanged?.(
+        applications.map((app) => (app.id === appId ? updated : app))
       );
       setEditingNotesId(null);
     } catch (err) {
@@ -87,7 +76,7 @@ export default function ApplicationsTracker({ refreshTrigger }) {
     if (!window.confirm('Delete this tracked application?')) return;
     try {
       await deleteApplication(appId);
-      setApplications((prev) => prev.filter((app) => app.id !== appId));
+      onApplicationsChanged?.(applications.filter((app) => app.id !== appId));
     } catch (err) {
       alert('Failed to delete application');
     }
@@ -95,12 +84,11 @@ export default function ApplicationsTracker({ refreshTrigger }) {
 
   // KPIs
   const totalApps = applications.length;
-  const appliedCount = applications.filter((a) => a.status === 'Applied').length;
   const interviewCount = applications.filter((a) => a.status === 'Interviewing').length;
   const offerCount = applications.filter((a) => a.status === 'Offered').length;
   const followUpCount = applications.filter((a) => a.follow_up_date).length;
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = localDate();
 
   // Filtered applications
   const filteredApps = applications.filter((app) => {
@@ -262,9 +250,7 @@ export default function ApplicationsTracker({ refreshTrigger }) {
       </div>
 
       {/* Content: Table or Kanban */}
-      {loading ? (
-        <div className="py-12 text-center text-[#666666] text-xs font-mono">Loading applications...</div>
-      ) : applications.length === 0 ? (
+      {applications.length === 0 ? (
         <div className="card-corporate p-12 bg-white border border-[#e0e0e0] text-center space-y-3 rounded-lg shadow-none">
           <Briefcase className="mx-auto text-[#666666]" size={40} />
           <h3 className="font-bold text-[#000000] text-sm">No tracked applications yet</h3>

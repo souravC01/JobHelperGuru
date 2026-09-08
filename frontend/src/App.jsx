@@ -57,7 +57,6 @@ export default function App() {
   const [currentJob, setCurrentJob] = useState(null);
   const [resumes, setResumes] = useState([]);
   const [applications, setApplications] = useState([]);
-  const [refreshTrackerTrigger, setRefreshTrackerTrigger] = useState(0);
   const [rankingRefreshKey, setRankingRefreshKey] = useState(0);
 
   // Modals state
@@ -209,7 +208,6 @@ export default function App() {
   };
 
   const handleApplicationSaved = async () => {
-    setRefreshTrackerTrigger((prev) => prev + 1);
     const updatedApps = await getApplications().catch(() => []);
     setApplications(updatedApps);
   };
@@ -510,10 +508,8 @@ export default function App() {
           currentUser ? (
             <ApplicationsTracker
               key={currentUser?.id || 'anon'}
-              refreshTrigger={refreshTrackerTrigger}
-              onCountChanged={() => {
-                getApplications().then(setApplications).catch(() => {});
-              }}
+              applications={applications}
+              onApplicationsChanged={setApplications}
             />
           ) : (
             <div className="max-w-xl mx-auto my-12 p-8 rounded-lg bg-white border border-[#e0e0e0] text-center">
