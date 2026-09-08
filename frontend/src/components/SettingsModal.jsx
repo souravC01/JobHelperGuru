@@ -15,7 +15,16 @@ import {
   Tag,
   Zap,
 } from 'lucide-react';
-import { getSettings, updateSettings, testAISettings } from '../api/client';
+import {
+  getSettings,
+  updateSettings,
+  testAISettings,
+  getProviderProfiles,
+  createProviderProfile,
+  updateProviderProfile,
+  activateProviderProfile,
+  deleteProviderProfile,
+} from '../api/client';
 
 export default function SettingsModal({ isOpen, onClose, currentUser = null, isOnboarding = false, onSettingsChanged = null }) {
   // Form fields
@@ -43,121 +52,50 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
     }
   }, [isOpen]);
 
-  // Helper to deduplicate an array of key profiles
-  const deduplicateKeys = (keysList) => {
-    const seen = new Set();
-    return keysList.filter((k) => {
-      const sig = `${(k.api_base_url || '').trim()}::${(k.model_name || '').trim()}::${(k.api_key || '').trim()}`;
-      if (seen.has(sig)) return false;
-      seen.add(sig);
-      return true;
-    });
-  };
-
   const loadSettingsAndKeys = async () => {
     try {
-      const data = await getSettings();
-      let parsedSavedKeys = [];
+      const [settingsData, profilesData] = await Promise.all([
+        getSettings(),
+        getProviderProfiles().catch(() => []),
+      ]);
 
-      setIsOfflineActive(Boolean(data.use_offline_mode));
+      setIsOfflineActive(Boolean(settingsData.use_offline_mode));
+      const profiles = profilesData || [];
+      setSavedKeys(profiles);
 
-      if (data.saved_keys) {
-        try {
-          parsedSavedKeys = JSON.parse(data.saved_keys);
-        } catch (e) {
-          parsedSavedKeys = [];
-        }
-      }
-
-      // Fallback to localStorage if backend saved_keys is empty (scoped to currentUser to prevent cross-account leaks)
-      if (!parsedSavedKeys || parsedSavedKeys.length === 0) {
-        const localKey = currentUser?.id ? `jobhelperguru_saved_keys_${currentUser.id}` : null;
-        if (localKey) {
-          const local = localStorage.getItem(localKey);
-          if (local) {
-            try {
-              parsedSavedKeys = JSON.parse(local);
-            } catch (e) {
-              parsedSavedKeys = [];
-            }
-          }
-        }
-      }
-
-      // If still empty but an active key exists (non-blank), auto-populate the first saved profile
-      if (parsedSavedKeys.length === 0 && data.api_key && data.api_key.trim()) {
-        const initialProfile = {
-          id: 'key-' + Date.now(),
-          name: data.model_name || 'Active AI Key',
-          api_base_url: data.api_base_url || 'https://generativelanguage.googleapis.com/v1beta/openai/',
-          model_name: data.model_name || 'gemini-2.0-flash',
-          api_key: data.api_key || '',
-          created_at: new Date().toISOString(),
-        };
-        parsedSavedKeys = [initialProfile];
-      }
-
-      // Clean up any duplicates from earlier saves
-      parsedSavedKeys = deduplicateKeys(parsedSavedKeys);
-
-      // Find active key accurately based on backend database state
-      let currentActiveId = null;
-      if (!data.use_offline_mode && data.api_key && data.api_key.trim()) {
-        const activeMatch = parsedSavedKeys.find(
-          (k) =>
-            (k.api_base_url || '').trim() === (data.api_base_url || '').trim() &&
-            (k.model_name || '').trim() === (data.model_name || '').trim() &&
-            (k.api_key || '').trim() === (data.api_key || '').trim()
-        );
-
-        if (activeMatch) {
-          currentActiveId = activeMatch.id;
-        } else {
-          // The database has an active key that wasn't in parsedSavedKeys. Add it so the user sees it accurately!
-          const dbProfile = {
-            id: 'key-' + Date.now(),
-            name: data.model_name || 'Active AI Key',
-            api_base_url: data.api_base_url || '',
-            model_name: data.model_name || '',
-            api_key: data.api_key || '',
-            created_at: new Date().toISOString(),
-          };
-          parsedSavedKeys.unshift(dbProfile);
-          currentActiveId = dbProfile.id;
-        }
-      }
-
-      setSavedKeys(parsedSavedKeys);
+      const currentActiveId = settingsData.active_profile_id || (profiles.find((p) => p.is_active)?.id ?? null);
       setActiveKeyId(currentActiveId);
 
-      // Populate form with current active profile or clear for new users
-      const target = parsedSavedKeys.find((k) => k.id === currentActiveId);
+      // Populate form with active profile if available, else defaults
+      const target = profiles.find((k) => k.id === currentActiveId);
       if (target) {
         setEditingId(target.id);
         setKeyName(target.name || '');
         setBaseUrl(target.api_base_url || '');
         setModelName(target.model_name || '');
-        setApiKey(target.api_key || '');
+        setApiKey('');
       } else {
         setEditingId(null);
         setKeyName('');
-        setBaseUrl(data.api_base_url || 'https://generativelanguage.googleapis.com/v1beta/openai/');
-        setModelName(data.model_name || 'gemini-2.0-flash');
-        setApiKey(data.api_key || '');
+        setBaseUrl(settingsData.api_base_url || 'https://generativelanguage.googleapis.com/v1beta/openai/');
+        setModelName(settingsData.model_name || 'gemini-2.0-flash');
+        setApiKey('');
       }
 
       setTestResult(null);
     } catch (err) {
-      console.error('Failed to load settings:', err);
+      console.error('Failed to load settings and profiles:', err);
     }
   };
 
   if (!isOpen) return null;
 
-  const maskKey = (key) => {
-    if (!key) return 'No Key (Public / Local Endpoint)';
-    if (key.length <= 8) return '••••••••';
-    return `${key.slice(0, 4)}••••••••${key.slice(-4)}`;
+  const maskKey = (profile) => {
+    if (!profile) return 'No Key (Public / Local Endpoint)';
+    if (profile.has_api_key) {
+      return profile.key_suffix ? `••••••••${profile.key_suffix}` : 'Configured (Server Encrypted)';
+    }
+    return 'No Key (Public / Local Endpoint)';
   };
 
   const handleSwitchToOffline = async () => {
@@ -166,8 +104,7 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
       await updateSettings({
         use_offline_mode: true,
       });
-      setIsOfflineActive(true);
-      setActiveKeyId(null);
+      await loadSettingsAndKeys();
       setTestResult({
         success: true,
         message: 'Active engine switched to Built-in Offline Heuristic. Zero API keys used.',
@@ -183,21 +120,8 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
   const handleActivateKey = async (profile) => {
     setSaving(true);
     try {
-      await updateSettings({
-        api_base_url: profile.api_base_url.trim(),
-        api_key: profile.api_key.trim(),
-        model_name: profile.model_name.trim(),
-        use_offline_mode: false,
-        saved_keys: JSON.stringify(savedKeys),
-      });
-
-      setIsOfflineActive(false);
-      setActiveKeyId(profile.id);
-      setEditingId(profile.id);
-      setKeyName(profile.name);
-      setBaseUrl(profile.api_base_url);
-      setModelName(profile.model_name);
-      setApiKey(profile.api_key);
+      await activateProviderProfile(profile.id);
+      await loadSettingsAndKeys();
       setTestResult({
         success: true,
         message: `Active provider switched to ${profile.name} (${profile.model_name})!`,
@@ -215,33 +139,23 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
     setKeyName(profile.name || '');
     setBaseUrl(profile.api_base_url || '');
     setModelName(profile.model_name || '');
-    setApiKey(profile.api_key || '');
+    setApiKey('');
     setTestResult(null);
   };
 
   const activeProfile = savedKeys.find((k) => k.id === activeKeyId);
 
   const handleDeleteKey = async (idToDelete) => {
-    const updated = savedKeys.filter((k) => k.id !== idToDelete);
-    setSavedKeys(updated);
-    if (currentUser?.id) {
-      localStorage.setItem(`jobhelperguru_saved_keys_${currentUser.id}`, JSON.stringify(updated));
-    }
-
     try {
-      await updateSettings({
-        saved_keys: JSON.stringify(updated),
-      });
+      await deleteProviderProfile(idToDelete);
+      await loadSettingsAndKeys();
+      if (editingId === idToDelete) {
+        handleAddNewKey();
+      }
+      if (onSettingsChanged) onSettingsChanged();
     } catch (e) {
-      console.error('Failed to update saved keys after delete:', e);
-    }
-
-    if (activeKeyId === idToDelete) {
-      setActiveKeyId(null);
-    }
-
-    if (editingId === idToDelete) {
-      handleAddNewKey();
+      console.error('Failed to delete provider profile:', e);
+      alert('Failed to delete provider profile: ' + e.message);
     }
   };
 
@@ -267,64 +181,26 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
     const trimmedKey = apiKey.trim();
     const nameToUse = keyName.trim() || trimmedModel || 'Custom AI Provider';
 
-    let updatedList = [...savedKeys];
-
-    let targetIndex = -1;
-    if (editingId) {
-      targetIndex = updatedList.findIndex((item) => item.id === editingId);
-    }
-
-    if (targetIndex === -1) {
-      targetIndex = updatedList.findIndex(
-        (item) =>
-          item.api_base_url.trim() === trimmedUrl &&
-          item.model_name.trim() === trimmedModel &&
-          item.api_key.trim() === trimmedKey
-      );
-    }
-
-    let savedId;
-    if (targetIndex !== -1) {
-      savedId = updatedList[targetIndex].id;
-      updatedList[targetIndex] = {
-        ...updatedList[targetIndex],
-        name: nameToUse,
-        api_base_url: trimmedUrl,
-        model_name: trimmedModel,
-        api_key: trimmedKey,
-        updated_at: new Date().toISOString(),
-      };
-    } else {
-      savedId = 'key-' + Date.now();
-      const newProfile = {
-        id: savedId,
-        name: nameToUse,
-        api_base_url: trimmedUrl,
-        model_name: trimmedModel,
-        api_key: trimmedKey,
-        created_at: new Date().toISOString(),
-      };
-      updatedList.unshift(newProfile);
-    }
-
-    updatedList = deduplicateKeys(updatedList);
-    setSavedKeys(updatedList);
-    if (currentUser?.id) {
-      localStorage.setItem(`jobhelperguru_saved_keys_${currentUser.id}`, JSON.stringify(updatedList));
-    }
-
     try {
-      await updateSettings({
-        api_base_url: trimmedUrl,
-        api_key: trimmedKey,
-        model_name: trimmedModel,
-        use_offline_mode: false,
-        saved_keys: JSON.stringify(updatedList),
-      });
+      if (editingId && savedKeys.some((k) => k.id === editingId)) {
+        await updateProviderProfile(editingId, {
+          name: nameToUse,
+          api_base_url: trimmedUrl,
+          model_name: trimmedModel,
+          api_key: trimmedKey ? trimmedKey : undefined,
+          is_active: true,
+        });
+      } else {
+        await createProviderProfile({
+          name: nameToUse,
+          api_base_url: trimmedUrl,
+          model_name: trimmedModel,
+          api_key: trimmedKey || undefined,
+          is_active: true,
+        });
+      }
 
-      setActiveKeyId(savedId);
-      setEditingId(savedId);
-      setIsOfflineActive(false);
+      await loadSettingsAndKeys();
       setSaveSuccess(true);
       if (onSettingsChanged) onSettingsChanged();
       setTimeout(() => setSaveSuccess(false), 2000);
@@ -346,7 +222,7 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
     try {
       const res = await testAISettings({
         api_base_url: baseUrl.trim(),
-        api_key: apiKey.trim(),
+        api_key: apiKey.trim() || undefined,
         model_name: modelName.trim(),
       });
       setTestResult(res);
@@ -357,7 +233,7 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
     }
   };
 
-  const isEditingExisting = editingId && savedKeys.some((k) => k.id === editingId);
+  const isEditingExisting = Boolean(editingId && savedKeys.some((k) => k.id === editingId));
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
@@ -543,7 +419,7 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
                       </div>
 
                       <div className="font-mono text-[10px] text-[#666666]">
-                        Key: {maskKey(item.api_key)}
+                        Key: {maskKey(item)}
                       </div>
                     </div>
 
@@ -684,7 +560,11 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
               type={showKey ? 'text' : 'password'}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Paste your API key here (AIzaSy... or sk-...)"
+              placeholder={
+                isEditingExisting && savedKeys.find((k) => k.id === editingId)?.has_api_key
+                  ? '•••••••• (Leave blank to keep existing key)'
+                  : 'Paste your API key here (AIzaSy... or sk-...)'
+              }
               className="input-corporate w-full font-mono text-xs"
             />
           </div>

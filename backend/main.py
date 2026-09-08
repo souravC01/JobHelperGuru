@@ -17,6 +17,9 @@ from backend.models import (
     ResumeUpdate,
     Settings,
     SettingsUpdate,
+    ProviderProfileMetadata,
+    ProviderProfileCreate,
+    ProviderProfileUpdate,
     JobAnalysisResult,
     RankedResume,
     BulletOptimizationRequest,
@@ -68,6 +71,12 @@ else:
 
 
 def get_ai_engine(user_id: Optional[str] = None) -> AIEngine:
+    if not user_id:
+        return AIEngine(
+            api_base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            api_key="",
+            model_name="offline-heuristic",
+        )
     settings = storage.get_settings(user_id=user_id)
     if settings.use_offline_mode:
         return AIEngine(
@@ -75,9 +84,14 @@ def get_ai_engine(user_id: Optional[str] = None) -> AIEngine:
             api_key="",
             model_name="offline-heuristic",
         )
+    api_key = settings.api_key
+    if settings.active_profile_id:
+        profile_key = storage.get_provider_profile_secret(settings.active_profile_id, user_id=user_id)
+        if profile_key:
+            api_key = profile_key
     return AIEngine(
         api_base_url=settings.api_base_url,
-        api_key=settings.api_key,
+        api_key=api_key,
         model_name=settings.model_name,
     )
 
@@ -507,23 +521,80 @@ def export_excel(current_user: User = Depends(get_current_user)):
     )
 
 
-# --- Settings ---
+# --- Settings & Provider Profiles ---
 @app.get("/api/settings", response_model=Settings)
 def get_settings(current_user: User = Depends(get_current_user)):
-    return storage.get_settings(user_id=current_user.id)
+    s = storage.get_settings(user_id=current_user.id)
+    s_dict = s.model_dump()
+    s_dict["api_key"] = ""
+    s_dict["saved_keys"] = "[]"
+    return Settings(**s_dict)
 
 
 @app.post("/api/settings", response_model=Settings)
 def update_settings(req: SettingsUpdate, current_user: User = Depends(get_current_user)):
-    return storage.update_settings(req, user_id=current_user.id)
+    s = storage.update_settings(req, user_id=current_user.id)
+    s_dict = s.model_dump()
+    s_dict["api_key"] = ""
+    s_dict["saved_keys"] = "[]"
+    return Settings(**s_dict)
+
+
+@app.get("/api/settings/profiles", response_model=List[ProviderProfileMetadata])
+def list_profiles(current_user: User = Depends(get_current_user)):
+    return storage.get_provider_profiles(user_id=current_user.id)
+
+
+@app.post("/api/settings/profiles", response_model=ProviderProfileMetadata)
+def create_profile(req: ProviderProfileCreate, current_user: User = Depends(get_current_user)):
+    return storage.create_provider_profile(user_id=current_user.id, profile_in=req)
+
+
+@app.get("/api/settings/profiles/{profile_id}", response_model=ProviderProfileMetadata)
+def get_profile(profile_id: str, current_user: User = Depends(get_current_user)):
+    profile = storage.get_provider_profile(profile_id, user_id=current_user.id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Provider profile not found.")
+    return profile
+
+
+@app.patch("/api/settings/profiles/{profile_id}", response_model=ProviderProfileMetadata)
+def update_profile(profile_id: str, req: ProviderProfileUpdate, current_user: User = Depends(get_current_user)):
+    profile = storage.update_provider_profile(profile_id, user_id=current_user.id, updates=req)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Provider profile not found.")
+    return profile
+
+
+@app.post("/api/settings/profiles/{profile_id}/activate", response_model=ProviderProfileMetadata)
+def activate_profile(profile_id: str, current_user: User = Depends(get_current_user)):
+    profile = storage.activate_provider_profile(profile_id, user_id=current_user.id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Provider profile not found.")
+    return profile
+
+
+@app.delete("/api/settings/profiles/{profile_id}")
+def delete_profile(profile_id: str, current_user: User = Depends(get_current_user)):
+    success = storage.delete_provider_profile(profile_id, user_id=current_user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Provider profile not found.")
+    return {"success": True}
 
 
 @app.post("/api/settings/test-ai")
 def test_ai(req: SettingsUpdate, current_user: User = Depends(get_current_user)):
     try:
+        api_key = req.api_key
+        if not api_key:
+            s = storage.get_settings(user_id=current_user.id)
+            if s.active_profile_id:
+                api_key = storage.get_provider_profile_secret(s.active_profile_id, user_id=current_user.id)
+            if not api_key:
+                api_key = s.api_key
         ai = AIEngine(
             api_base_url=req.api_base_url or "https://integrate.api.nvidia.com/v1",
-            api_key=req.api_key,
+            api_key=api_key or "",
             model_name=req.model_name or "nvidia/nemotron-4-340b-instruct",
         )
         client = ai._get_client()
@@ -554,6 +625,6 @@ def test_ai(req: SettingsUpdate, current_user: User = Depends(get_current_user))
 
 
 # --- Static frontend files mounting ---
-dist_path = Path("frontend/dist")
+dist_path = (Path(__file__).resolve().parent.parent / "frontend" / "dist").resolve()
 if dist_path.exists() and dist_path.is_dir():
     app.mount("/", StaticFiles(directory=str(dist_path), html=True), name="frontend")

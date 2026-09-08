@@ -3,7 +3,7 @@ import os
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dotenv import load_dotenv
@@ -30,6 +30,9 @@ from backend.models import (
     ResumeAttachment,
     Settings,
     SettingsUpdate,
+    ProviderProfileMetadata,
+    ProviderProfileCreate,
+    ProviderProfileUpdate,
 )
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from backend.services.encryption import encrypt_value, decrypt_value, DecryptionError
@@ -306,6 +309,21 @@ class StorageService:
                     key TEXT NOT NULL,
                     value TEXT NOT NULL,
                     PRIMARY KEY (user_id, key)
+                )
+            """)
+            # Provider Profiles table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS provider_profiles (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    api_base_url TEXT NOT NULL,
+                    model_name TEXT NOT NULL,
+                    api_key_encrypted TEXT,
+                    key_suffix TEXT,
+                    is_active BOOLEAN DEFAULT FALSE,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
                 )
             """)
 
@@ -1020,6 +1038,16 @@ class StorageService:
         except DecryptionError:
             saved_keys = "[]"
 
+        raw_profile_id = settings_map.get("active_profile_id")
+        active_profile_id = (
+            raw_profile_id.strip()
+            if raw_profile_id and raw_profile_id.strip() not in ("", "None", "null")
+            else None
+        )
+
+        has_api_key = bool(api_key)
+        key_suffix = api_key[-4:] if (api_key and len(api_key) >= 4) else (api_key if api_key else None)
+
         return Settings(
             api_base_url=settings_map.get("api_base_url", defaults.api_base_url),
             api_key=api_key,
@@ -1027,6 +1055,9 @@ class StorageService:
             default_follow_up_days=int(settings_map.get("default_follow_up_days", defaults.default_follow_up_days)),
             saved_keys=saved_keys,
             use_offline_mode=use_offline_mode,
+            active_profile_id=active_profile_id,
+            has_api_key=has_api_key,
+            key_suffix=key_suffix,
         )
 
     def update_settings(self, updates: SettingsUpdate, user_id: Optional[str] = None) -> Settings:
@@ -1044,22 +1075,302 @@ class StorageService:
         with self._get_cursor() as cursor:
             if user_id:
                 for key, val in to_store.items():
+                    stored_val = "" if val is None else str(val)
                     cursor.execute(
                         self._format_sql(
                             "INSERT INTO user_settings (user_id, key, value) VALUES (?, ?, ?) "
                             "ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value"
                         ),
-                        (user_id, key, str(val)),
+                        (user_id, key, stored_val),
                     )
             else:
                 for key, val in to_store.items():
+                    stored_val = "" if val is None else str(val)
                     cursor.execute(
                         self._format_sql(
                             "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
                         ),
-                        (key, str(val)),
+                        (key, stored_val),
                     )
         return self.get_settings(user_id=user_id)
+
+    # --- Provider Profiles CRUD ---
+    def create_provider_profile(self, user_id: str, profile_in: ProviderProfileCreate) -> ProviderProfileMetadata:
+        profile_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        api_key = (profile_in.api_key or "").strip()
+        api_key_encrypted = encrypt_value(api_key) if api_key else None
+        key_suffix = api_key[-4:] if len(api_key) >= 4 else (api_key if api_key else None)
+        has_api_key = bool(api_key)
+        is_active = bool(profile_in.is_active)
+
+        with self._get_cursor() as cursor:
+            if is_active:
+                if self.is_postgres:
+                    cursor.execute(
+                        self._format_sql("UPDATE provider_profiles SET is_active = FALSE WHERE user_id = ?"),
+                        (user_id,),
+                    )
+                else:
+                    cursor.execute(
+                        "UPDATE provider_profiles SET is_active = 0 WHERE user_id = ?",
+                        (user_id,),
+                    )
+
+            cursor.execute(
+                self._format_sql(
+                    "INSERT INTO provider_profiles (id, user_id, name, api_base_url, model_name, api_key_encrypted, key_suffix, is_active, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                ),
+                (
+                    profile_id,
+                    user_id,
+                    profile_in.name,
+                    profile_in.api_base_url,
+                    profile_in.model_name,
+                    api_key_encrypted,
+                    key_suffix,
+                    is_active if self.is_postgres else (1 if is_active else 0),
+                    now,
+                    now,
+                ),
+            )
+
+        if is_active:
+            self.update_settings(
+                SettingsUpdate(
+                    active_profile_id=profile_id,
+                    api_base_url=profile_in.api_base_url,
+                    model_name=profile_in.model_name,
+                    use_offline_mode=False,
+                    api_key=api_key if api_key else None,
+                ),
+                user_id=user_id,
+            )
+
+        return ProviderProfileMetadata(
+            id=profile_id,
+            name=profile_in.name,
+            api_base_url=profile_in.api_base_url,
+            model_name=profile_in.model_name,
+            is_active=is_active,
+            has_api_key=has_api_key,
+            key_suffix=key_suffix,
+            created_at=now,
+            updated_at=now,
+        )
+
+    def get_provider_profiles(self, user_id: str) -> List[ProviderProfileMetadata]:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                self._format_sql(
+                    "SELECT id, user_id, name, api_base_url, model_name, api_key_encrypted, key_suffix, is_active, created_at, updated_at "
+                    "FROM provider_profiles WHERE user_id = ? ORDER BY created_at DESC"
+                ),
+                (user_id,),
+            )
+            rows = cursor.fetchall()
+            results = []
+            for r in rows:
+                row = dict(r)
+                is_active = bool(row["is_active"])
+                has_api_key = bool(row.get("api_key_encrypted"))
+                results.append(
+                    ProviderProfileMetadata(
+                        id=row["id"],
+                        name=row["name"],
+                        api_base_url=row["api_base_url"],
+                        model_name=row["model_name"],
+                        is_active=is_active,
+                        has_api_key=has_api_key,
+                        key_suffix=row.get("key_suffix"),
+                        created_at=row.get("created_at"),
+                        updated_at=row.get("updated_at"),
+                    )
+                )
+            return results
+
+    def get_provider_profile(self, profile_id: str, user_id: str) -> Optional[ProviderProfileMetadata]:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                self._format_sql(
+                    "SELECT id, user_id, name, api_base_url, model_name, api_key_encrypted, key_suffix, is_active, created_at, updated_at "
+                    "FROM provider_profiles WHERE id = ? AND user_id = ?"
+                ),
+                (profile_id, user_id),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            r = dict(row)
+            is_active = bool(r["is_active"])
+            has_api_key = bool(r.get("api_key_encrypted"))
+            return ProviderProfileMetadata(
+                id=r["id"],
+                name=r["name"],
+                api_base_url=r["api_base_url"],
+                model_name=r["model_name"],
+                is_active=is_active,
+                has_api_key=has_api_key,
+                key_suffix=r.get("key_suffix"),
+                created_at=r.get("created_at"),
+                updated_at=r.get("updated_at"),
+            )
+
+    def get_provider_profile_secret(self, profile_id: str, user_id: str) -> Optional[str]:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                self._format_sql(
+                    "SELECT api_key_encrypted FROM provider_profiles WHERE id = ? AND user_id = ?"
+                ),
+                (profile_id, user_id),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            r = dict(row)
+            encrypted = r.get("api_key_encrypted")
+            if not encrypted:
+                return None
+            try:
+                return decrypt_value(encrypted)
+            except DecryptionError:
+                return None
+
+    def update_provider_profile(
+        self, profile_id: str, user_id: str, updates: ProviderProfileUpdate
+    ) -> Optional[ProviderProfileMetadata]:
+        existing = self.get_provider_profile(profile_id, user_id)
+        if not existing:
+            return None
+
+        update_dict = updates.model_dump(exclude_unset=True)
+        now = datetime.now(timezone.utc).isoformat()
+        name = update_dict.get("name", existing.name)
+        api_base_url = update_dict.get("api_base_url", existing.api_base_url)
+        model_name = update_dict.get("model_name", existing.model_name)
+        is_active = update_dict.get("is_active", existing.is_active)
+
+        api_key_encrypted = None
+        key_suffix = existing.key_suffix
+        update_key_sql = ""
+        key_params = []
+
+        if "api_key" in update_dict and update_dict["api_key"] is not None:
+            raw_key = update_dict["api_key"].strip()
+            if raw_key:
+                api_key_encrypted = encrypt_value(raw_key)
+                key_suffix = raw_key[-4:] if len(raw_key) >= 4 else raw_key
+            else:
+                api_key_encrypted = None
+                key_suffix = None
+            update_key_sql = ", api_key_encrypted = ?, key_suffix = ?"
+            key_params = [api_key_encrypted, key_suffix]
+
+        with self._get_cursor() as cursor:
+            if is_active and not existing.is_active:
+                if self.is_postgres:
+                    cursor.execute(
+                        self._format_sql("UPDATE provider_profiles SET is_active = FALSE WHERE user_id = ?"),
+                        (user_id,),
+                    )
+                else:
+                    cursor.execute(
+                        "UPDATE provider_profiles SET is_active = 0 WHERE user_id = ?",
+                        (user_id,),
+                    )
+
+            sql = (
+                f"UPDATE provider_profiles SET name = ?, api_base_url = ?, model_name = ?, is_active = ?, updated_at = ?"
+                f"{update_key_sql} WHERE id = ? AND user_id = ?"
+            )
+            params = [
+                name,
+                api_base_url,
+                model_name,
+                is_active if self.is_postgres else (1 if is_active else 0),
+                now,
+            ] + key_params + [profile_id, user_id]
+            cursor.execute(self._format_sql(sql), tuple(params))
+
+        if is_active:
+            secret = self.get_provider_profile_secret(profile_id, user_id)
+            self.update_settings(
+                SettingsUpdate(
+                    active_profile_id=profile_id,
+                    api_base_url=api_base_url,
+                    model_name=model_name,
+                    use_offline_mode=False,
+                    api_key=secret if secret else None,
+                ),
+                user_id=user_id,
+            )
+
+        return self.get_provider_profile(profile_id, user_id)
+
+    def activate_provider_profile(self, profile_id: str, user_id: str) -> Optional[ProviderProfileMetadata]:
+        existing = self.get_provider_profile(profile_id, user_id)
+        if not existing:
+            return None
+
+        with self._get_cursor() as cursor:
+            if self.is_postgres:
+                cursor.execute(
+                    self._format_sql("UPDATE provider_profiles SET is_active = FALSE WHERE user_id = ?"),
+                    (user_id,),
+                )
+                cursor.execute(
+                    self._format_sql("UPDATE provider_profiles SET is_active = TRUE WHERE id = ? AND user_id = ?"),
+                    (profile_id, user_id),
+                )
+            else:
+                cursor.execute(
+                    "UPDATE provider_profiles SET is_active = 0 WHERE user_id = ?",
+                    (user_id,),
+                )
+                cursor.execute(
+                    "UPDATE provider_profiles SET is_active = 1 WHERE id = ? AND user_id = ?",
+                    (profile_id, user_id),
+                )
+
+        secret = self.get_provider_profile_secret(profile_id, user_id)
+        self.update_settings(
+            SettingsUpdate(
+                active_profile_id=profile_id,
+                api_base_url=existing.api_base_url,
+                model_name=existing.model_name,
+                use_offline_mode=False,
+                api_key=secret if secret else None,
+            ),
+            user_id=user_id,
+        )
+        return self.get_provider_profile(profile_id, user_id)
+
+    def delete_provider_profile(self, profile_id: str, user_id: str) -> bool:
+        existing = self.get_provider_profile(profile_id, user_id)
+        if not existing:
+            return False
+
+        settings = self.get_settings(user_id=user_id)
+        was_active = existing.is_active or (settings.active_profile_id == profile_id)
+
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                self._format_sql("DELETE FROM provider_profiles WHERE id = ? AND user_id = ?"),
+                (profile_id, user_id),
+            )
+
+        if was_active:
+            self.update_settings(
+                SettingsUpdate(
+                    active_profile_id=None,
+                    use_offline_mode=True,
+                    api_key="",
+                ),
+                user_id=user_id,
+            )
+
+        return True
 
     def migrate_from_sqlite(self, sqlite_path: str = "data/tracker.db"):
         """Migrates records from a local SQLite database into the current PostgreSQL database."""

@@ -400,3 +400,52 @@ export async function testAISettings(settings) {
   });
   return res.json();
 }
+
+// --- Provider Profiles ---
+export async function getProviderProfiles() {
+  const res = await authFetch(`${API_BASE}/settings/profiles`);
+  if (!res.ok) throw new Error('Failed to load provider profiles');
+  return res.json();
+}
+
+export async function createProviderProfile(profile) {
+  const res = await authFetch(`${API_BASE}/settings/profiles`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(profile),
+  });
+  if (!res.ok) throw new Error('Failed to create provider profile');
+  return res.json();
+}
+
+export async function getProviderProfile(id) {
+  const res = await authFetch(`${API_BASE}/settings/profiles/${id}`);
+  if (!res.ok) throw new Error('Failed to load provider profile');
+  return res.json();
+}
+
+export async function updateProviderProfile(id, updates) {
+  const res = await authFetch(`${API_BASE}/settings/profiles/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error('Failed to update provider profile');
+  return res.json();
+}
+
+export async function activateProviderProfile(id) {
+  const res = await authFetch(`${API_BASE}/settings/profiles/${id}/activate`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error('Failed to activate provider profile');
+  return res.json();
+}
+
+export async function deleteProviderProfile(id) {
+  const res = await authFetch(`${API_BASE}/settings/profiles/${id}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to delete provider profile');
+  return res.json();
+}
