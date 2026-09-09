@@ -73,3 +73,18 @@ def test_decryption_error_on_wrong_key(monkeypatch):
 
     with pytest.raises(DecryptionError, match="re-enter"):
         decrypt_value(ciphertext)
+
+
+def test_allowed_ai_hosts_includes_defaults_and_custom(monkeypatch):
+    from backend.config import DEFAULT_ALLOWED_AI_HOSTS
+    assert "api.experientiallabs.ai" in DEFAULT_ALLOWED_AI_HOSTS
+
+    monkeypatch.setenv("APP_MODE", "local")
+    monkeypatch.setenv("ALLOWED_AI_HOSTS", "custom-model.org, internal.lab.ai")
+
+    cfg = load_config()
+    assert "api.experientiallabs.ai" in cfg.allowed_provider_hosts
+    assert "api.openai.com" in cfg.allowed_provider_hosts
+    assert "custom-model.org" in cfg.allowed_provider_hosts
+    assert "internal.lab.ai" in cfg.allowed_provider_hosts
+

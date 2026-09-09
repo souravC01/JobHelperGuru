@@ -30,6 +30,7 @@ DEFAULT_ALLOWED_AI_HOSTS: List[str] = [
     "api.together.xyz",
     "api.tokenrouter.com",
     "integrate.api.nvidia.com",
+    "api.experientiallabs.ai",
 ]
 
 DEFAULT_LOCAL_AI_HOSTS: List[str] = [
@@ -88,7 +89,8 @@ def load_config() -> AppConfig:
 
     custom_ai_hosts_raw = os.getenv("ALLOWED_AI_HOSTS")
     if custom_ai_hosts_raw:
-        allowed_hosts = [h.strip() for h in custom_ai_hosts_raw.split(",") if h.strip()]
+        custom_hosts = [h.strip() for h in custom_ai_hosts_raw.split(",") if h.strip()]
+        allowed_hosts = sorted(list(set(DEFAULT_ALLOWED_AI_HOSTS + custom_hosts)))
     else:
         allowed_hosts = list(DEFAULT_ALLOWED_AI_HOSTS)
 
