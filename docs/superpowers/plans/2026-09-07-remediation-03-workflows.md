@@ -10,7 +10,7 @@
 
 **Spec:** [Audit](D:/Grind/Projects/JobHelperGuru/docs/SECURITY_AND_CODE_AUDIT_2026-09-07.md); [roadmap constraints](D:/Grind/Projects/JobHelperGuru/docs/superpowers/plans/2026-09-07-audit-remediation.md). Requires owned files from 01 and frontend isolation/test infrastructure from 02.
 
-## Task 1 — Persist edited resume text and align upload formats (B2, B3, RTF)
+## Task 1 - Persist edited resume text and align upload formats (B2, B3, RTF)
 
 **Files:** `ResumeLibrary.jsx`, API client, `backend/main.py`, `backend/models.py`, `document_parser.py`, API/document parser tests, `ResumeLibrary.test.jsx`.
 
@@ -22,7 +22,7 @@
 - [ ] Use the same validated path for Quick Upload and Add Resume. Do not allow async completion of an older file parse to overwrite a newer selection or the user's title/text edits; cancel/ignore stale parsing results.
 - [ ] Run `python -m pytest tests/test_document_parser.py tests/test_api.py -q` and ResumeLibrary component tests. Commit as `Preserve resume text edits across upload workflows`.
 
-## Task 2 — Correct keyword matching, metadata and evidence claims (B5, B6, B7, B14)
+## Task 2 - Correct keyword matching, metadata and evidence claims (B5, B6, B7, B14)
 
 **Files:** `heuristic_parser.py`, `ai_engine.py`, `models.py`, `main.py`, `ResumeFitRanker.jsx`, `BulletOptimizerModal.jsx`, `CoverLetterModal.jsx`, existing AI/heuristic tests. Add `backend/services/skill_matching.py` and its tests for shared skill matching only.
 
@@ -45,7 +45,7 @@ def test_punctuation_skills_match_exact_resume():
 - [ ] Extract explicit employer graduation date ranges or relative windows into structured fields. Evaluate only with adequate candidate dates and employer criteria; otherwise return unknown. Do not overwrite actual employer criteria with the old four/six-month heuristic. Test dates at boundaries and absent/ambiguous dates.
 - [ ] Run `python -m pytest tests/test_heuristic_parser.py tests/test_ai_engine.py tests/test_api.py -q` and ranker/optimizer/outreach component tests. Commit as `Correct matching metadata and evidence-aware drafts`.
 
-## Task 3 — Export untrusted values as spreadsheet text (S7)
+## Task 3 - Export untrusted values as spreadsheet text (S7)
 
 **Files:** `backend/services/excel_exporter.py`, `tests/test_excel_exporter.py`.
 
@@ -67,7 +67,7 @@ def test_untrusted_company_is_exported_as_text():
 - [ ] Verify formulas remain inert after save/reopen, all styles/headers and valid hyperlinks remain, and empty exports still work. Open only benign synthetic output in the visual smoke check.
 - [ ] Run `python -m pytest tests/test_excel_exporter.py tests/test_api.py -q`. Commit as `Export untrusted spreadsheet content as text`.
 
-## Task 4 — Keep tracker state, local dates and archived views consistent (B12, B13, B15)
+## Task 4 - Keep tracker state, local dates and archived views consistent (B12, B13, B15)
 
 **Files:** `App.jsx`, `ApplicationsTracker.jsx`, `KanbanBoard.jsx`, `FollowUpBanner.jsx`, `JobAnalyzer.jsx`, API client, backend application update logic, associated tests. Add `frontend/src/utils/localDate.js` for shared date-only formatting.
 

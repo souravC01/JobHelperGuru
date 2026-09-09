@@ -14,7 +14,7 @@
 
 Create `backend/config.py`, `backend/services/outbound_http.py`, `backend/services/email_service.py`, `backend/services/provider_profiles.py`, and `backend/services/rate_limiter.py` for their named responsibilities. Modify existing auth, AI, scraping, encryption, storage, model, settings, and app files. Put narrow backend regressions in `tests/test_security_config.py`, `test_outbound_http.py`, `test_identity_linking.py`, `test_provider_profiles.py`, and `test_rate_limits.py`. Add `frontend/src/test/setup.js` and component tests beside App/settings/auth components.
 
-## Task 1 — Fail closed on deployment secrets (S8)
+## Task 1 - Fail closed on deployment secrets (S8)
 
 **Interfaces:** `load_config() -> AppConfig` reads `APP_MODE` (`local`, `test`, `production`; default `production`) and returns public app URL, allowed provider hosts, secrets, and resource limits. Production startup calls this before service initialization. `decrypt_value` raises a typed decryption error for encrypted records that cannot be decrypted.
 
@@ -24,7 +24,7 @@ Create `backend/config.py`, `backend/services/outbound_http.py`, `backend/servic
 - [ ] Test wrong-key, corrupted-token, whitespace, legacy plaintext migration, and valid old ciphertext. Decryption failure gives a safe “re-enter provider key” error and never passes ciphertext as an API credential. Do not log decrypted keys or rotate working production keys as incidental cleanup.
 - [ ] Run `python -m pytest tests/test_security_config.py tests/test_encryption.py tests/test_storage_encryption.py -q`; update env templates and deployment guide. Commit as `Validate deployment secrets and encrypted settings`.
 
-## Task 2 — Use one outbound request policy for all user-selected destinations (S3, S4)
+## Task 2 - Use one outbound request policy for all user-selected destinations (S3, S4)
 
 **Interfaces:** `OutboundPolicy(mode, allowed_provider_hosts, local_ai_hosts)` and `SafeHttpClient.request(method, url, *, policy, timeout, max_bytes, **kwargs)` enforce scheme, hostname, port, resolved-address, redirect, and response-size rules. The OpenAI SDK transport and scraper transports consume this same policy; no bypass through curl or iframe helpers.
 
@@ -35,7 +35,7 @@ Create `backend/config.py`, `backend/services/outbound_http.py`, `backend/servic
 - [ ] Require `get_current_user` on `/api/settings/test-ai`; test the route returns 401 before creating any network client for anonymous requests. Inject the safe transport into the SDK. Bound scraper response bodies to 2 MiB and give the entire fetch/redirect attempt a 30-second deadline.
 - [ ] Run `python -m pytest tests/test_outbound_http.py tests/test_scraper.py tests/test_ai_engine.py -q`. Keep a separate opt-in compatibility smoke test for public ATS sites and local Ollama. Commit as `Enforce outbound network policy on every fetch`.
 
-## Task 3 — Verify email ownership and bind Google identities safely (S5, B10)
+## Task 3 - Verify email ownership and bind Google identities safely (S5, B10)
 
 **Interfaces:** add user verification state and `session_version`; add unique `(issuer, subject)` identities. Add `POST /api/auth/verify-email/request`, `POST /api/auth/verify-email/confirm`, and password-recovery request/confirm routes. Registration creates a pending account and returns no authenticated data-access token. `EmailService.send_verification(recipient, link)` uses a fake transport in tests and configured SMTP in production.
 
@@ -47,7 +47,7 @@ Create `backend/config.py`, `backend/services/outbound_http.py`, `backend/servic
 - [ ] Update `AuthModal.jsx` and the API client for pending verification, confirmation, resend and recovery states. Add synthetic component tests for success, expired link, resend limit, and recovery. Do not send real emails while testing.
 - [ ] Run `python -m pytest tests/test_identity_linking.py tests/test_auth_api.py tests/test_auth_service.py -q` and auth component tests. Extend migration dry-run/rollback coverage. Commit as `Verify account ownership and secure identity linking`.
 
-## Task 4 — Store provider secrets only on the server (S9, B8, settings validation)
+## Task 4 - Store provider secrets only on the server (S9, B8, settings validation)
 
 **Interfaces:** separate internal `ProviderProfileSecret` from public metadata `{id, name, api_base_url, model_name, has_api_key, key_suffix, is_active}`. Introduce owner-scoped profile create/edit/delete/activate endpoints under `/api/settings/profiles`. `get_ai_engine(user_id)` resolves the active secret internally. Public settings include `active_profile_id`, `use_offline_mode`, and `default_follow_up_days`, not decrypted keys or legacy secret JSON.
 
@@ -56,10 +56,10 @@ Create `backend/config.py`, `backend/services/outbound_http.py`, `backend/servic
 - [ ] Make anonymous job analysis use the heuristic engine without a provider secret. Legacy global settings must not give public requests access to an owner's billable credentials; retain them only in migration backup until explicitly resolved.
 - [ ] Make deletion of an active profile transactional: remove/deactivate it, clear the active reference, and select offline mode. Do not silently activate another billed provider. Activating a profile must atomically set active reference and online mode.
 - [ ] Rewrite SettingsModal to send a secret only when creating/replacing it. Use metadata for listing and profile IDs for activation/testing. Remove plaintext localStorage persistence and purge legacy key caches. Server records are authoritative; browser-only keys require the owning user to re-enter them. Never import another browser account's cache into the current account.
-- [ ] Reject null/invalid mode, default-days, URL and model fields before storing; range-check default follow-up days to 1–90. Empty “new key” input cannot erase a working secret. Keep UI errors free of provider response bodies that may contain credentials.
+- [ ] Reject null/invalid mode, default-days, URL and model fields before storing; range-check default follow-up days to 1-90. Empty “new key” input cannot erase a working secret. Keep UI errors free of provider response bodies that may contain credentials.
 - [ ] Run `python -m pytest tests/test_provider_profiles.py tests/test_settings_isolation.py -q` and SettingsModal tests. Verify delete/reopen does not resurrect a profile. Commit as `Keep provider keys server-side and deactivate deletions`.
 
-## Task 5 — Reset identity-bound frontend state and ignore stale requests (S6)
+## Task 5 - Reset identity-bound frontend state and ignore stale requests (S6)
 
 **Files:** `App.jsx`, API client, optimizer/outreach/settings/auth components, `App.test.jsx`. Introduce a keyed account workspace inside the existing app file if needed; keep the public analyzer and current navigation structure.
 
@@ -71,7 +71,7 @@ Create `backend/config.py`, `backend/services/outbound_http.py`, `backend/servic
 - [ ] Verify new requests use B's token and never include A's resume/content; ensure an empty vault offers upload instead of inventing a selected resume. Tests use fake data only.
 - [ ] Run frontend App, optimizer, outreach and settings tests. Commit as `Clear account state and reject stale responses`.
 
-## Task 6 — Bound public requests and stored resources (S10)
+## Task 6 - Bound public requests and stored resources (S10)
 
 **Interfaces:** `RateLimiter.check(bucket, subject, *, limit, window_seconds)` uses atomic counters in the existing database and returns retry timing. Limits are configurable through AppConfig, not user settings. Add an ASGI body-size limiter that counts streamed bytes rather than trusting Content-Length.
 

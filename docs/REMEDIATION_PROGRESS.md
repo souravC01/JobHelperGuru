@@ -2,7 +2,7 @@
 
 Branch: `security/audit-remediation`, from refreshed `origin/main` at `14a58fb`.
 
-Execution authorized September 7, 2026. Work proceeds through phases 01–04 in order. No production rollout, live migration, or credential rotation is authorized.
+Execution authorized September 7, 2026. Work proceeds through phases 01-04 in order. No production rollout, live migration, or credential rotation is authorized.
 
 ## Decisions
 
@@ -12,8 +12,8 @@ Execution authorized September 7, 2026. Work proceeds through phases 01–04 in 
 
 ## Progress
 
-- Phase 01, task 1: in progress — isolate backend tests and add frontend test harness.
-- Phase 01, tasks 2–4: pending.
+- Phase 01, task 1: in progress - isolate backend tests and add frontend test harness.
+- Phase 01, tasks 2-4: pending.
 - Phase 02: pending.
 - Phase 03: pending.
 - Phase 04: pending.

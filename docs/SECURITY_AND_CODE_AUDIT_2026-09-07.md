@@ -17,7 +17,7 @@ Reviewed commit: `14a58fbe45b18eb53b78ab9a8689323d75e082b4` (`main`). Review sta
 
 ## Security findings
 
-### S1 — High: authenticated users can read and modify another user's application
+### S1 - High: authenticated users can read and modify another user's application
 
 **Confirmed locally.** [Application PATCH endpoint](D:/Grind/Projects/JobHelperGuru/backend/main.py:401) authenticates a user but calls [the storage update](D:/Grind/Projects/JobHelperGuru/backend/storage.py:623) without ownership information. SQL filters only by application ID. An empty PATCH returns the complete existing application, so this is both a confidentiality and integrity issue.
 
@@ -25,7 +25,7 @@ The probe created two users. User A read User B's private notes with an empty PA
 
 **Fix:** require `user_id` in the update service, scope both UPDATE and returned SELECT by owner, and return 404 for non-owned IDs. Add two-user tests for empty and non-empty PATCH, not just list/delete isolation.
 
-### S2 — High: client-selected resume file keys bypass object ownership and permit local file deletion
+### S2 - High: client-selected resume file keys bypass object ownership and permit local file deletion
 
 **Confirmed locally.** [Resume creation](D:/Grind/Projects/JobHelperGuru/backend/main.py:205) accepts a client-provided `file_key`. Listing generates signed downloads for that key; deleting the caller's resume deletes the referenced binary without checking whether that binary belongs to the caller. [Local deletion](D:/Grind/Projects/JobHelperGuru/backend/services/object_storage.py:161) also joins an unvalidated key onto `data/uploads`.
 
@@ -33,7 +33,7 @@ One probe attached another synthetic user's uploaded key to an attacker-owned re
 
 **Fix:** stop accepting arbitrary file keys in public resume creation. Bind uploaded objects to their authenticated owner server-side; validate ownership before signing or deletion. Resolve local paths and enforce containment within that user's upload directory. Do not use basename fallback as an authorization mechanism.
 
-### S3 — High: unauthenticated AI connection testing permits requests to private addresses
+### S3 - High: unauthenticated AI connection testing permits requests to private addresses
 
 **Confirmed with intercepted HTTP.** [The connection-test endpoint](D:/Grind/Projects/JobHelperGuru/backend/main.py:440) has no authentication dependency and accepts an arbitrary provider base URL. [Client construction](D:/Grind/Projects/JobHelperGuru/backend/services/ai_engine.py:83) forwards it to the OpenAI client.
 
@@ -41,7 +41,7 @@ A request without a login and with a fake API key attempted an HTTP POST to a lo
 
 **Fix:** authenticate connection tests, validate provider destinations, and enforce outbound network restrictions in cloud mode. Preserve local Ollama support through an explicit local-deployment policy rather than allowing private addresses on the public service. Reject insecure credential transport where inappropriate and apply request limits.
 
-### S4 — High: the scraper's private-address protection is bypassed after the first URL
+### S4 - High: the scraper's private-address protection is bypassed after the first URL
 
 **Confirmed with intercepted HTTP.** [Initial URL validation](D:/Grind/Projects/JobHelperGuru/backend/services/scraper.py:70) is not repeated for redirected destinations. The standard request follows redirects. [Embedded iframe fetching](D:/Grind/Projects/JobHelperGuru/backend/services/scraper.py:327) checks whether a known ATS name occurs anywhere in a URL rather than validating its hostname and resolved address.
 
@@ -49,7 +49,7 @@ Probes confirmed a public-to-loopback redirect and an iframe pointing to loopbac
 
 **Fix:** validate each redirect and embedded destination, parse and compare hostnames, cap redirects, and use transport/network-level protections against DNS resolution races. Apply the same policy to every fetch path, including browser-impersonation requests.
 
-### S5 — High: Google sign-in can inherit an attacker-created email/password account
+### S5 - High: Google sign-in can inherit an attacker-created email/password account
 
 **Confirmed using mocked Google verification.** [Registration](D:/Grind/Projects/JobHelperGuru/backend/routers/auth.py:86) does not verify ownership of an email. [Google sign-in](D:/Grind/Projects/JobHelperGuru/backend/routers/auth.py:170) automatically finds an existing account by email and retains its password login. It does not bind identity to Google's `sub`, and it ignores `email_verified`.
 
@@ -57,7 +57,7 @@ The probe registered a future user's email with an attacker-known password, then
 
 **Fix:** verify email ownership before enabling password accounts, bind Google identities by issuer/subject, and require a secure account-linking flow. Check email authority appropriately. Google also recommends a production token-verification library; the current `tokeninfo` dependency is intended for debugging and can be throttled. [Google backend authentication guidance](https://developers.google.com/identity/sign-in/web/backend-auth).
 
-### S6 — High: previous-account resume content survives logout and account switching
+### S6 - High: previous-account resume content survives logout and account switching
 
 **Confirmed with the actual App component in a synthetic hook harness.** [Logout and unauthorized handlers](D:/Grind/Projects/JobHelperGuru/frontend/src/App.jsx:134) clear some state but retain `selectedResumeForJob`, modal state, and other account-dependent state. [Initial loading](D:/Grind/Projects/JobHelperGuru/frontend/src/App.jsx:125) only replaces the selected resume when the new account has at least one resume.
 
@@ -65,13 +65,13 @@ After User A logged out and User B logged in with no resumes, both optimizer and
 
 **Fix:** reset all account-bound state and close/remount modals on logout, expiry, and identity changes. Set the selected resume to `resumesData[0] ?? null`. Cancel or ignore outstanding requests belonging to the previous identity.
 
-### S7 — Medium: exported job data becomes executable spreadsheet formulas
+### S7 - Medium: exported job data becomes executable spreadsheet formulas
 
 **Confirmed locally.** [Excel cell creation](D:/Grind/Projects/JobHelperGuru/backend/services/excel_exporter.py:91) assigns untrusted company, role, notes, and other values directly to cells. Harmless `=1+1` values became formula cells in the exported workbook. Job text can originate from third-party pages; S1 also permits another account to alter those values if it knows an application ID.
 
 **Fix:** explicitly encode untrusted values as text in both worksheets and validate hyperlink schemes. Only deliberate, application-owned formulas should use formula cell types. Actual formula execution capabilities depend on the spreadsheet application and its protections; this is not a demonstrated remote-code-execution finding.
 
-### S8 — High if secrets are omitted: public default signing/encryption secrets remain usable
+### S8 - High if secrets are omitted: public default signing/encryption secrets remain usable
 
 **Code-confirmed, deployment configuration not checked.** [JWT initialization](D:/Grind/Projects/JobHelperGuru/backend/services/auth_service.py:7) has a hardcoded fallback and refuses it only when `ENVIRONMENT` is exactly `production`. The [Render blueprint](D:/Grind/Projects/JobHelperGuru/render.yaml:1) and Dockerfile do not set that flag. [Settings encryption](D:/Grind/Projects/JobHelperGuru/backend/services/encryption.py:12) silently uses a public fallback if neither encryption secret is supplied.
 
@@ -79,7 +79,7 @@ A correctly configured deployment avoids this condition. If deployed without the
 
 **Fix:** fail startup on absent/weak secrets in deployed environments, require explicit development mode for development defaults, and validate required configuration. Do not silently treat a failed decryption as valid plaintext for modern encrypted records; use a versioned legacy migration.
 
-### S9 — Medium: plaintext API keys persist in browser storage after logout
+### S9 - Medium: plaintext API keys persist in browser storage after logout
 
 **Code-confirmed.** [Saved profiles](D:/Grind/Projects/JobHelperGuru/frontend/src/components/SettingsModal.jsx:313) write complete API keys to localStorage. [Logout cleanup](D:/Grind/Projects/JobHelperGuru/frontend/src/api/client.js:12) removes only the JWT and user record. Per-user localStorage key names do not provide access isolation within the same origin/browser profile. Settings responses also return plaintext keys.
 
@@ -87,7 +87,7 @@ This increases exposure on shared browser profiles and if same-origin script exe
 
 **Fix:** keep provider secrets on the backend, return masked profile metadata, activate profiles by ID, and remove legacy plaintext browser copies. Consider HttpOnly session cookies with corresponding CSRF protections if changing session storage.
 
-### S10 — Medium: public and expensive operations lack application-level abuse limits
+### S10 - Medium: public and expensive operations lack application-level abuse limits
 
 **Code-confirmed; no load attack performed.** Register/login, anonymous scraping/analysis, and AI testing have no rate limiter in the application. Most [request models](D:/Grind/Projects/JobHelperGuru/backend/models.py:35) do not bound string lengths, list counts, or stored resume counts. The 10 MB upload check does not bound decompressed DOCX/PDF processing or all JSON/text ingestion paths.
 
@@ -95,7 +95,7 @@ This increases exposure on shared browser profiles and if same-origin script exe
 
 ## Dependency and test risks
 
-### D1 — Upgrade the development toolchain; distinguish it from the production server
+### D1 - Upgrade the development toolchain; distinguish it from the production server
 
 The lockfile resolves **Vite 5.4.21** and **esbuild 0.21.5**. npm reported **two affected packages: one high, one moderate**, covering multiple advisories. Vite includes a Windows file-deny bypass, relevant when its development server is exposed to the network. The current Vite config does not explicitly expose it, and the Docker runtime serves built assets with FastAPI rather than running Vite.
 
@@ -103,7 +103,7 @@ See [Vite's Windows advisory](https://github.com/vitejs/vite/security/advisories
 
 The fresh Python resolution had no reported vulnerabilities in the application packages. The audit environment's bundled **pip 25.0.1** had seven advisory entries, including a duplicate identifier; these are tooling findings, not evidence of seven production application vulnerabilities. Python dependencies use open-ended minimums rather than a lockfile, so the installed deployment can differ. Record and audit a reproducible production dependency set.
 
-### D2 — High development-data risk: the normal test command is not fully isolated
+### D2 - High development-data risk: the normal test command is not fully isolated
 
 [The shared fixture](D:/Grind/Projects/JobHelperGuru/tests/conftest.py:1) clears only `DATABASE_URL`. Importing `backend.main` still initializes the default local `data/tracker.db`, loads environment configuration, and creates the object-storage client. API upload tests can therefore use configured R2 credentials, while other tests can write to the user's normal SQLite database. Startup also invokes automatic deduplication.
 
@@ -160,9 +160,9 @@ Do not treat `.env`, SQLite databases, or `data/uploads` as redundant files: the
 
 ## Suggested order of work
 
-1. Fix S1–S6 with ownership, request-destination, identity-linking, and account-switch regression coverage. Ensure no local/cloud file operation trusts client-provided paths.
+1. Fix S1-S6 with ownership, request-destination, identity-linking, and account-switch regression coverage. Ensure no local/cloud file operation trusts client-provided paths.
 2. Enforce deployment secrets, isolate the test suite, and address spreadsheet injection, browser key persistence, and abuse limits.
-3. Fix data-loss and correctness bugs first: B1–B9, then migration and remaining validation/date/UI issues. Add tests at the failing route or handler rather than only testing helper functions.
+3. Fix data-loss and correctness bugs first: B1-B9, then migration and remaining validation/date/UI issues. Add tests at the failing route or handler rather than only testing helper functions.
 4. Upgrade/audit a reproducible dependency set, then perform the small verified cleanup. Avoid combining security fixes with large unrelated refactors.
 
 The passing baseline and build are useful checks, but they do not invalidate the additional security and correctness reproductions above.

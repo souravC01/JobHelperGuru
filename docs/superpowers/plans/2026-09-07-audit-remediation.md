@@ -56,10 +56,10 @@ An urgent first patch may contain only test isolation, owner checks, rejection o
 | B8 deleted active key remains active | 02 Task 4 |
 | B9 broken storage fallback/download | 01 Task 3 |
 | B10 password length | 02 Task 3 |
-| B11 tenant migration | 01 Task 4, extended by 02 Tasks 3–4 |
+| B11 tenant migration | 01 Task 4, extended by 02 Tasks 3-4 |
 | B12 stale tracker totals; B13 dates/defaults; B15 archived Kanban | 03 Task 4 |
 | B14 employer graduation window | 03 Task 2 |
-| Null bullet/settings inputs; RTF decoding | 02 Task 4 and 03 Tasks 1–2 |
+| Null bullet/settings inputs; RTF decoding | 02 Task 4 and 03 Tasks 1-2 |
 | Unused functions/imports/variables/declarations; duplicate requirements | 04 Task 2 |
 | Scratch/build scripts/history/cache candidates | 04 Task 2, retention decisions specified there |
 

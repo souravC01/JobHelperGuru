@@ -10,7 +10,7 @@
 
 **Spec:** [Audit](D:/Grind/Projects/JobHelperGuru/docs/SECURITY_AND_CODE_AUDIT_2026-09-07.md); [roadmap constraints](D:/Grind/Projects/JobHelperGuru/docs/superpowers/plans/2026-09-07-audit-remediation.md). Requires the behavior/security workstreams for release readiness; dependency assessment may start earlier.
 
-## Task 1 — Upgrade audited dependencies and make builds reproducible (D1)
+## Task 1 - Upgrade audited dependencies and make builds reproducible (D1)
 
 **Files:** `frontend/package.json`, `frontend/package-lock.json`, `frontend/vite.config.js`, `requirements.txt`, `backend/requirements.txt`, `Dockerfile`, `build.sh`, README. Create runtime/development input and lock files under `requirements/`.
 
@@ -24,7 +24,7 @@
 - [ ] Run a clean frontend install, component tests and production build, Python suite under the chosen production runtime, Docker build, `npm audit --json`, `npm audit --omit=dev --json`, and an audit of the locked Python runtime set. Document any remaining finding with exploitability and a specific mitigation; no “zero risk” claim.
 - [ ] Commit as `Lock dependencies and upgrade the audited toolchain`.
 
-## Task 2 — Remove verified unused code and consolidate duplicate files
+## Task 2 - Remove verified unused code and consolidate duplicate files
 
 **Files:** existing frontend API client/components, backend service imports, `run.py`, dependency manifests and README. No schema or user-data changes belong in this task.
 
@@ -37,18 +37,18 @@
 - [ ] Do not delete `.env`, databases, uploads, user-authored scratch artifacts, or the audit's evidence as part of automated cleanup. List obsolete scratch/cache files separately; remove only task-created disposable files with verified paths. Cache deletion is optional housekeeping, not a release requirement.
 - [ ] Run Ruff's unused-name checks, frontend scope/lint checks, component tests/build, and affected backend tests. No new tests are needed solely to assert an import was removed. Commit as `Remove verified unused code and consolidate manifests`.
 
-## Task 3 — Verify all findings and rehearse data migration/recovery
+## Task 3 - Verify all findings and rehearse data migration/recovery
 
 **Files:** regression suites, `backend/migrate.py`, deployment guide; create `docs/REMEDIATION_VALIDATION.md` containing results and known limitations.
 
-- [ ] Match every S1–S10, D1–D2, B1–B15 and additional input/format issue in the roadmap to a prevention test or specific operational check. Re-run the original attack shapes locally after converting their expected outcomes; “the vulnerability still reproduces” is a failed release gate.
+- [ ] Match every S1-S10, D1-D2, B1-B15 and additional input/format issue in the roadmap to a prevention test or specific operational check. Re-run the original attack shapes locally after converting their expected outcomes; “the vulnerability still reproduces” is a failed release gate.
 - [ ] Run the entire deterministic backend suite, frontend component suite and production build. Run disposable PostgreSQL tests for ownership, canonical URL uniqueness, counter atomicity, profile activation/deletion, identity uniqueness, and all migrations. Complete one synthetic browser journey: verify account → upload/edit resume → analyze → rank → draft → save → update tracker → export → logout → second account.
 - [ ] Rehearse additive schema migration on a disposable copy with mixed legacy records: old ciphertext, unverified email accounts, null-owner files, duplicate posting URLs, missing binaries, and null arrays. Compare pre/post IDs, owners, content, hashes and counts. The dry-run must report conflicts rather than resolve them by deletion.
 - [ ] Test backup restoration and interrupted-migration recovery. Keep old columns until the new read/write paths are stable. Ensure any rollback build is compatible with the additive schema and cannot reintroduce the unsafe startup migration. If it cannot safely run, use a controlled maintenance response/forward fix rather than silently restoring vulnerable behavior.
 - [ ] Verify mail transport, sender/public URL, secrets, cloud mode, provider-host list, trusted proxy configuration and R2 mode using synthetic checks in staging. No real-data probe, email blast, destructive migration, or credential rotation is permitted as a smoke test.
 - [ ] Record exact versions, commands, pass/fail counts, advisory applicability and unresolved limitations. Commit as `Document remediation validation and rollout procedure`.
 
-## Task 4 — Prepare the production rollout decision
+## Task 4 - Prepare the production rollout decision
 
 - [ ] Prepare a concrete change summary and migration dry-run report, including any unresolved owner/identity conflicts and the user impact of verification or one-time re-login. Explain that original uploaded documents remain original even when extracted text is edited.
 - [ ] Confirm restorable database backup and preservation of resume objects before any live migration. Protect backup credentials and contents; never include them in a PR or audit report.

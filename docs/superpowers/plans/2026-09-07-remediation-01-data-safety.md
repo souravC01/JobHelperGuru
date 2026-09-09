@@ -14,7 +14,7 @@
 
 Modify `tests/conftest.py`, `backend/main.py`, `backend/models.py`, `backend/storage.py`, `backend/services/object_storage.py`, and the existing API/storage tests. Create focused tests `test_application_security.py`, `test_resume_file_security.py`, and `test_migration.py`. Create `backend/migrate.py` for explicit migration operations, never startup side effects.
 
-## Task 1 — Make default tests unable to reach personal data or cloud services (D2)
+## Task 1 - Make default tests unable to reach personal data or cloud services (D2)
 
 **Interfaces:** produce a function-scoped `client` fixture and `two_users` fixture returning `(client, alpha_headers, beta_headers)`. They use a fresh database and fake object/AI clients. Existing helper tests may still instantiate their own temporary `StorageService`.
 
@@ -41,7 +41,7 @@ def two_users(client):
 
 When verification is added in workstream 02, this fixture must create verified synthetic users through the test mail flow or storage fixture; it must not weaken production authentication.
 
-## Task 2 — Enforce owner-scoped updates and reliable posting identity (S1, B1, B4)
+## Task 2 - Enforce owner-scoped updates and reliable posting identity (S1, B1, B4)
 
 **Files:** `backend/main.py`, `backend/storage.py`, `backend/models.py`, `tests/test_application_security.py`, `tests/test_storage.py`.
 
@@ -68,7 +68,7 @@ def test_foreign_application_patch_is_not_found(two_users):
 - [ ] Tests: A/B owner matrix; no-ID/foreign-ID empty PATCH; same URL returns one record; different URLs survive restart; concurrent same-URL save; null update is 422 and listing stays 200; owner-separated identical URLs remain separate.
 - [ ] Run `python -m pytest tests/test_application_security.py tests/test_storage.py tests/test_api.py -q`. Commit as `Enforce application ownership and posting identity`.
 
-## Task 3 — Make file ownership and actual storage location authoritative (S2, B9)
+## Task 3 - Make file ownership and actual storage location authoritative (S2, B9)
 
 **Files:** `backend/models.py`, `backend/storage.py`, `backend/main.py`, `backend/services/object_storage.py`, `frontend/src/api/client.js`, `frontend/src/components/ResumeLibrary.jsx`, `tests/test_resume_file_security.py`, `tests/test_object_storage.py`.
 
@@ -82,7 +82,7 @@ def test_foreign_application_patch_is_not_found(two_users):
 - [ ] Tests: owned local and R2 download/delete; foreign requests return 404; forged create fields rejected; R2 write failure creates no row; missing object gives controlled failure; malicious legacy paths quarantined; repeated delete cleanup remains scoped.
 - [ ] Run `python -m pytest tests/test_resume_file_security.py tests/test_object_storage.py tests/test_api.py -q`. Commit as `Bind resume files to owners and storage backends`.
 
-## Task 4 — Replace automatic legacy migration with a safe explicit command (B11)
+## Task 4 - Replace automatic legacy migration with a safe explicit command (B11)
 
 **Files:** `backend/migrate.py`, `backend/storage.py`, `backend/main.py`, `tests/test_migration.py`, deployment guide.
 
