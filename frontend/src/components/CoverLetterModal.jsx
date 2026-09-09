@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Mail, Copy, Check, Sparkles, Loader2, MessageSquare, Send } from 'lucide-react';
-import { generateOutreach } from '../api/client';
+import { Mail, Copy, Check, Sparkles, Loader2, MessageSquare, Send, FileText, Download } from 'lucide-react';
+import { generateOutreach, exportCoverLetterDocx } from '../api/client';
 
 export default function CoverLetterModal({
   isOpen,
@@ -10,6 +10,7 @@ export default function CoverLetterModal({
   onAiError,
 }) {
   const [loading, setLoading] = useState(false);
+  const [downloadingDocx, setDownloadingDocx] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [copiedPitch, setCopiedPitch] = useState(false);
@@ -54,6 +55,88 @@ export default function CoverLetterModal({
     }
   };
 
+  const handleDownloadDocx = async () => {
+    if (!data?.cover_letter_pitch) return;
+    setDownloadingDocx(true);
+    try {
+      await exportCoverLetterDocx({
+        cover_letter_text: data.cover_letter_pitch,
+        candidate_name: selectedResume?.name || '',
+        company: currentJob?.company || '',
+        role: currentJob?.title || '',
+        subject_line: data.subject_line || '',
+      });
+    } catch (err) {
+      alert(err.message || 'Failed to download Word document.');
+    } finally {
+      setDownloadingDocx(false);
+    }
+  };
+
+  const handlePrintPdf = () => {
+    if (!data?.cover_letter_pitch) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Please allow popups to download or print your PDF.');
+      return;
+    }
+    const candidateName = selectedResume?.name || 'Candidate';
+    const company = currentJob?.company || '';
+    const role = currentJob?.title || '';
+    const subject = data?.subject_line || '';
+    const bodyHtml = data.cover_letter_pitch
+      .split('\n\n')
+      .map((p) => `<p style="margin: 0 0 14px 0; line-height: 1.6;">${p.replace(/\n/g, '<br/>')}</p>`)
+      .join('');
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Cover Letter - ${candidateName} - ${company}</title>
+  <style>
+    @page { margin: 1in; size: letter; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #1e293b;
+      margin: 0;
+      padding: 24px;
+      font-size: 11pt;
+      line-height: 1.5;
+    }
+    .header { margin-bottom: 20px; }
+    .name { font-size: 16pt; font-weight: bold; color: #0f172a; margin-bottom: 4px; }
+    .date { font-size: 10pt; color: #64748b; margin-bottom: 16px; }
+    .recipient { margin-bottom: 16px; line-height: 1.4; }
+    .subject { font-weight: bold; margin-bottom: 16px; color: #0f172a; }
+    @media print {
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="name">${candidateName}</div>
+    <div class="date">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+    <div class="recipient">
+      Hiring Team<br/>
+      ${company ? company + '<br/>' : ''}
+    </div>
+    ${subject ? `<div class="subject">Subject: ${subject}</div>` : ''}
+  </div>
+  <div class="content">
+    ${bodyHtml}
+  </div>
+  <script>
+    window.onload = function() {
+      window.print();
+    };
+  </script>
+</body>
+</html>`);
+    printWindow.document.close();
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
       <div className="card-corporate bg-white border border-[#e0e0e0] w-full max-w-3xl my-8 p-6 rounded-xl space-y-5 animate-fade-in shadow-xl max-h-[90vh] overflow-y-auto text-[#000000]">
@@ -65,7 +148,7 @@ export default function CoverLetterModal({
             </div>
             <div>
               <h3 className="text-base font-bold text-[#000000] tracking-tight">
-                Tailored Outreach & Cover Letter Pitch
+                Tailored Outreach & Cover Letter
               </h3>
               <p className="text-xs text-[#666666]">
                 Customized for <strong>{currentJob.title}</strong> at <strong>{currentJob.company}</strong>
@@ -83,7 +166,7 @@ export default function CoverLetterModal({
         {loading ? (
           <div className="py-16 text-center space-y-3">
             <Loader2 size={24} className="animate-spin text-[#0a66c2] mx-auto" />
-            <p className="text-xs text-[#666666]">Crafting high-impact outreach and cover letter pitch...</p>
+            <p className="text-xs text-[#666666]">Crafting high-impact outreach and 3-paragraph cover letter...</p>
           </div>
         ) : error ? (
           <div className="p-4 bg-[#b24020]/10 border border-[#b24020]/25 rounded-lg text-[#b24020] text-xs">
@@ -109,31 +192,57 @@ export default function CoverLetterModal({
               </p>
             </div>
 
-            {/* 3-Paragraph Cover Letter Pitch */}
-            <div className="p-4 rounded-lg bg-[#f3f6f8] border border-[#e0e0e0] space-y-2">
-              <div className="flex items-center justify-between">
+            {/* 3-Paragraph Cover Letter */}
+            <div className="p-4 rounded-lg bg-[#f3f6f8] border border-[#e0e0e0] space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs font-bold text-[#666666] uppercase tracking-wider flex items-center gap-1.5">
                   <Send size={13} className="text-[#0a66c2]" />
-                  <span>3-Paragraph Application Pitch</span>
+                  <span>3-Paragraph Cover Letter</span>
                 </span>
-                <button
-                  onClick={() => handleCopy(data.cover_letter_pitch, 'pitch')}
-                  className="btn-secondary-corporate text-xs py-1 px-3"
-                >
-                  {copiedPitch ? (
-                    <>
-                      <Check size={12} className="text-[#057642]" />
-                      <span className="text-[#057642] font-semibold">Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy size={12} />
-                      <span>Copy Pitch</span>
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleCopy(data.cover_letter_pitch, 'pitch')}
+                    className="btn-secondary-corporate text-xs py-1 px-3"
+                    title="Copy cover letter text"
+                  >
+                    {copiedPitch ? (
+                      <>
+                        <Check size={12} className="text-[#057642]" />
+                        <span className="text-[#057642] font-semibold">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={12} />
+                        <span>Copy Text</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={handleDownloadDocx}
+                    disabled={downloadingDocx}
+                    className="btn-secondary-corporate text-xs py-1 px-3 flex items-center gap-1.5"
+                    title="Download tailored cover letter as Microsoft Word (.docx)"
+                  >
+                    {downloadingDocx ? (
+                      <Loader2 size={12} className="animate-spin text-[#0a66c2]" />
+                    ) : (
+                      <FileText size={12} className="text-[#0a66c2]" />
+                    )}
+                    <span>Download Word (.docx)</span>
+                  </button>
+
+                  <button
+                    onClick={handlePrintPdf}
+                    className="btn-secondary-corporate text-xs py-1 px-3 flex items-center gap-1.5"
+                    title="Download or print cover letter as PDF"
+                  >
+                    <Download size={12} className="text-[#0a66c2]" />
+                    <span>Download PDF</span>
+                  </button>
+                </div>
               </div>
-              <div className="text-xs text-[#000000] bg-white p-4 rounded-lg border border-[#e0e0e0] whitespace-pre-line leading-relaxed font-sans">
+              <div className="text-xs text-[#000000] bg-white p-4 rounded-lg border border-[#e0e0e0] whitespace-pre-line leading-relaxed font-sans shadow-sm">
                 {data.cover_letter_pitch}
               </div>
             </div>

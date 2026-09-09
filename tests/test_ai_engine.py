@@ -285,3 +285,50 @@ def test_settings_test_ai_endpoint_with_reasoning_model(monkeypatch):
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
+
+def test_ensure_three_paragraph_cover_letter_single_paragraph_split():
+    from backend.services.ai_engine import ensure_three_paragraph_cover_letter, sanitize_dashes
+    job = JobAnalysisResult(company="Acme Corp", title="Staff Engineer", required_skills=["Python", "FastAPI"])
+    resume = Resume(id="res-1", name="John Doe", content="Experienced developer.")
+    single_para = "I am excited to apply. I have extensive experience building distributed systems. I look forward to meeting the team."
+    result = ensure_three_paragraph_cover_letter(single_para, job, resume)
+
+    blocks = [b.strip() for b in result.split("\n\n") if b.strip()]
+    assert len(blocks) >= 5
+    assert blocks[0].startswith("Dear ")
+    assert "Acme Corp" in blocks[0]
+    assert blocks[-1].startswith("Sincerely")
+    assert "John Doe" in blocks[-1]
+    assert "\u2014" not in result
+    assert "\u2013" not in result
+
+
+def test_sanitize_dashes_replaces_unicode_dashes():
+    from backend.services.ai_engine import sanitize_dashes
+    text = "Full\u2014Stack Developer \u2013 Python/React"
+    clean = sanitize_dashes(text)
+    assert clean == "Full-Stack Developer - Python/React"
+    assert "\u2014" not in clean
+    assert "\u2013" not in clean
+
+
+def test_generate_outreach_three_paragraphs_and_zero_em_dashes():
+    engine = AIEngine(api_key=None)
+    job = JobAnalysisResult(company="Stripe", title="Backend Engineer", required_skills=["Python", "PostgreSQL", "Kafka"])
+    resume = Resume(id="res-2", name="Jane Smith", content="Built payment pipelines in Python and PostgreSQL.")
+
+    outreach = engine.generate_outreach(job, resume)
+    assert outreach.subject_line != ""
+    assert "Jane Smith" in outreach.subject_line or "Backend Engineer" in outreach.subject_line
+    assert outreach.connection_note != ""
+    assert len(outreach.connection_note) < 300
+
+    blocks = [b.strip() for b in outreach.cover_letter_pitch.split("\n\n") if b.strip()]
+    assert len(blocks) >= 5
+    assert "\u2014" not in outreach.cover_letter_pitch
+    assert "\u2013" not in outreach.cover_letter_pitch
+    assert "\u2014" not in outreach.subject_line
+    assert "\u2013" not in outreach.subject_line
+    assert "\u2014" not in outreach.connection_note
+    assert "\u2013" not in outreach.connection_note
+

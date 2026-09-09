@@ -73,6 +73,82 @@ def extract_raw_content_from_response(resp: Any) -> str:
     return str(val).strip()
 
 
+def sanitize_dashes(text: str) -> str:
+    """Replaces any unicode em-dash or en-dash with standard hyphen (-)."""
+    if not text:
+        return text
+    return text.replace("\u2014", "-").replace("\u2013", "-")
+
+
+def ensure_three_paragraph_cover_letter(raw_pitch: str, job: JobAnalysisResult, resume: Resume) -> str:
+    """
+    Guarantees that the cover letter contains a formal salutation, exactly 3 distinct body paragraphs,
+    and a professional closing, with zero em/en-dashes.
+    """
+    clean_pitch = sanitize_dashes(raw_pitch or "").strip()
+    candidate_name = resume.name or "Candidate"
+    company = job.company or "the Company"
+    title = job.title or "Position"
+
+    if not clean_pitch:
+        skills_str = ", ".join(job.required_skills[:3]) if job.required_skills else "software engineering"
+        return (
+            f"Dear Hiring Team at {company},\n\n"
+            f"I am writing to express my strong interest in the {title} position at {company}. With experience in {skills_str}, "
+            f"I am eager to contribute to your technical initiatives and team success.\n\n"
+            f"Throughout my work, I have focused on scalable delivery, clean implementation, and collaborative problem-solving. "
+            f"My background directly complements the core responsibilities outlined for the {title} role.\n\n"
+            f"I welcome the opportunity to discuss how my qualifications align with {company}'s goals. Thank you for your consideration.\n\n"
+            f"Sincerely,\n{candidate_name}"
+        )
+
+    salutation = f"Dear Hiring Team at {company},"
+    sign_off = f"Sincerely,\n{candidate_name}"
+
+    # Split into blocks separated by newlines
+    blocks = [b.strip() for b in clean_pitch.split("\n\n") if b.strip()]
+
+    body_blocks = []
+    for b in blocks:
+        low = b.lower()
+        if low.startswith("dear ") or low.startswith("hello ") or low.startswith("to the hiring"):
+            salutation = b
+            continue
+        if low.startswith("sincerely") or low.startswith("best regards") or low.startswith("warm regards") or (low.startswith("thank you") and len(b.split()) < 10):
+            sign_off = b
+            continue
+        body_blocks.append(b)
+
+    # If body_blocks already has 3 distinct paragraphs
+    if len(body_blocks) == 3:
+        return f"{salutation}\n\n{body_blocks[0]}\n\n{body_blocks[1]}\n\n{body_blocks[2]}\n\n{sign_off}"
+
+    if len(body_blocks) > 3:
+        p1 = body_blocks[0]
+        p2 = "\n\n".join(body_blocks[1:-1])
+        p3 = body_blocks[-1]
+        return f"{salutation}\n\n{p1}\n\n{p2}\n\n{p3}\n\n{sign_off}"
+
+    # If 1 or 2 blocks were returned, split sentences into 3 balanced paragraphs
+    full_text = " ".join(body_blocks) if body_blocks else clean_pitch
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', full_text) if s.strip()]
+
+    if len(sentences) >= 3:
+        n = len(sentences)
+        idx1 = max(1, n // 3)
+        idx2 = max(idx1 + 1, (2 * n) // 3)
+        p1 = " ".join(sentences[:idx1])
+        p2 = " ".join(sentences[idx1:idx2])
+        p3 = " ".join(sentences[idx2:])
+        return f"{salutation}\n\n{p1}\n\n{p2}\n\n{p3}\n\n{sign_off}"
+
+    skills_str = ", ".join(job.required_skills[:3]) if job.required_skills else "software engineering"
+    p1 = f"I am writing to express my strong interest in the {title} position at {company}. {full_text}"
+    p2 = f"My experience with {skills_str} has prepared me to tackle the technical challenges outlined in the job description, driving reliable execution and measurable impact."
+    p3 = f"I am excited about the opportunity to contribute to {company}'s engineering initiatives and look forward to discussing how my skills align with your goals."
+    return f"{salutation}\n\n{p1}\n\n{p2}\n\n{p3}\n\n{sign_off}"
+
+
 class AIEngine:
     def __init__(
         self,
@@ -663,58 +739,86 @@ Claim Status: {claim_status.value}
         client = self._get_client()
         if client:
             try:
-                system_prompt = """
-You are an expert career coach. Write a tailored, punchy, 3-paragraph cover letter pitch and a concise LinkedIn connection note based on the candidate's matched skills and the target job.
-If the candidate resume content is empty or lacks evidence, DO NOT fabricate affirmative claims of hands-on experience; provide a draft template with placeholders like [insert relevant experience] requiring user confirmation.
+                system_prompt = """You are an executive career strategist and technical recruiter.
+Write a highly customized, compelling 3-paragraph cover letter and a concise LinkedIn connection note based on the candidate's resume and target job description.
+
+CRITICAL FORMATTING RULES:
+1. "cover_letter_pitch" MUST be formatted as a complete 3-paragraph cover letter with double line breaks between sections:
+   - Salutation: "Dear Hiring Team at [Company],"
+   - Paragraph 1 (Hook & Role Interest): Introduce the candidate, state enthusiastic application for the role at the target company, and introduce core domain expertise.
+   - Paragraph 2 (Technical Evidence & Projects): Connect 2-3 matched technical skills directly to relevant projects, achievements, and concrete outcomes from the candidate background.
+   - Paragraph 3 (Value Add & Proactive Close): Highlight how the candidate will accelerate the team roadmap, and conclude with a proactive invitation for an interview.
+   - Sign-off: "Sincerely,\n[Candidate Name or Candidate]"
+2. If the resume content is empty or lacks evidence, DO NOT fabricate affirmative claims of hands-on experience; provide a draft template with clear placeholders like [insert relevant experience] requiring user confirmation.
+3. NEVER use unicode em-dashes or en-dashes; use standard hyphens (-) exclusively everywhere.
+4. "connection_note" must be a concise LinkedIn note under 300 characters.
+5. "subject_line" must be a professional application email subject line.
+
 Return strict JSON:
 {
-  "subject_line": "Subject line for application email",
-  "cover_letter_pitch": "3 high-impact paragraphs connecting skills to role",
-  "connection_note": "A concise 300-character LinkedIn note for recruiters"
-}
-"""
+  "subject_line": "Application: [Job Title] - [Candidate Name]",
+  "cover_letter_pitch": "Dear Hiring Team at [Company],\n\n[Paragraph 1]\n\n[Paragraph 2]\n\n[Paragraph 3]\n\nSincerely,\n[Name]",
+  "connection_note": "Concise LinkedIn recruiter note (<300 characters)"
+}"""
+                candidate_name = resume.name or "Candidate"
                 resp = client.chat.completions.create(
                     model=self.model_name,
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Company: {job.company}\nRole: {job.title}\nJob Skills: {', '.join(job.required_skills)}\n\nCandidate Resume:\n{resume.content[:2500] if has_content else '[Resume content is empty]'}"},
+                        {"role": "user", "content": f"Company: {job.company}\nRole: {job.title}\nJob Skills: {', '.join(job.required_skills)}\nCandidate Name: {candidate_name}\n\nCandidate Resume:\n{resume.content[:2500] if has_content else '[Resume content is empty]'}"},
                     ],
                     temperature=0.4,
                 )
                 raw = extract_raw_content_from_response(resp)
                 data = extract_json_from_llm_response(raw)
-                return OutreachResponse(**data)
+
+                raw_pitch = data.get("cover_letter_pitch", "")
+                pitch = ensure_three_paragraph_cover_letter(raw_pitch, job, resume)
+                note = sanitize_dashes(data.get("connection_note", "")).strip()
+                subject = sanitize_dashes(data.get("subject_line", f"Application: {job.title} - {candidate_name}")).strip()
+
+                return OutreachResponse(
+                    subject_line=subject,
+                    cover_letter_pitch=pitch,
+                    connection_note=note,
+                )
             except Exception as e:
                 raise RuntimeError(f"AI API Provider Failed ({self.model_name}): {str(e)}") from e
 
         # Offline fallback pitch
         skills_str = ", ".join(job.required_skills[:3]) if job.required_skills else "software engineering"
+        candidate_name = resume.name or "Candidate"
         if not has_content:
-            subject = f"Application Draft: {job.title} - {resume.name or 'Candidate'}"
+            subject = f"Application Draft: {job.title} - {candidate_name}"
             pitch = (
                 f"Dear Hiring Team at {job.company},\n\n"
-                f"I am writing to express my interest in the {job.title} position. "
+                f"I am writing to express my interest in the {job.title} position at {job.company}. "
                 f"[Draft note: Please review and insert your relevant experience related to {skills_str} before submitting].\n\n"
                 f"[Highlight 1-2 key technical accomplishments, architecture decisions, or domain expertise here].\n\n"
                 f"Thank you for your time and consideration. I welcome the opportunity to discuss how my background aligns with your team's goals.\n\n"
-                f"Sincerely,\n[Your Name]"
+                f"Sincerely,\n{candidate_name}"
             )
             note = f"Hi! I noticed the {job.title} opening at {job.company} and would love to connect to learn more about the engineering team's current focus."
         else:
-            subject = f"Application: {job.title} - {resume.name}"
+            subject = f"Application: {job.title} - {candidate_name}"
             pitch = (
                 f"Dear Hiring Team at {job.company},\n\n"
-                f"I am writing to express my strong interest in the {job.title} position. With hands-on experience in {skills_str}, "
+                f"I am writing to express my strong interest in the {job.title} position at {job.company}. With hands-on experience in {skills_str}, "
                 f"I have built scalable solutions and driven technical delivery across similar domain challenges.\n\n"
                 f"Throughout my background, I have prioritized clean architecture, automated testing, and high-performance system design. "
                 f"I am eager to bring this momentum to {job.company} to help accelerate your current engineering roadmap.\n\n"
                 f"Thank you for your time and consideration. I welcome the opportunity to discuss how my experience aligns with your team's goals.\n\n"
-                f"Sincerely,\nCandidate"
+                f"Sincerely,\n{candidate_name}"
             )
             note = f"Hi! I noticed the {job.title} opening at {job.company} and would love to connect. I bring strong experience in {skills_str} and look forward to sharing ideas!"
+
+        pitch = ensure_three_paragraph_cover_letter(pitch, job, resume)
+        note = sanitize_dashes(note)
+        subject = sanitize_dashes(subject)
 
         return OutreachResponse(
             subject_line=subject,
             cover_letter_pitch=pitch,
             connection_note=note,
         )
+

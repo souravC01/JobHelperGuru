@@ -159,7 +159,6 @@ class ObjectStorageService:
                 return response["Body"].read()
             except Exception as e:
                 print(f"[WARN] R2 download failed for {object_key}: {e}")
-                return None
 
         safe_path = self._resolve_safe_path(object_key, user_id=user_id)
         if safe_path and safe_path.is_file():

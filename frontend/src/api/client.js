@@ -358,14 +358,57 @@ export async function downloadExcelReport() {
   document.body.removeChild(a);
 }
 
-export async function downloadResumeFile(resumeId, filename = 'resume') {
-  const res = await authFetch(`${API_BASE}/resumes/${resumeId}/download`);
-  if (!res.ok) throw new Error('Failed to download resume file');
+export async function exportCoverLetterDocx(data) {
+  const res = await authFetch(`${API_BASE}/resumes/export-cover-letter-docx`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, 'Failed to export cover letter Word document');
+  }
+  let filename = 'Cover_Letter.docx';
+  const disposition = res.headers.get('content-disposition');
+  if (disposition) {
+    const match = disposition.match(/filename=["']?([^"';]+)["']?/i);
+    if (match && match[1]) {
+      filename = match[1].trim();
+    }
+  }
   const blob = await res.blob();
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+export async function downloadResumeFile(resumeId, filename = 'resume') {
+  const res = await authFetch(`${API_BASE}/resumes/${resumeId}/download`);
+  if (!res.ok) throw new Error('Failed to download resume file');
+
+  const isFallback = res.headers.get('x-fallback-generated') === 'true';
+  if (isFallback) {
+    alert('Original uploaded file was not found in storage, so the file was generated from the saved text.');
+  }
+
+  let resolvedFilename = filename;
+  const disposition = res.headers.get('content-disposition');
+  if (disposition) {
+    const match = disposition.match(/filename=["']?([^"';]+)["']?/i);
+    if (match && match[1]) {
+      resolvedFilename = match[1].trim();
+    }
+  }
+
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = resolvedFilename;
   document.body.appendChild(a);
   a.click();
   window.URL.revokeObjectURL(url);

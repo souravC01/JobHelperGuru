@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from typing import Optional, List
 
@@ -28,8 +29,10 @@ from backend.models import (
     BulletOptimizationRequest,
     BulletOptimizationResponse,
     OutreachResponse,
+    CoverLetterDocxRequest,
     User,
 )
+from backend.services.document_export import generate_cover_letter_docx, generate_docx_from_text
 from backend.storage import StorageService
 from backend.services.scraper import ScraperService
 from backend.services.ai_engine import AIEngine, extract_raw_content_from_response
@@ -137,6 +140,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition", "X-Fallback-Generated"],
 )
 
 # Services
@@ -474,6 +478,36 @@ def parse_resume_file(
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
 
 
+@app.post("/api/resumes/export-cover-letter-docx")
+def export_cover_letter_docx(
+    req: CoverLetterDocxRequest,
+    current_user: User = Depends(get_current_user),
+):
+    if not req.cover_letter_text or not req.cover_letter_text.strip():
+        raise HTTPException(status_code=422, detail="Cover letter text cannot be empty.")
+
+    candidate_name = req.candidate_name or current_user.name or ""
+    docx_bytes = generate_cover_letter_docx(
+        cover_letter_text=req.cover_letter_text,
+        candidate_name=candidate_name,
+        company=req.company or "",
+        role=req.role or "",
+        subject_line=req.subject_line or "",
+    )
+    safe_company = re.sub(r'[^a-zA-Z0-9_-]', '_', req.company or "Company").strip('_') or "Company"
+    safe_role = re.sub(r'[^a-zA-Z0-9_-]', '_', req.role or "Role").strip('_') or "Role"
+    filename = f"Cover_Letter_{safe_company}_{safe_role}.docx"
+
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
+
+
 @app.get("/api/resumes/{resume_id}/download")
 def download_resume_file(
     resume_id: str,
@@ -482,9 +516,6 @@ def download_resume_file(
     resume = storage.get_resume(resume_id, user_id=current_user.id)
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found.")
-
-    if not resume.file_key and not resume.attachment_id:
-        raise HTTPException(status_code=404, detail="No document file attached to this resume.")
 
     attachment = None
     if resume.attachment_id:
@@ -495,27 +526,41 @@ def download_resume_file(
     if attachment and attachment.deletion_state != "active":
         raise HTTPException(status_code=404, detail="File is no longer available.")
 
-    storage_backend = attachment.storage_backend if attachment else ("r2" if object_storage.is_configured else "local")
     object_key = attachment.object_key if attachment else resume.file_key
     original_filename = (attachment.original_filename if attachment else None) or f"{resume.name}.pdf"
     content_type = (attachment.content_type if attachment else None) or "application/octet-stream"
 
-    if storage_backend == "r2":
-        download_url = object_storage.generate_download_url(object_key)
-        if not download_url:
-            raise HTTPException(status_code=503, detail="Unable to generate download link.")
-        return RedirectResponse(url=download_url, status_code=307)
-    else:
+    file_bytes = None
+    if object_key:
         file_bytes = object_storage.get_file(object_key, user_id=current_user.id)
-        if not file_bytes:
-            raise HTTPException(status_code=404, detail="File not found in storage.")
+
+    if file_bytes:
         return Response(
             content=file_bytes,
             media_type=content_type,
             headers={
-                "Content-Disposition": f'attachment; filename="{original_filename}"'
+                "Content-Disposition": f'attachment; filename="{original_filename}"',
+                "Access-Control-Expose-Headers": "Content-Disposition, X-Fallback-Generated",
             },
         )
+
+    # Graceful fallback: synthesize clean .docx from saved resume text
+    raw_text = (getattr(resume, "raw_text", None) or getattr(resume, "content", None) or "").strip()
+    if raw_text:
+        fallback_bytes = generate_docx_from_text(title=resume.name or "Resume", text=raw_text)
+        safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', resume.name or "resume").strip('_') or "resume"
+        fallback_filename = f"{safe_name}_generated.docx"
+        return Response(
+            content=fallback_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": f'attachment; filename="{fallback_filename}"',
+                "X-Fallback-Generated": "true",
+                "Access-Control-Expose-Headers": "Content-Disposition, X-Fallback-Generated",
+            },
+        )
+
+    raise HTTPException(status_code=404, detail="Original uploaded file was not found in storage.")
 
 
 @app.patch("/api/resumes/{resume_id}", response_model=Resume)

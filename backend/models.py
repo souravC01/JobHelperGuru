@@ -321,3 +321,11 @@ class AuthResponse(BaseModel):
     message: Optional[str] = None
     is_new_user: bool = False
 
+
+class CoverLetterDocxRequest(BaseModel):
+    cover_letter_text: str
+    company: Optional[str] = ""
+    role: Optional[str] = ""
+    candidate_name: Optional[str] = ""
+    subject_line: Optional[str] = ""
+
