@@ -173,3 +173,25 @@ Once Render reports "Live" status:
    - Parse a job description and generate tailored resume bullets.
    - Check the Tracker tab to ensure applications save to PostgreSQL.
 5. **Verify UptimeRobot Status:** Check UptimeRobot after 10-20 minutes to confirm successful green heartbeat checks.
+
+---
+
+## Step 6: Automated CI/CD & Deploy Hook Gating
+
+To protect production, Render deployments are gated by GitHub Actions CI. Pushing to GitHub does not trigger an immediate build until all backend, frontend, and Docker test suites pass.
+
+### How to Configure Gated Deployment:
+
+1. **In Render Dashboard**:
+   - Navigate to your Web Service -> **Settings**.
+   - Under **Build & Deploy**, copy your **Deploy Hook** URL:
+     `https://api.render.com/deploy/srv-xxxxxxx?key=yyyyyyy`
+2. **In GitHub Repository Settings**:
+   - Navigate to **Settings** -> **Secrets and variables** -> **Actions**.
+   - Click **New repository secret**.
+   - Name: `RENDER_DEPLOY_HOOK_URL`
+   - Value: Paste the copied Render Deploy Hook URL.
+3. **How It Works**:
+   - On every pull request and branch push, GitHub Actions runs backend tests (160 tests), frontend tests (17 tests), and Docker container build validation.
+   - When code is merged into `main` and all CI tests pass, the `deploy-render` job automatically triggers the Render Deploy Hook, ensuring only verified code is deployed to production.
+

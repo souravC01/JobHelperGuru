@@ -4,6 +4,7 @@
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-jobhelperguru.onrender.com-0a66c2?style=for-the-badge&logo=render&logoColor=white)](https://jobhelperguru.onrender.com)
 [![Backend Tests](https://img.shields.io/badge/Backend%20Tests-160%2F160%20Passing-057642?style=for-the-badge)](tests/)
 [![Frontend Tests](https://img.shields.io/badge/Frontend%20Tests-17%2F17%20Passing-057642?style=for-the-badge)](frontend/src/test/)
+[![CI/CD Pipeline](https://github.com/souravC01/JobHelperGuru/actions/workflows/ci.yml/badge.svg)](https://github.com/souravC01/JobHelperGuru/actions/workflows/ci.yml)
 
 🌐 **Live Application:** [https://jobhelperguru.onrender.com](https://jobhelperguru.onrender.com)
 

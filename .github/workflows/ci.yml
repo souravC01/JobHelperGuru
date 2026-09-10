@@ -1,0 +1,140 @@
+name: CI/CD Pipeline
+
+'on':
+  push:
+    branches:
+      - main
+      - security/audit-remediation
+      - 'ci/**'
+      - 'feature/**'
+      - 'fix/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-ci:
+    name: Backend Tests & Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements/runtime.txt
+            requirements/dev.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/dev.txt
+
+      - name: Verify zero em-dash compliance
+        run: |
+          python -c "
+          import os, sys
+          bad_chars = ['\u2014', '\u2013']
+          failed = False
+          scan_dirs = ['backend', 'frontend/src', 'tests']
+          for d in scan_dirs:
+              for root, _, files in os.walk(d):
+                  for f in files:
+                      if f.endswith(('.py', '.js', '.jsx', '.json')):
+                          p = os.path.join(root, f)
+                          try:
+                              text = open(p, encoding='utf-8').read()
+                              for c in bad_chars:
+                                  if c in text:
+                                      print(f'Error: Found unauthorized dash {repr(c)} in {p}')
+                                      failed = True
+                          except Exception:
+                              pass
+          if failed:
+              sys.exit(1)
+          print('Zero em-dash compliance verified across application code.')
+          "
+
+      - name: Run Pytest test suite
+        env:
+          JWT_SECRET_KEY: "ci_test_jwt_secret_key_minimum_32_characters_long_for_security"
+          SETTINGS_ENCRYPTION_KEY: "ci_test_settings_encryption_key_32_chars_long"
+        run: |
+          python -m pytest -q
+
+  frontend-ci:
+    name: Frontend Tests & Production Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run Vitest unit tests
+        run: npm run test:run
+
+      - name: Build production bundle
+        run: npm run build
+
+  docker-ci:
+    name: Docker Container Build Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build container image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: jobhelperguru:ci-test
+
+  ci-success:
+    name: CI Pipeline Passed
+    needs: [backend-ci, frontend-ci, docker-ci]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate All Required Checks Passed
+        run: echo "All backend, frontend, and Docker validation checks passed successfully."
+
+  deploy-render:
+    name: Trigger Render Deployment
+    needs: ci-success
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render Deploy Hook
+        run: |
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
+            echo "::warning ::RENDER_DEPLOY_HOOK_URL secret is not configured in repository secrets. Skipping deploy hook trigger."
+          else
+            echo "Triggering Render deployment..."
+            curl -f -s -S -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+            echo "Render deploy hook triggered successfully!"
+          fi
