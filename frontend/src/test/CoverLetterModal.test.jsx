@@ -97,7 +97,7 @@ describe('CoverLetterModal 3-paragraph format and docx/pdf download', () => {
       })
     })
 
-    const docxBtn = screen.getByRole('button', { name: /Download Word \(\.docx\)/i })
+    const docxBtn = await screen.findByRole('button', { name: /Download Word \(\.docx\)/i })
     await act(async () => {
       fireEvent.click(docxBtn)
     })
