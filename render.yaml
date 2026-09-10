@@ -7,7 +7,7 @@ services:
     plan: free
     region: oregon
     healthCheckPath: /api/health
-    autoDeploy: true
+    autoDeploy: false
     envVars:
       - key: PORT
         value: 10000
