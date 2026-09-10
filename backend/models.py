@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, ValidationInfo, ConfigDict
 
 
 class ApplicationStatus(str, Enum):
@@ -61,21 +61,42 @@ class ApplicationUpdate(BaseModel):
     notes: Optional[str] = None
     best_resume_id: Optional[str] = None
 
+    @field_validator("company", "role", "status", "required_skills", "ats_keywords", mode="before")
+    @classmethod
+    def reject_null_fields(cls, v: Any, info: ValidationInfo) -> Any:
+        if v is None:
+            raise ValueError(f"{info.field_name} cannot be null")
+        return v
+
+
+class ResumeAttachment(BaseModel):
+    id: str
+    user_id: str
+    storage_backend: str  # local or r2
+    object_key: str
+    original_filename: Optional[str] = None
+    content_type: Optional[str] = None
+    size_bytes: Optional[int] = 0
+    deletion_state: str = "active"  # active, pending, failed
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+
 
 class Resume(BaseModel):
     id: str
     name: str
     content: str
     file_key: Optional[str] = None
+    attachment_id: Optional[str] = None
     download_url: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
 
 
 class ResumeCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     name: str
     content: str
-    file_key: Optional[str] = None
 
 
 class ResumeUpdate(BaseModel):
@@ -84,21 +105,53 @@ class ResumeUpdate(BaseModel):
 
 
 class Settings(BaseModel):
-    api_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    api_base_url: str = ""
     api_key: str = ""
-    model_name: str = "gemini-2.0-flash"
-    default_follow_up_days: int = 7
+    model_name: str = ""
+    default_follow_up_days: int = Field(default=7, ge=1, le=90)
     saved_keys: Optional[str] = "[]"
     use_offline_mode: bool = False
+    active_profile_id: Optional[str] = None
+    has_api_key: bool = False
+    key_suffix: Optional[str] = None
 
 
 class SettingsUpdate(BaseModel):
     api_base_url: Optional[str] = None
     api_key: Optional[str] = None
     model_name: Optional[str] = None
-    default_follow_up_days: Optional[int] = None
+    default_follow_up_days: Optional[int] = Field(default=None, ge=1, le=90)
     saved_keys: Optional[str] = None
     use_offline_mode: Optional[bool] = None
+    active_profile_id: Optional[str] = None
+
+
+class ProviderProfileMetadata(BaseModel):
+    id: str
+    name: str
+    api_base_url: str
+    model_name: str
+    is_active: bool = False
+    has_api_key: bool = False
+    key_suffix: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ProviderProfileCreate(BaseModel):
+    name: str
+    api_base_url: str
+    model_name: str
+    api_key: Optional[str] = None
+    is_active: bool = False
+
+
+class ProviderProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    api_base_url: Optional[str] = None
+    model_name: Optional[str] = None
+    api_key: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 class ScrapedJob(BaseModel):
@@ -209,6 +262,9 @@ class User(BaseModel):
     name: str
     avatar_url: Optional[str] = None
     provider: str = "email"
+    email_verified: bool = False
+    session_version: int = 1
+    google_sub: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
 
@@ -218,14 +274,58 @@ class UserRegisterRequest(BaseModel):
     password: str
     name: str
 
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long.")
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password must not exceed 72 UTF-8 bytes.")
+        return v
+
 
 class UserLoginRequest(BaseModel):
     email: str
     password: str
 
 
-class AuthResponse(BaseModel):
+class EmailVerificationRequest(BaseModel):
+    email: str
+
+
+class EmailVerificationConfirm(BaseModel):
     token: str
-    user: User
+
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long.")
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password must not exceed 72 UTF-8 bytes.")
+        return v
+
+
+class AuthResponse(BaseModel):
+    token: Optional[str] = None
+    user: Optional[User] = None
+    message: Optional[str] = None
     is_new_user: bool = False
+
+
+class CoverLetterDocxRequest(BaseModel):
+    cover_letter_text: str
+    company: Optional[str] = ""
+    role: Optional[str] = ""
+    candidate_name: Optional[str] = ""
+    subject_line: Optional[str] = ""
 

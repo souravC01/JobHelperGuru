@@ -55,30 +55,36 @@ def test_new_grad_eligibility_window():
     from datetime import datetime
     parser = HeuristicParser()
     ref_date = datetime(2026, 9, 1)
+    criteria = "Graduating in the next 4 months or graduated within the last 6 months"
 
     # 1. Graduating in 1 month (Oct 2026) -> Eligible
     res_oct_2026 = "Education: B.S. in Computer Science, Expected: Oct 2026"
-    el_oct = parser.check_new_grad_eligibility(res_oct_2026, ref_date)
+    el_oct = parser.check_new_grad_eligibility(res_oct_2026, employer_criteria=criteria, ref_date=ref_date)
     assert el_oct["eligible"] is True
     assert el_oct["months_diff"] == 1
 
     # 2. Graduated 4 months ago (May 2026) -> Eligible
     res_may_2026 = "Education: Bachelor of Engineering, Graduation: May 2026"
-    el_may = parser.check_new_grad_eligibility(res_may_2026, ref_date)
+    el_may = parser.check_new_grad_eligibility(res_may_2026, employer_criteria=criteria, ref_date=ref_date)
     assert el_may["eligible"] is True
     assert el_may["months_diff"] == -4
 
     # 3. Graduating in 12 months (Sept 2027) -> Ineligible (> 4 months)
     res_2027 = "Education: Computer Science, Expected: Sep 2027"
-    el_2027 = parser.check_new_grad_eligibility(res_2027, ref_date)
+    el_2027 = parser.check_new_grad_eligibility(res_2027, employer_criteria=criteria, ref_date=ref_date)
     assert el_2027["eligible"] is False
     assert el_2027["months_diff"] > 4
 
     # 4. Graduated 24 months ago (Sept 2024) -> Ineligible (> 6 months ago)
     res_2024 = "Education: B.S. in Computer Science, Graduation: Sep 2024"
-    el_2024 = parser.check_new_grad_eligibility(res_2024, ref_date)
+    el_2024 = parser.check_new_grad_eligibility(res_2024, employer_criteria=criteria, ref_date=ref_date)
     assert el_2024["eligible"] is False
     assert el_2024["months_diff"] < -6
+
+    # 5. When employer criteria is not specified -> Unknown (None)
+    el_none = parser.check_new_grad_eligibility(res_oct_2026, employer_criteria=None, ref_date=ref_date)
+    assert el_none["eligible"] is None
+    assert "not specified" in el_none["status"].lower()
 
 
 def test_heuristic_experience_required_range():

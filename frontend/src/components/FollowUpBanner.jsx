@@ -1,8 +1,8 @@
-import React from 'react';
 import { Bell, Calendar } from 'lucide-react';
+import { localDate } from '../utils/localDate';
 
 export default function FollowUpBanner({ applications = [], onSelectApp }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate();
 
   const dueApps = applications.filter((app) => {
     if (!app.follow_up_date) return false;

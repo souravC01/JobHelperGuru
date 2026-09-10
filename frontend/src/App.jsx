@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Briefcase,
   Sparkles,
@@ -57,7 +57,6 @@ export default function App() {
   const [currentJob, setCurrentJob] = useState(null);
   const [resumes, setResumes] = useState([]);
   const [applications, setApplications] = useState([]);
-  const [refreshTrackerTrigger, setRefreshTrackerTrigger] = useState(0);
   const [rankingRefreshKey, setRankingRefreshKey] = useState(0);
 
   // Modals state
@@ -106,54 +105,84 @@ export default function App() {
     });
   };
 
+  const sessionRef = useRef(0);
+
+  const resetAccountState = () => {
+    setCurrentUser(null);
+    setResumes([]);
+    setApplications([]);
+    setCurrentJob(null);
+    setSelectedResumeForJob(null);
+    setAdoptedSkillsMap({});
+    setIsOptimizerOpen(false);
+    setOptimizerKeywords([]);
+    setIsCoverLetterOpen(false);
+    setIsSettingsOpen(false);
+    setIsOnboardingSettings(false);
+    setAiErrorState({
+      isOpen: false,
+      errorMsg: '',
+      modelName: '',
+      retryAction: null,
+    });
+  };
+
   const loadInitialData = async () => {
+    const currentSession = sessionRef.current;
     if (!getToken()) {
-      setResumes([]);
-      setApplications([]);
+      resetAccountState();
       return;
     }
     try {
       const me = await getMe().catch(() => null);
+      if (sessionRef.current !== currentSession) return;
       if (me) setCurrentUser(me);
 
       const [resumesData, appsData] = await Promise.all([
         getResumes().catch(() => []),
         getApplications().catch(() => []),
       ]);
+      if (sessionRef.current !== currentSession) return;
+
       setResumes(resumesData);
       setApplications(appsData);
-      if (resumesData.length > 0) {
-        setSelectedResumeForJob(resumesData[0]);
-      }
+      setSelectedResumeForJob(resumesData[0] ?? null);
     } catch (err) {
+      if (sessionRef.current !== currentSession) return;
       console.error('Failed to load initial data:', err);
     }
   };
 
   useEffect(() => {
     const handleUnauthorized = () => {
-      setCurrentUser(null);
-      setResumes([]);
-      setApplications([]);
+      sessionRef.current += 1;
+      resetAccountState();
       setAuthMode('login');
       setIsAuthOpen(true);
     };
 
     const handleLogout = () => {
-      setCurrentUser(null);
-      setResumes([]);
-      setApplications([]);
-      setCurrentJob(null);
+      sessionRef.current += 1;
+      resetAccountState();
+    };
+
+    const handleLoginSuccess = (e) => {
+      sessionRef.current += 1;
+      resetAccountState();
+      if (e?.detail) setCurrentUser(e.detail);
+      loadInitialData();
     };
 
     window.addEventListener('jh_auth_unauthorized', handleUnauthorized);
     window.addEventListener('jh_auth_logout', handleLogout);
+    window.addEventListener('jh_auth_login_success', handleLoginSuccess);
 
     loadInitialData();
 
     return () => {
       window.removeEventListener('jh_auth_unauthorized', handleUnauthorized);
       window.removeEventListener('jh_auth_logout', handleLogout);
+      window.removeEventListener('jh_auth_login_success', handleLoginSuccess);
     };
   }, []);
 
@@ -179,7 +208,6 @@ export default function App() {
   };
 
   const handleApplicationSaved = async () => {
-    setRefreshTrackerTrigger((prev) => prev + 1);
     const updatedApps = await getApplications().catch(() => []);
     setApplications(updatedApps);
   };
@@ -444,7 +472,15 @@ export default function App() {
         {activeTab === 'resumes' && (
           currentUser ? (
             <ResumeLibrary
-              onResumesUpdated={(updated) => setResumes(updated)}
+              key={currentUser?.id || 'anon'}
+              onResumesUpdated={(updated) => {
+                setResumes(updated);
+                setSelectedResumeForJob((prev) => {
+                  if (!prev) return updated[0] ?? null;
+                  const found = updated.find((r) => r.id === prev.id);
+                  return found || (updated[0] ?? null);
+                });
+              }}
             />
           ) : (
             <div className="max-w-xl mx-auto my-12 p-8 rounded-lg bg-white border border-[#e0e0e0] text-center">
@@ -470,15 +506,19 @@ export default function App() {
 
         {activeTab === 'tracker' && (
           currentUser ? (
-            <ApplicationsTracker refreshTrigger={refreshTrackerTrigger} />
+            <ApplicationsTracker
+              key={currentUser?.id || 'anon'}
+              applications={applications}
+              onApplicationsChanged={setApplications}
+            />
           ) : (
             <div className="max-w-xl mx-auto my-12 p-8 rounded-lg bg-white border border-[#e0e0e0] text-center">
               <div className="w-14 h-14 rounded-full bg-[#0a66c2]/10 border border-[#0a66c2]/20 text-[#0a66c2] mx-auto flex items-center justify-center mb-4">
                 <TableIcon size={24} />
               </div>
-              <h3 className="text-xl font-bold text-[#000000] mb-2">Personal Job Pipeline</h3>
+              <h3 className="text-xl font-bold text-[#000000] mb-2">Personal Applications Pipeline</h3>
               <p className="text-xs text-[#666666] mb-6 leading-relaxed">
-                Sign in to view and manage your private job application pipeline, interview stages, and follow-up deadlines.
+                Sign in to manage and track your job application pipeline with automatic follow-up reminders.
               </p>
               <button
                 onClick={() => {
@@ -500,11 +540,13 @@ export default function App() {
         onClose={() => setIsAuthOpen(false)}
         initialMode={authMode}
         onSuccess={async (user, isNewUser = false) => {
+          sessionRef.current += 1;
+          resetAccountState();
           setCurrentUser(user);
           await loadInitialData();
           try {
             const settings = await getSettings();
-            if (isNewUser || (!settings?.api_key?.trim() && !settings?.use_offline_mode)) {
+            if (isNewUser || (!settings?.has_api_key && !settings?.use_offline_mode)) {
               setIsOnboardingSettings(true);
               setIsSettingsOpen(true);
             }
@@ -518,6 +560,7 @@ export default function App() {
       />
 
       <BulletOptimizerModal
+        key={`optimizer-${currentUser?.id || 'anon'}`}
         isOpen={isOptimizerOpen}
         onClose={() => setIsOptimizerOpen(false)}
         initialKeywords={optimizerKeywords}
@@ -529,14 +572,17 @@ export default function App() {
       />
 
       <CoverLetterModal
+        key={`cover-${currentUser?.id || 'anon'}`}
         isOpen={isCoverLetterOpen}
         onClose={() => setIsCoverLetterOpen(false)}
         currentJob={currentJob}
         selectedResume={selectedResumeForJob}
+        currentUser={currentUser}
         onAiError={handleAiError}
       />
 
       <SettingsModal
+        key={`settings-${currentUser?.id || 'anon'}`}
         isOpen={isSettingsOpen}
         onClose={() => {
           setIsSettingsOpen(false);

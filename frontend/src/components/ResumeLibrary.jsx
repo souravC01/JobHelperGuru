@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   FileText,
   Plus,
@@ -21,6 +21,7 @@ import {
   uploadResumeFile,
   parseResumeFile,
   updateResume,
+  downloadResumeFile,
 } from '../api/client';
 
 export default function ResumeLibrary({ onResumesUpdated }) {
@@ -46,6 +47,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
 
   const fileInputRef = useRef(null);
   const directFileInputRef = useRef(null);
+  const fileParseRequestIdRef = useRef(0);
 
   const loadResumes = async () => {
     setLoading(true);
@@ -65,6 +67,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
   }, []);
 
   const handleCloseAddModal = () => {
+    fileParseRequestIdRef.current += 1;
     setShowAddModal(false);
     setNewName('');
     setNewContent('');
@@ -82,8 +85,8 @@ export default function ResumeLibrary({ onResumesUpdated }) {
     setError('');
     try {
       if (selectedFile) {
-        // Upload the actual binary with the user's custom title
-        await uploadResumeFile(selectedFile, newName.trim());
+        // Upload the actual binary with the user's custom title and edited text content
+        await uploadResumeFile(selectedFile, newName.trim(), newContent.trim());
       } else {
         // Plain text entry
         await addResume({ name: newName.trim(), content: newContent.trim() });
@@ -109,6 +112,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
 
   const handleProcessFile = async (file) => {
     if (!file) return;
+    const parseId = ++fileParseRequestIdRef.current;
     setUploadingDoc(true);
     setError('');
     const suggestedTitle = file.name.replace(/\.[^/.]+$/, '');
@@ -122,19 +126,25 @@ export default function ResumeLibrary({ onResumesUpdated }) {
     try {
       if (file.name.endsWith('.txt') || file.name.endsWith('.md')) {
         const text = await file.text();
+        if (parseId !== fileParseRequestIdRef.current) return;
         setNewContent(text);
       } else {
         // Parse document on the fly without creating a record in the database yet
         const parsed = await parseResumeFile(file);
+        if (parseId !== fileParseRequestIdRef.current) return;
         setNewContent(parsed.text);
         if (!newName.trim()) {
           setNewName(parsed.suggested_title || suggestedTitle);
         }
       }
     } catch (err) {
-      setError(err.message || 'Failed to extract text from file.');
+      if (parseId === fileParseRequestIdRef.current) {
+        setError(err.message || 'Failed to extract text from file.');
+      }
     } finally {
-      setUploadingDoc(false);
+      if (parseId === fileParseRequestIdRef.current) {
+        setUploadingDoc(false);
+      }
     }
   };
 
@@ -146,7 +156,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
       const suggestedTitle = file.name.replace(/\.[^/.]+$/, '');
       if (file.name.endsWith('.txt') || file.name.endsWith('.md')) {
         const text = await file.text();
-        await addResume({ name: suggestedTitle, content: text });
+        await uploadResumeFile(file, suggestedTitle, text);
       } else {
         await uploadResumeFile(file, suggestedTitle);
       }
@@ -227,7 +237,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
           <input
             ref={directFileInputRef}
             type="file"
-            accept=".pdf,.docx,.doc,.txt,.md"
+            accept=".pdf,.docx,.doc,.txt,.md,.rtf"
             onChange={handleDirectUpload}
             className="hidden"
           />
@@ -429,7 +439,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf,.docx,.doc,.txt,.md"
+                  accept=".pdf,.docx,.doc,.txt,.md,.rtf"
                   onChange={(e) => handleProcessFile(e.target.files[0])}
                   className="hidden"
                 />
@@ -451,7 +461,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
                       </span>
                     </div>
                     <p className="text-[11px] text-[#666666]">
-                      Supports <strong>.PDF</strong>, <strong>.DOCX (Word)</strong>, <strong>.TXT</strong>, <strong>.MD</strong>
+                      Supports <strong>.PDF</strong>, <strong>.DOCX (Word)</strong>, <strong>.RTF</strong>, <strong>.TXT</strong>, <strong>.MD</strong>
                     </p>
                   </div>
                 )}
@@ -567,16 +577,14 @@ export default function ResumeLibrary({ onResumesUpdated }) {
                 </button>
 
                 {viewingResume.download_url && (
-                  <a
-                    href={viewingResume.download_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={() => downloadResumeFile(viewingResume.id, viewingResume.name || 'resume').catch((err) => alert(err.message))}
                     className="btn-secondary-corporate text-xs py-1 px-3 flex items-center gap-1.5"
-                    title="Download original uploaded file"
+                    title="Download original uploaded file (edited text is saved for ATS matching)"
                   >
                     <Download size={13} />
-                    <span>Download File</span>
-                  </a>
+                    <span>Original uploaded file</span>
+                  </button>
                 )}
 
                 <button

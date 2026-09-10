@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Tag, Copy, Check } from 'lucide-react';
 
 export default function ATSKeywordBank({ keywords = [], onSelectKeyword }) {

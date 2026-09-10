@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Crown,
   CheckCircle,
@@ -190,15 +190,22 @@ export default function ResumeFitRanker({
                       {/* New Grad Eligibility Status Badge */}
                       {rank.is_new_grad_role && (
                         <div className="flex items-center gap-1.5 mt-1">
-                          {rank.new_grad_eligible ? (
+                          {rank.new_grad_eligible === true && (
                             <span className="badge-corporate bg-[#057642]/10 border border-[#057642]/25 text-[#057642] text-[10px] py-0.5 px-2 flex items-center gap-1 font-semibold">
                               <GraduationCap size={12} className="text-[#057642]" />
                               <span>New Grad Eligible ({rank.graduation_status})</span>
                             </span>
-                          ) : (
+                          )}
+                          {rank.new_grad_eligible === false && (
                             <span className="badge-corporate bg-[#b24020]/10 border border-[#b24020]/25 text-[#b24020] text-[10px] py-0.5 px-2 flex items-center gap-1 font-semibold">
                               <AlertTriangle size={12} className="text-[#b24020]" />
-                              <span>Timeline Check: {rank.graduation_status || 'Date not found'}</span>
+                              <span>Timeline Ineligible ({rank.graduation_status || 'Outside window'})</span>
+                            </span>
+                          )}
+                          {(rank.new_grad_eligible === null || rank.new_grad_eligible === undefined) && (
+                            <span className="badge-corporate bg-[#555555]/10 border border-[#555555]/25 text-[#555555] text-[10px] py-0.5 px-2 flex items-center gap-1 font-semibold">
+                              <GraduationCap size={12} className="text-[#666666]" />
+                              <span>Timeline Unknown ({rank.graduation_status || 'Graduation date not detected'})</span>
                             </span>
                           )}
                         </div>
@@ -252,7 +259,16 @@ export default function ResumeFitRanker({
                     {rank.graduation_status && (
                       <div className="p-3 rounded-lg bg-[#f3f6f8] border border-[#e0e0e0] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                         <div className="flex items-center gap-2">
-                          <GraduationCap size={15} className={rank.new_grad_eligible ? "text-[#057642]" : "text-[#b24020]"} />
+                          <GraduationCap
+                            size={15}
+                            className={
+                              rank.new_grad_eligible === true
+                                ? "text-[#057642]"
+                                : rank.new_grad_eligible === false
+                                ? "text-[#b24020]"
+                                : "text-[#666666]"
+                            }
+                          />
                           <div>
                             <span className="font-semibold text-[#000000]">Education & Timeline: </span>
                             <span className="text-[#666666]">{rank.graduation_status}</span>
@@ -260,11 +276,17 @@ export default function ResumeFitRanker({
                         </div>
                         {rank.is_new_grad_role && (
                           <span className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 self-start sm:self-auto ${
-                            rank.new_grad_eligible
+                            rank.new_grad_eligible === true
                               ? 'bg-[#057642]/10 text-[#057642] border border-[#057642]/30'
-                              : 'bg-[#b24020]/10 text-[#b24020] border border-[#b24020]/30'
+                              : rank.new_grad_eligible === false
+                              ? 'bg-[#b24020]/10 text-[#b24020] border border-[#b24020]/30'
+                              : 'bg-[#555555]/10 text-[#555555] border border-[#555555]/30'
                           }`}>
-                            {rank.new_grad_eligible ? 'Meets Timeline' : 'Verify Timeline'}
+                            {rank.new_grad_eligible === true
+                              ? 'Meets Timeline'
+                              : rank.new_grad_eligible === false
+                              ? 'Ineligible'
+                              : 'Timeline Unknown'}
                           </span>
                         )}
                       </div>

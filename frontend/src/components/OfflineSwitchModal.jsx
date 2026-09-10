@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { AlertTriangle, Zap, Settings as SettingsIcon, X, Loader2 } from 'lucide-react';
 import { updateSettings } from '../api/client';
 

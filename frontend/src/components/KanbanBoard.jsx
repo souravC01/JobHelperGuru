@@ -1,4 +1,3 @@
-import React from 'react';
 import { MapPin, DollarSign, Calendar, ExternalLink, ArrowRight, ArrowLeft } from 'lucide-react';
 
 const COLUMNS = [
@@ -7,6 +6,7 @@ const COLUMNS = [
   { id: 'Interviewing', label: 'Interviewing', badge: 'status-interviewing' },
   { id: 'Offered', label: 'Offered', badge: 'status-offered' },
   { id: 'Rejected', label: 'Rejected', badge: 'status-rejected' },
+  { id: 'Archived', label: 'Archived', badge: 'status-archived' },
 ];
 
 export default function KanbanBoard({ applications = [], onUpdateStatus }) {
@@ -27,7 +27,7 @@ export default function KanbanBoard({ applications = [], onUpdateStatus }) {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 overflow-x-auto pb-4">
+    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 overflow-x-auto pb-4">
       {COLUMNS.map((col) => {
         const columnApps = applications.filter((app) => app.status === col.id);
 

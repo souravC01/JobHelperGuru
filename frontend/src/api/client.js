@@ -31,8 +31,10 @@ export async function authFetch(url, options = {}) {
   }
   const res = await fetch(url, { ...options, headers });
   if (res.status === 401) {
-    clearAuth();
-    window.dispatchEvent(new CustomEvent('jh_auth_unauthorized'));
+    if (token && token === getToken()) {
+      clearAuth();
+      window.dispatchEvent(new CustomEvent('jh_auth_unauthorized', { detail: { token } }));
+    }
   }
   return res;
 }
@@ -64,10 +66,6 @@ async function parseApiError(res, defaultMsg) {
   return err;
 }
 
-export async function fetchHealth() {
-  const res = await fetch(`${API_BASE}/health`);
-  return res.json();
-}
 
 // --- Auth APIs ---
 export async function registerUser({ email, password, name }) {
@@ -81,7 +79,9 @@ export async function registerUser({ email, password, name }) {
     throw new Error(data.detail || 'Registration failed');
   }
   const data = await res.json();
-  setAuth(data.token, data.user);
+  if (data.token) {
+    setAuth(data.token, data.user);
+  }
   return data;
 }
 
@@ -98,6 +98,50 @@ export async function loginUser({ email, password }) {
   const data = await res.json();
   setAuth(data.token, data.user);
   return data;
+}
+
+export async function requestEmailVerification(email) {
+  const res = await fetch(`${API_BASE}/auth/verify-email/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  return res.json();
+}
+
+export async function confirmEmailVerification(token) {
+  const res = await fetch(`${API_BASE}/auth/verify-email/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ detail: 'Verification failed' }));
+    throw new Error(data.detail || 'Verification failed');
+  }
+  return res.json();
+}
+
+export async function requestPasswordReset(email) {
+  const res = await fetch(`${API_BASE}/auth/password-reset/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  return res.json();
+}
+
+export async function confirmPasswordReset(token, new_password) {
+  const res = await fetch(`${API_BASE}/auth/password-reset/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ detail: 'Password reset failed' }));
+    throw new Error(data.detail || 'Password reset failed');
+  }
+  return res.json();
 }
 
 export async function googleAuthUser(credential) {
@@ -174,11 +218,14 @@ export async function parseResumeFile(file) {
   return res.json();
 }
 
-export async function uploadResumeFile(file, name = '') {
+export async function uploadResumeFile(file, name = '', content_override = '') {
   const formData = new FormData();
   formData.append('file', file);
   if (name) {
     formData.append('name', name);
+  }
+  if (content_override) {
+    formData.append('content_override', content_override);
   }
   const res = await authFetch(`${API_BASE}/resumes/upload`, {
     method: 'POST',
@@ -251,11 +298,11 @@ export async function optimizeBullet({
   return res.json();
 }
 
-export async function generateOutreach({ job, resume_id, resume_content }) {
+export async function generateOutreach({ job, resume_id, resume_content, candidate_name }) {
   const res = await authFetch(`${API_BASE}/resumes/generate-outreach`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ job, resume_id, resume_content }),
+    body: JSON.stringify({ job, resume_id, resume_content, candidate_name }),
   });
   if (!res.ok) {
     throw await parseApiError(res, 'Failed to generate outreach');
@@ -296,10 +343,6 @@ export async function deleteApplication(id) {
   return res.json();
 }
 
-/** @deprecated Use downloadExcelReport() which sends authenticated JWT Bearer headers */
-export function getExcelExportUrl() {
-  return `${API_BASE}/export/excel`;
-}
 
 export async function downloadExcelReport() {
   const res = await authFetch(`${API_BASE}/export/excel`);
@@ -309,6 +352,63 @@ export async function downloadExcelReport() {
   const a = document.createElement('a');
   a.href = url;
   a.download = `job_tracker_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+export async function exportCoverLetterDocx(data) {
+  const res = await authFetch(`${API_BASE}/resumes/export-cover-letter-docx`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, 'Failed to export cover letter Word document');
+  }
+  let filename = 'Cover_Letter.docx';
+  const disposition = res.headers.get('content-disposition');
+  if (disposition) {
+    const match = disposition.match(/filename=["']?([^"';]+)["']?/i);
+    if (match && match[1]) {
+      filename = match[1].trim();
+    }
+  }
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+export async function downloadResumeFile(resumeId, filename = 'resume') {
+  const res = await authFetch(`${API_BASE}/resumes/${resumeId}/download`);
+  if (!res.ok) throw new Error('Failed to download resume file');
+
+  const isFallback = res.headers.get('x-fallback-generated') === 'true';
+  if (isFallback) {
+    alert('Original uploaded file was not found in storage, so the file was generated from the saved text.');
+  }
+
+  let resolvedFilename = filename;
+  const disposition = res.headers.get('content-disposition');
+  if (disposition) {
+    const match = disposition.match(/filename=["']?([^"';]+)["']?/i);
+    if (match && match[1]) {
+      resolvedFilename = match[1].trim();
+    }
+  }
+
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = resolvedFilename;
   document.body.appendChild(a);
   a.click();
   window.URL.revokeObjectURL(url);
@@ -338,5 +438,54 @@ export async function testAISettings(settings) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
   });
+  return res.json();
+}
+
+// --- Provider Profiles ---
+export async function getProviderProfiles() {
+  const res = await authFetch(`${API_BASE}/settings/profiles`);
+  if (!res.ok) throw new Error('Failed to load provider profiles');
+  return res.json();
+}
+
+export async function createProviderProfile(profile) {
+  const res = await authFetch(`${API_BASE}/settings/profiles`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(profile),
+  });
+  if (!res.ok) throw new Error('Failed to create provider profile');
+  return res.json();
+}
+
+export async function getProviderProfile(id) {
+  const res = await authFetch(`${API_BASE}/settings/profiles/${id}`);
+  if (!res.ok) throw new Error('Failed to load provider profile');
+  return res.json();
+}
+
+export async function updateProviderProfile(id, updates) {
+  const res = await authFetch(`${API_BASE}/settings/profiles/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error('Failed to update provider profile');
+  return res.json();
+}
+
+export async function activateProviderProfile(id) {
+  const res = await authFetch(`${API_BASE}/settings/profiles/${id}/activate`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error('Failed to activate provider profile');
+  return res.json();
+}
+
+export async function deleteProviderProfile(id) {
+  const res = await authFetch(`${API_BASE}/settings/profiles/${id}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to delete provider profile');
   return res.json();
 }

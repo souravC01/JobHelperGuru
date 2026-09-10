@@ -16,6 +16,7 @@ except ImportError:
     CURL_CFFI_AVAILABLE = False
 
 from backend.models import ScrapedJob
+from backend.services.outbound_http import SafeHttpClient, OutboundPolicy, validate_destination_url, SSRFBlockedError
 
 
 def is_safe_url(url: str) -> bool:
@@ -24,27 +25,7 @@ def is_safe_url(url: str) -> bool:
     Blocks non-HTTP(S) schemes, private IP addresses, loopback, link-local, and cloud metadata endpoints.
     """
     try:
-        parsed = urlparse(url)
-        if parsed.scheme not in ("http", "https"):
-            return False
-        hostname = parsed.hostname
-        if not hostname:
-            return False
-        if hostname.lower() in ("localhost", "127.0.0.1", "::1", "metadata.google.internal"):
-            return False
-
-        addr_info = socket.getaddrinfo(hostname, None)
-        for item in addr_info:
-            ip_str = item[4][0]
-            ip = ipaddress.ip_address(ip_str)
-            if (
-                ip.is_private
-                or ip.is_loopback
-                or ip.is_link_local
-                or ip.is_reserved
-                or not ip.is_global
-            ):
-                return False
+        validate_destination_url(url, OutboundPolicy(is_scraping_request=True))
         return True
     except Exception:
         return False
@@ -53,6 +34,7 @@ def is_safe_url(url: str) -> bool:
 class ScraperService:
     def __init__(self):
         self.session = requests.Session()
+        self.safe_client = SafeHttpClient()
         self.session.headers.update({
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -82,10 +64,10 @@ class ScraperService:
         html = None
 
         # 1. Try TLS browser impersonation via curl_cffi for anti-bot protected sites (Indeed, Glassdoor, Cloudflare)
-        if CURL_CFFI_AVAILABLE:
+        if CURL_CFFI_AVAILABLE and is_safe_url(clean_url):
             for profile in ("safari17_0", "safari15_5", "chrome124"):
                 try:
-                    cffi_resp = cffi_requests.get(clean_url, impersonate=profile, timeout=timeout)
+                    cffi_resp = cffi_requests.get(clean_url, impersonate=profile, timeout=timeout, allow_redirects=False)
                     if (
                         cffi_resp.status_code == 200
                         and "Authenticating..." not in cffi_resp.text
@@ -96,12 +78,24 @@ class ScraperService:
                 except Exception:
                     continue
 
-        # 2. Fallback to standard requests.Session
+        # 2. Fallback to SafeHttpClient with redirect and body limits
         if not html:
             try:
-                response = self.session.get(clean_url, timeout=timeout, allow_redirects=True)
-                response.raise_for_status()
-                html = response.text
+                resp = self.safe_client.get(
+                    clean_url,
+                    policy=OutboundPolicy(is_scraping_request=True),
+                    timeout=timeout,
+                )
+                if resp.status_code == 200:
+                    html = resp.text
+                else:
+                    return ScrapedJob(
+                        title="",
+                        company="",
+                        location="",
+                        raw_text=f"Server returned HTTP {resp.status_code}. Please paste the job description text directly.",
+                        source_url=clean_url,
+                    )
             except Exception as e:
                 # If fetch fails (e.g. anti-bot or 403), return error info in raw_text so user knows
                 return ScrapedJob(
@@ -202,7 +196,7 @@ class ScraperService:
 
         # Clean title if it contains company separator (e.g. "Software Engineer - TechCorp")
         if title and company:
-            title = re.sub(rf"\s*[-|–]\s*{re.escape(company)}.*", "", title, flags=re.I).strip()
+            title = re.sub(rf"\s*[-|\u2013\u2014]\s*{re.escape(company)}.*", "", title, flags=re.I).strip()
         elif title and " - " in title:
             parts = title.split(" - ")
             title = parts[0].strip()
@@ -241,7 +235,7 @@ class ScraperService:
 
         # Check first 5 lines for common headline patterns like "Role at Company"
         for line in lines[:5]:
-            match = re.search(r"^(.*?)\s+at\s+(.*?)(?:\s*[-–(].*)?$", line, re.I)
+            match = re.search(r"^(.*?)\s+at\s+(.*?)(?:\s*[-\u2013\u2014(].*)?$", line, re.I)
             if match:
                 title = match.group(1).strip()
                 company = match.group(2).strip()
@@ -271,8 +265,6 @@ class ScraperService:
         Detects modern ATS widgets embedded on corporate career portals
         (e.g. Greenhouse API embed, Lever embed, Ashby embed, or embedded iframes).
         """
-        import html as html_lib
-
         # 1. Direct Greenhouse API Endpoint in HTML (e.g. IXL, Figma, Stripe, Airbnb)
         gh_match = re.search(
             r"boards-api\.greenhouse\.io[\\/]+v1[\\/]+boards[\\/]+([^\\/\"'\s]+)[\\/]+jobs[\\/]+(\d+)",
@@ -325,21 +317,31 @@ class ScraperService:
 
         # 5. Embedded ATS Iframes in HTML (Greenhouse, Lever, Ashby, SmartRecruiters)
         soup = BeautifulSoup(html_text, "html.parser")
+        allowed_ats_domains = {"greenhouse.io", "lever.co", "ashbyhq.com", "smartrecruiters.com"}
         for iframe in soup.find_all("iframe"):
             src = iframe.get("src", "").strip()
             if not src:
                 continue
-            if any(ats in src.lower() for ats in ["greenhouse.io", "lever.co", "ashbyhq.com", "smartrecruiters.com"]):
-                if not src.startswith("http"):
-                    src = urllib.parse.urljoin(source_url, src)
-                try:
-                    iframe_resp = self.session.get(src, timeout=timeout)
-                    if iframe_resp.ok and len(iframe_resp.text) > 300:
-                        iframe_job = self.extract_from_html(iframe_resp.text, source_url=source_url)
-                        if iframe_job and len(iframe_job.raw_text.strip()) > 150:
-                            return iframe_job
-                except Exception:
-                    pass
+            if not src.startswith("http://") and not src.startswith("https://"):
+                src = urllib.parse.urljoin(source_url, src)
+
+            try:
+                parsed = urllib.parse.urlsplit(src)
+                host = (parsed.hostname or "").lower()
+                if not any(host == d or host.endswith("." + d) for d in allowed_ats_domains):
+                    continue
+
+                iframe_resp = self.safe_client.get(
+                    src,
+                    timeout=timeout,
+                    policy=OutboundPolicy(is_scraping_request=True),
+                )
+                if iframe_resp.status_code == 200 and len(iframe_resp.text) > 300:
+                    iframe_job = self.extract_from_html(iframe_resp.text, source_url=source_url)
+                    if iframe_job and len(iframe_job.raw_text.strip()) > 150:
+                        return iframe_job
+            except Exception:
+                pass
 
         return None
 
@@ -347,8 +349,8 @@ class ScraperService:
         import html as html_lib
         api_url = f"https://boards-api.greenhouse.io/v1/boards/{board}/jobs/{job_id}"
         try:
-            resp = self.session.get(api_url, timeout=timeout)
-            if resp.ok:
+            resp = self.safe_client.get(api_url, timeout=timeout, policy=OutboundPolicy(is_scraping_request=True))
+            if resp.status_code == 200:
                 data = resp.json()
                 title = data.get("title") or "Open Position"
                 company = data.get("company_name") or board.capitalize()
@@ -379,8 +381,8 @@ class ScraperService:
     def _fetch_lever_api(self, company_token: str, posting_id: str, source_url: str, timeout: int = 15) -> Optional[ScrapedJob]:
         api_url = f"https://api.lever.co/v0/postings/{company_token}/{posting_id}"
         try:
-            resp = self.session.get(api_url, timeout=timeout)
-            if resp.ok:
+            resp = self.safe_client.get(api_url, timeout=timeout, policy=OutboundPolicy(is_scraping_request=True))
+            if resp.status_code == 200:
                 data = resp.json()
                 title = data.get("text") or "Open Position"
                 company = company_token.capitalize()
@@ -552,7 +554,7 @@ class ScraperService:
         if not match:
             return None
 
-        host, locale, portal, job_path = match.group(1), match.group(2), match.group(3), match.group(4)
+        host, _locale, portal, job_path = match.group(1), match.group(2), match.group(3), match.group(4)
         tenant = host.split(".")[0]
         job_slug = job_path.split("?")[0]
         if "/" in job_slug:
@@ -595,8 +597,8 @@ class ScraperService:
         posting_key = posting_id.split("-")[0] if "-" in posting_id and posting_id.split("-")[0].isdigit() else posting_id
         api_url = f"https://api.smartrecruiters.com/v1/companies/{company}/postings/{posting_key}"
         try:
-            resp = self.session.get(api_url, timeout=timeout)
-            if resp.ok:
+            resp = self.safe_client.get(api_url, timeout=timeout, policy=OutboundPolicy(is_scraping_request=True))
+            if resp.status_code == 200:
                 data = resp.json()
                 title = data.get("name", "")
                 sections = data.get("jobAd", {}).get("sections", {})
