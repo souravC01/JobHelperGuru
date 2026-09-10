@@ -102,3 +102,40 @@ def test_resume_download_fallback_when_binary_file_missing():
         assert "Senior Software Engineer" in doc_text
     finally:
         app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_generate_outreach_prefers_current_user_account_name():
+    client = TestClient(app)
+    app.dependency_overrides[get_current_user] = lambda: User(
+        id="user-account-name-1",
+        email="devon@example.com",
+        name="Devon Miles",
+        created_at="2026-09-07T00:00:00",
+    )
+    try:
+        from backend.main import storage
+        res = storage.add_resume(
+            name="Tech_Lead_Resume_v2.pdf",
+            content="Experienced backend leader in Python.",
+            user_id="user-account-name-1",
+        )
+        payload = {
+            "job": {
+                "title": "Principal Architect",
+                "company": "Stripe",
+                "required_skills": ["Python", "Architecture"],
+            },
+            "resume_id": res.id,
+        }
+        resp = client.post("/api/resumes/generate-outreach", json=payload)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "Devon Miles" in data["subject_line"]
+        assert "Tech_Lead_Resume_v2.pdf" not in data["subject_line"]
+        assert "Devon Miles" in data["cover_letter_pitch"]
+        assert "Tech_Lead_Resume_v2.pdf" not in data["cover_letter_pitch"]
+        assert "\u2014" not in data["cover_letter_pitch"]
+        assert "\u2013" not in data["cover_letter_pitch"]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+

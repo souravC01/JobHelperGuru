@@ -298,11 +298,11 @@ export async function optimizeBullet({
   return res.json();
 }
 
-export async function generateOutreach({ job, resume_id, resume_content }) {
+export async function generateOutreach({ job, resume_id, resume_content, candidate_name }) {
   const res = await authFetch(`${API_BASE}/resumes/generate-outreach`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ job, resume_id, resume_content }),
+    body: JSON.stringify({ job, resume_id, resume_content, candidate_name }),
   });
   if (!res.ok) {
     throw await parseApiError(res, 'Failed to generate outreach');

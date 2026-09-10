@@ -577,6 +577,7 @@ export default function App() {
         onClose={() => setIsCoverLetterOpen(false)}
         currentJob={currentJob}
         selectedResume={selectedResumeForJob}
+        currentUser={currentUser}
         onAiError={handleAiError}
       />
 

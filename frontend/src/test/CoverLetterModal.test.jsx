@@ -20,18 +20,24 @@ describe('CoverLetterModal 3-paragraph format and docx/pdf download', () => {
 
   const mockResume = {
     id: 'resume-1',
-    name: 'Alice Developer',
+    name: 'Software_Engineer_Resume_2026.pdf',
     content: 'Experienced engineer with Python and distributed systems expertise.',
   }
 
+  const mockUser = {
+    id: 'user-1',
+    name: 'Sarah Connor',
+    email: 'sarah@example.com',
+  }
+
   const mockOutreachData = {
-    subject_line: 'Application: Senior Software Engineer - Alice Developer',
+    subject_line: 'Application: Senior Software Engineer - Sarah Connor',
     cover_letter_pitch:
       'Dear Hiring Team at Stripe,\n\n' +
       'I am writing to express my enthusiasm for the Senior Software Engineer position at Stripe.\n\n' +
       'My hands-on experience designing low-latency payment pipelines directly matches Stripe engineering.\n\n' +
       'I look forward to discussing how my experience will help advance your team roadmap.\n\n' +
-      'Sincerely,\nAlice Developer',
+      'Sincerely,\nSarah Connor',
     connection_note:
       'Hi! I noticed the Senior Software Engineer opening at Stripe and would love to connect.',
   }
@@ -45,6 +51,7 @@ describe('CoverLetterModal 3-paragraph format and docx/pdf download', () => {
         onClose={vi.fn()}
         currentJob={mockJob}
         selectedResume={mockResume}
+        currentUser={mockUser}
       />
     )
 
@@ -67,7 +74,7 @@ describe('CoverLetterModal 3-paragraph format and docx/pdf download', () => {
     expect(screen.queryByText(/\.md/i)).toBeNull()
   })
 
-  it('calls exportCoverLetterDocx when Download Word (.docx) is clicked', async () => {
+  it('prefers candidate name from account info instead of resume name for outreach and export', async () => {
     apiClient.generateOutreach.mockResolvedValue(mockOutreachData)
     apiClient.exportCoverLetterDocx.mockResolvedValue()
 
@@ -77,11 +84,17 @@ describe('CoverLetterModal 3-paragraph format and docx/pdf download', () => {
         onClose={vi.fn()}
         currentJob={mockJob}
         selectedResume={mockResume}
+        currentUser={mockUser}
       />
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Download Word \(\.docx\)/i })).toBeInTheDocument()
+      expect(apiClient.generateOutreach).toHaveBeenCalledWith({
+        job: mockJob,
+        resume_id: mockResume.id,
+        resume_content: mockResume.content,
+        candidate_name: 'Sarah Connor',
+      })
     })
 
     const docxBtn = screen.getByRole('button', { name: /Download Word \(\.docx\)/i })
@@ -91,7 +104,7 @@ describe('CoverLetterModal 3-paragraph format and docx/pdf download', () => {
 
     expect(apiClient.exportCoverLetterDocx).toHaveBeenCalledWith({
       cover_letter_text: mockOutreachData.cover_letter_pitch,
-      candidate_name: 'Alice Developer',
+      candidate_name: 'Sarah Connor',
       company: 'Stripe',
       role: 'Senior Software Engineer',
       subject_line: mockOutreachData.subject_line,

@@ -289,9 +289,9 @@ def test_settings_test_ai_endpoint_with_reasoning_model(monkeypatch):
 def test_ensure_three_paragraph_cover_letter_single_paragraph_split():
     from backend.services.ai_engine import ensure_three_paragraph_cover_letter, sanitize_dashes
     job = JobAnalysisResult(company="Acme Corp", title="Staff Engineer", required_skills=["Python", "FastAPI"])
-    resume = Resume(id="res-1", name="John Doe", content="Experienced developer.")
+    resume = Resume(id="res-1", name="My_Resume_File.pdf", content="Experienced developer.")
     single_para = "I am excited to apply. I have extensive experience building distributed systems. I look forward to meeting the team."
-    result = ensure_three_paragraph_cover_letter(single_para, job, resume)
+    result = ensure_three_paragraph_cover_letter(single_para, job, resume, candidate_name="John Doe")
 
     blocks = [b.strip() for b in result.split("\n\n") if b.strip()]
     assert len(blocks) >= 5
@@ -299,6 +299,7 @@ def test_ensure_three_paragraph_cover_letter_single_paragraph_split():
     assert "Acme Corp" in blocks[0]
     assert blocks[-1].startswith("Sincerely")
     assert "John Doe" in blocks[-1]
+    assert "My_Resume_File.pdf" not in blocks[-1]
     assert "\u2014" not in result
     assert "\u2013" not in result
 
@@ -315,20 +316,43 @@ def test_sanitize_dashes_replaces_unicode_dashes():
 def test_generate_outreach_three_paragraphs_and_zero_em_dashes():
     engine = AIEngine(api_key=None)
     job = JobAnalysisResult(company="Stripe", title="Backend Engineer", required_skills=["Python", "PostgreSQL", "Kafka"])
-    resume = Resume(id="res-2", name="Jane Smith", content="Built payment pipelines in Python and PostgreSQL.")
+    resume = Resume(id="res-2", name="Senior_SWE_Resume.pdf", content="Built payment pipelines in Python and PostgreSQL.")
 
-    outreach = engine.generate_outreach(job, resume)
+    outreach = engine.generate_outreach(job, resume, candidate_name="Jane Smith")
     assert outreach.subject_line != ""
-    assert "Jane Smith" in outreach.subject_line or "Backend Engineer" in outreach.subject_line
+    assert "Jane Smith" in outreach.subject_line
+    assert "Senior_SWE_Resume.pdf" not in outreach.subject_line
     assert outreach.connection_note != ""
     assert len(outreach.connection_note) < 300
 
     blocks = [b.strip() for b in outreach.cover_letter_pitch.split("\n\n") if b.strip()]
     assert len(blocks) >= 5
+    assert "Jane Smith" in blocks[-1]
+    assert "Senior_SWE_Resume.pdf" not in blocks[-1]
     assert "\u2014" not in outreach.cover_letter_pitch
     assert "\u2013" not in outreach.cover_letter_pitch
     assert "\u2014" not in outreach.subject_line
     assert "\u2013" not in outreach.subject_line
     assert "\u2014" not in outreach.connection_note
     assert "\u2013" not in outreach.connection_note
+
+
+def test_generate_outreach_prefers_account_name_over_resume_filename():
+    engine = AIEngine(api_key=None)
+    job = JobAnalysisResult(company="Netflix", title="Staff Engineer", required_skills=["Java", "Spring"])
+    resume = Resume(id="res-3", name="My_Software_Resume_2026.pdf", content="Java expert.")
+
+    # Account candidate name provided
+    outreach = engine.generate_outreach(job, resume, candidate_name="Devon Miles")
+    assert "Devon Miles" in outreach.subject_line
+    assert "My_Software_Resume_2026.pdf" not in outreach.subject_line
+    assert "Devon Miles" in outreach.cover_letter_pitch
+    assert "My_Software_Resume_2026.pdf" not in outreach.cover_letter_pitch
+
+    # When no candidate name provided, defaults to Candidate and never uses resume file name
+    outreach_def = engine.generate_outreach(job, resume, candidate_name=None)
+    assert "Candidate" in outreach_def.subject_line
+    assert "My_Software_Resume_2026.pdf" not in outreach_def.subject_line
+    assert "Candidate" in outreach_def.cover_letter_pitch
+    assert "My_Software_Resume_2026.pdf" not in outreach_def.cover_letter_pitch
 

@@ -80,13 +80,18 @@ def sanitize_dashes(text: str) -> str:
     return text.replace("\u2014", "-").replace("\u2013", "-")
 
 
-def ensure_three_paragraph_cover_letter(raw_pitch: str, job: JobAnalysisResult, resume: Resume) -> str:
+def ensure_three_paragraph_cover_letter(
+    raw_pitch: str,
+    job: JobAnalysisResult,
+    resume: Resume,
+    candidate_name: Optional[str] = None,
+) -> str:
     """
     Guarantees that the cover letter contains a formal salutation, exactly 3 distinct body paragraphs,
-    and a professional closing, with zero em/en-dashes.
+    and a professional closing, with zero em-dashes.
     """
     clean_pitch = sanitize_dashes(raw_pitch or "").strip()
-    candidate_name = resume.name or "Candidate"
+    resolved_name = (candidate_name or "").strip() or "Candidate"
     company = job.company or "the Company"
     title = job.title or "Position"
 
@@ -99,11 +104,11 @@ def ensure_three_paragraph_cover_letter(raw_pitch: str, job: JobAnalysisResult, 
             f"Throughout my work, I have focused on scalable delivery, clean implementation, and collaborative problem-solving. "
             f"My background directly complements the core responsibilities outlined for the {title} role.\n\n"
             f"I welcome the opportunity to discuss how my qualifications align with {company}'s goals. Thank you for your consideration.\n\n"
-            f"Sincerely,\n{candidate_name}"
+            f"Sincerely,\n{resolved_name}"
         )
 
     salutation = f"Dear Hiring Team at {company},"
-    sign_off = f"Sincerely,\n{candidate_name}"
+    sign_off = f"Sincerely,\n{resolved_name}"
 
     # Split into blocks separated by newlines
     blocks = [b.strip() for b in clean_pitch.split("\n\n") if b.strip()]
@@ -115,7 +120,7 @@ def ensure_three_paragraph_cover_letter(raw_pitch: str, job: JobAnalysisResult, 
             salutation = b
             continue
         if low.startswith("sincerely") or low.startswith("best regards") or low.startswith("warm regards") or (low.startswith("thank you") and len(b.split()) < 10):
-            sign_off = b
+            sign_off = f"Sincerely,\n{resolved_name}"
             continue
         body_blocks.append(b)
 
@@ -734,8 +739,14 @@ Claim Status: {claim_status.value}
         )
 
     # --- 4. Tailored Outreach Generator ---
-    def generate_outreach(self, job: JobAnalysisResult, resume: Resume) -> OutreachResponse:
+    def generate_outreach(
+        self,
+        job: JobAnalysisResult,
+        resume: Resume,
+        candidate_name: Optional[str] = None,
+    ) -> OutreachResponse:
         has_content = bool(resume.content and resume.content.strip())
+        resolved_candidate_name = (candidate_name or "").strip() or "Candidate"
         client = self._get_client()
         if client:
             try:
@@ -760,12 +771,11 @@ Return strict JSON:
   "cover_letter_pitch": "Dear Hiring Team at [Company],\n\n[Paragraph 1]\n\n[Paragraph 2]\n\n[Paragraph 3]\n\nSincerely,\n[Name]",
   "connection_note": "Concise LinkedIn recruiter note (<300 characters)"
 }"""
-                candidate_name = resume.name or "Candidate"
                 resp = client.chat.completions.create(
                     model=self.model_name,
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Company: {job.company}\nRole: {job.title}\nJob Skills: {', '.join(job.required_skills)}\nCandidate Name: {candidate_name}\n\nCandidate Resume:\n{resume.content[:2500] if has_content else '[Resume content is empty]'}"},
+                        {"role": "user", "content": f"Company: {job.company}\nRole: {job.title}\nJob Skills: {', '.join(job.required_skills)}\nCandidate Name: {resolved_candidate_name}\n\nCandidate Resume:\n{resume.content[:2500] if has_content else '[Resume content is empty]'}"},
                     ],
                     temperature=0.4,
                 )
@@ -773,9 +783,9 @@ Return strict JSON:
                 data = extract_json_from_llm_response(raw)
 
                 raw_pitch = data.get("cover_letter_pitch", "")
-                pitch = ensure_three_paragraph_cover_letter(raw_pitch, job, resume)
+                pitch = ensure_three_paragraph_cover_letter(raw_pitch, job, resume, candidate_name=resolved_candidate_name)
                 note = sanitize_dashes(data.get("connection_note", "")).strip()
-                subject = sanitize_dashes(data.get("subject_line", f"Application: {job.title} - {candidate_name}")).strip()
+                subject = sanitize_dashes(data.get("subject_line", f"Application: {job.title} - {resolved_candidate_name}")).strip()
 
                 return OutreachResponse(
                     subject_line=subject,
@@ -787,20 +797,19 @@ Return strict JSON:
 
         # Offline fallback pitch
         skills_str = ", ".join(job.required_skills[:3]) if job.required_skills else "software engineering"
-        candidate_name = resume.name or "Candidate"
         if not has_content:
-            subject = f"Application Draft: {job.title} - {candidate_name}"
+            subject = f"Application Draft: {job.title} - {resolved_candidate_name}"
             pitch = (
                 f"Dear Hiring Team at {job.company},\n\n"
                 f"I am writing to express my interest in the {job.title} position at {job.company}. "
                 f"[Draft note: Please review and insert your relevant experience related to {skills_str} before submitting].\n\n"
                 f"[Highlight 1-2 key technical accomplishments, architecture decisions, or domain expertise here].\n\n"
                 f"Thank you for your time and consideration. I welcome the opportunity to discuss how my background aligns with your team's goals.\n\n"
-                f"Sincerely,\n{candidate_name}"
+                f"Sincerely,\n{resolved_candidate_name}"
             )
             note = f"Hi! I noticed the {job.title} opening at {job.company} and would love to connect to learn more about the engineering team's current focus."
         else:
-            subject = f"Application: {job.title} - {candidate_name}"
+            subject = f"Application: {job.title} - {resolved_candidate_name}"
             pitch = (
                 f"Dear Hiring Team at {job.company},\n\n"
                 f"I am writing to express my strong interest in the {job.title} position at {job.company}. With hands-on experience in {skills_str}, "
@@ -808,11 +817,11 @@ Return strict JSON:
                 f"Throughout my background, I have prioritized clean architecture, automated testing, and high-performance system design. "
                 f"I am eager to bring this momentum to {job.company} to help accelerate your current engineering roadmap.\n\n"
                 f"Thank you for your time and consideration. I welcome the opportunity to discuss how my experience aligns with your team's goals.\n\n"
-                f"Sincerely,\n{candidate_name}"
+                f"Sincerely,\n{resolved_candidate_name}"
             )
             note = f"Hi! I noticed the {job.title} opening at {job.company} and would love to connect. I bring strong experience in {skills_str} and look forward to sharing ideas!"
 
-        pitch = ensure_three_paragraph_cover_letter(pitch, job, resume)
+        pitch = ensure_three_paragraph_cover_letter(pitch, job, resume, candidate_name=resolved_candidate_name)
         note = sanitize_dashes(note)
         subject = sanitize_dashes(subject)
 

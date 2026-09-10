@@ -668,6 +668,7 @@ class OutreachRequest(BaseModel):
     job: JobAnalysisResult
     resume_id: Optional[str] = None
     resume_content: Optional[str] = None
+    candidate_name: Optional[str] = None
 
 
 @app.post("/api/resumes/generate-outreach", response_model=OutreachResponse)
@@ -683,8 +684,10 @@ def generate_outreach(req: OutreachRequest, current_user: User = Depends(get_cur
         resume = resumes[0] if resumes else Resume(id="temp", name="Candidate", content="")
 
     ai = get_ai_engine(user_id=current_user.id)
+    # Prefer account info name (Google account name or account creation name)
+    account_name = (current_user.name or "").strip() or (req.candidate_name or "").strip() or "Candidate"
     try:
-        return ai.generate_outreach(req.job, resume)
+        return ai.generate_outreach(req.job, resume, candidate_name=account_name)
     except Exception as e:
         raise HTTPException(
             status_code=502,

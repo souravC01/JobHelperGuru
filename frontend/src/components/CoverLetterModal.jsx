@@ -7,6 +7,7 @@ export default function CoverLetterModal({
   onClose,
   currentJob,
   selectedResume,
+  currentUser,
   onAiError,
 }) {
   const [loading, setLoading] = useState(false);
@@ -15,6 +16,19 @@ export default function CoverLetterModal({
   const [error, setError] = useState('');
   const [copiedPitch, setCopiedPitch] = useState(false);
   const [copiedNote, setCopiedNote] = useState(false);
+
+  // Candidate name chosen from account info (Google account name or account creation name)
+  const candidateName =
+    currentUser?.name?.trim() ||
+    (() => {
+      try {
+        const stored = JSON.parse(localStorage.getItem('jh_user') || '{}');
+        return stored?.name?.trim() || '';
+      } catch {
+        return '';
+      }
+    })() ||
+    'Candidate';
 
   useEffect(() => {
     if (isOpen && currentJob) {
@@ -32,6 +46,7 @@ export default function CoverLetterModal({
         job: currentJob,
         resume_id: selectedResume?.id || null,
         resume_content: selectedResume?.content || null,
+        candidate_name: candidateName,
       });
       setData(res);
     } catch (err) {
@@ -61,7 +76,7 @@ export default function CoverLetterModal({
     try {
       await exportCoverLetterDocx({
         cover_letter_text: data.cover_letter_pitch,
-        candidate_name: selectedResume?.name || '',
+        candidate_name: candidateName,
         company: currentJob?.company || '',
         role: currentJob?.title || '',
         subject_line: data.subject_line || '',
@@ -80,7 +95,7 @@ export default function CoverLetterModal({
       alert('Please allow popups to download or print your PDF.');
       return;
     }
-    const candidateName = selectedResume?.name || 'Candidate';
+    const printCandidateName = candidateName;
     const company = currentJob?.company || '';
     const role = currentJob?.title || '';
     const subject = data?.subject_line || '';
@@ -93,7 +108,7 @@ export default function CoverLetterModal({
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Cover Letter - ${candidateName} - ${company}</title>
+  <title>Cover Letter - ${printCandidateName} - ${company}</title>
   <style>
     @page { margin: 1in; size: letter; }
     body {
