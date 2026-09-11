@@ -155,7 +155,7 @@ export async function googleAuthUser(credential) {
     throw new Error(data.detail || 'Google sign-in failed');
   }
   const data = await res.json();
-  setAuth(data.token, data.user);
+  if (data.token) setAuth(data.token, data.user);
   return data;
 }
 

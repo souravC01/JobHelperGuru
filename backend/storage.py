@@ -446,18 +446,24 @@ class StorageService:
         with self._get_cursor() as cursor:
             if clear_password:
                 cursor.execute(
+                    self._format_sql("UPDATE auth_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL"),
+                    (now, user_id),
+                )
+                cursor.execute(
                     self._format_sql(
-                        "UPDATE users SET google_sub = ?, hashed_password = NULL, email_verified = ?, session_version = session_version + 1, updated_at = ? WHERE id = ?"
+                        "UPDATE users SET google_sub = ?, hashed_password = CASE WHEN email_verified = FALSE THEN NULL ELSE hashed_password END, email_verified = ?, session_version = session_version + 1, updated_at = ? WHERE id = ? AND (google_sub IS NULL OR google_sub = ?)"
                     ),
-                    (clean_sub, verify_email, now, user_id),
+                    (clean_sub, verify_email, now, user_id, clean_sub),
                 )
             else:
                 cursor.execute(
                     self._format_sql(
-                        "UPDATE users SET google_sub = ?, email_verified = ?, updated_at = ? WHERE id = ?"
+                        "UPDATE users SET google_sub = ?, email_verified = ?, updated_at = ? WHERE id = ? AND (google_sub IS NULL OR google_sub = ?)"
                     ),
-                    (clean_sub, verify_email, now, user_id),
+                    (clean_sub, verify_email, now, user_id, clean_sub),
                 )
+            if cursor.rowcount != 1:
+                raise ValueError("Google identity changed during sign-in. Please try again.")
 
     def increment_user_session_version(self, user_id: str) -> int:
         now = datetime.now().isoformat()

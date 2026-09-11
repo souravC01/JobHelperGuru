@@ -45,6 +45,11 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
     setError('');
     try {
       const data = await googleAuthUser(response.credential);
+      if (data.requires_verification) {
+        setEmail(data.user?.email || '');
+        setMode('verify_pending');
+        return;
+      }
       if (onSuccess) onSuccess(data.user, Boolean(data.is_new_user));
       onClose();
     } catch (err) {

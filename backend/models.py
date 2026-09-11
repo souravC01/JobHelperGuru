@@ -321,6 +321,7 @@ class AuthResponse(BaseModel):
     user: Optional[User] = None
     message: Optional[str] = None
     is_new_user: bool = False
+    requires_verification: bool = False
 
 
 class CoverLetterDocxRequest(BaseModel):

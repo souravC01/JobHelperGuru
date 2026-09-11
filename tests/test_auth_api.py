@@ -60,7 +60,7 @@ def test_google_auth_rejects_mismatched_audience(monkeypatch):
     mock_resp.read.return_value = json.dumps(fake_token_data).encode("utf-8")
     mock_resp.__enter__.return_value = mock_resp
 
-    with patch("urllib.request.urlopen", return_value=mock_resp):
+    with patch("backend.routers.auth.verify_google_id_token", return_value=fake_token_data):
         res = client.post("/api/auth/google", json={"credential": "fake-google-jwt"})
         assert res.status_code == 401
         assert "audience" in res.json()["detail"].lower()
