@@ -118,8 +118,8 @@ def test_resume_count_limit_per_user(client):
     token = res.json()["token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Add 30 resumes
-    for i in range(30):
+    # Add 10 resumes
+    for i in range(10):
         r = client.post(
             "/api/resumes",
             headers=headers,
@@ -127,14 +127,14 @@ def test_resume_count_limit_per_user(client):
         )
         assert r.status_code == 200
 
-    # 31st resume must be rejected with 422
+    # 11th resume must be rejected with 422
     r_overflow = client.post(
         "/api/resumes",
         headers=headers,
         json={"name": "Overflow Resume", "content": "Overflow content"},
     )
     assert r_overflow.status_code == 422
-    assert "limit" in r_overflow.text.lower()
+    assert "limit of 10 resumes" in r_overflow.text.lower()
 
 
 def test_ai_operations_rate_limiting_http_429(client):
@@ -210,3 +210,76 @@ def test_rate_limiter_cleanup_expired():
     limiter.check("bucket_cleanup", "sub1", limit=1, window_seconds=10, now_epoch=fake_now)
     cleaned = limiter.cleanup_expired(now_epoch=fake_now + 20.0)
     assert cleaned >= 1
+
+
+def test_get_client_ip_render_proxy_header():
+    from backend.services.rate_limiter import get_client_ip
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.headers = {"render-proxy-client-ip": "198.51.100.42"}
+    req.client.host = "10.0.0.1"
+
+    # With trust_proxy_headers=True, Render client IP is preferred
+    assert get_client_ip(req, trust_proxy_headers=True) == "198.51.100.42"
+
+    # With trust_proxy_headers=False, proxy header is ignored
+    assert get_client_ip(req, trust_proxy_headers=False) == "10.0.0.1"
+
+
+def test_get_client_ip_x_forwarded_for():
+    from backend.services.rate_limiter import get_client_ip
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.headers = {"x-forwarded-for": "203.0.113.195, 10.0.0.1"}
+    req.client.host = "10.0.0.1"
+
+    assert get_client_ip(req, trust_proxy_headers=True) == "203.0.113.195"
+    assert get_client_ip(req, trust_proxy_headers=False) == "10.0.0.1"
+
+
+def test_security_headers_middleware(client):
+    res = client.get("/api/health")
+    assert res.status_code == 200
+    assert res.headers["x-content-type-options"] == "nosniff"
+    assert res.headers["x-frame-options"] == "DENY"
+    assert res.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert "geolocation=()" in res.headers["permissions-policy"]
+
+
+def test_download_filename_header_injection_sanitization(client):
+    # Register and create resume
+    res = client.post("/api/auth/register", json={"email": "safeheader@example.test", "password": "Password123!", "name": "Safe Header"})
+    token = res.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    add_res = client.post(
+        "/api/resumes",
+        headers=headers,
+        json={"name": 'Injected"Header\r\nBad', "content": "Sample content for testing fallback download"},
+    )
+    assert add_res.status_code == 200
+    resume_id = add_res.json()["id"]
+
+    dl_res = client.get(f"/api/resumes/{resume_id}/download", headers=headers)
+    assert dl_res.status_code == 200
+    disp = dl_res.headers.get("content-disposition", "")
+    assert "\r" not in disp
+    assert "\n" not in disp
+
+
+def test_settings_test_ai_rate_limiting(client):
+    res = client.post("/api/auth/register", json={"email": "testairatelimit@example.test", "password": "Password123!", "name": "AI Tester"})
+    token = res.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    for _ in range(30):
+        r = client.post("/api/settings/test-ai", headers=headers, json={"api_key": ""})
+        assert r.status_code == 200
+
+    r_over = client.post("/api/settings/test-ai", headers=headers, json={"api_key": ""})
+    assert r_over.status_code == 429
+    assert "retry-after" in r_over.headers
+
+

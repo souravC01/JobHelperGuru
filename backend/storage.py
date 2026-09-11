@@ -1247,7 +1247,17 @@ class StorageService:
             for r in rows:
                 row = dict(r)
                 is_active = bool(row["is_active"])
-                has_api_key = bool(row.get("api_key_encrypted"))
+                raw_enc = row.get("api_key_encrypted")
+                has_api_key = False
+                needs_reentry = False
+                if raw_enc:
+                    try:
+                        dec = decrypt_value(raw_enc)
+                        has_api_key = bool(dec)
+                    except Exception:
+                        has_api_key = False
+                        needs_reentry = True
+
                 results.append(
                     ProviderProfileMetadata(
                         id=row["id"],
@@ -1256,6 +1266,7 @@ class StorageService:
                         model_name=row["model_name"],
                         is_active=is_active,
                         has_api_key=has_api_key,
+                        needs_reentry=needs_reentry,
                         key_suffix=row.get("key_suffix"),
                         created_at=row.get("created_at"),
                         updated_at=row.get("updated_at"),
@@ -1362,7 +1373,17 @@ class StorageService:
                 return None
             r = dict(row)
             is_active = bool(r["is_active"])
-            has_api_key = bool(r.get("api_key_encrypted"))
+            raw_enc = r.get("api_key_encrypted")
+            has_api_key = False
+            needs_reentry = False
+            if raw_enc:
+                try:
+                    dec = decrypt_value(raw_enc)
+                    has_api_key = bool(dec)
+                except Exception:
+                    has_api_key = False
+                    needs_reentry = True
+
             return ProviderProfileMetadata(
                 id=r["id"],
                 name=r["name"],
@@ -1370,6 +1391,7 @@ class StorageService:
                 model_name=r["model_name"],
                 is_active=is_active,
                 has_api_key=has_api_key,
+                needs_reentry=needs_reentry,
                 key_suffix=r.get("key_suffix"),
                 created_at=r.get("created_at"),
                 updated_at=r.get("updated_at"),

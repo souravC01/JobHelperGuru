@@ -29,13 +29,28 @@ from backend.services.auth_service import (
     hash_password,
     verify_password,
 )
-from backend.services.email_service import EmailService
+from backend.services.email_service import EmailService, SMTPEmailTransport
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 oauth2_scheme = HTTPBearer(auto_error=False)
 
+
+def _create_email_service() -> EmailService:
+    cfg = load_config()
+    if cfg.smtp_host:
+        transport = SMTPEmailTransport(
+            host=cfg.smtp_host,
+            port=cfg.smtp_port,
+            user=cfg.smtp_user,
+            password=cfg.smtp_password,
+            from_address=cfg.smtp_from,
+        )
+        return EmailService(transport=transport)
+    return EmailService()
+
+
 # Email service instance (mockable in tests)
-email_service = EmailService()
+email_service = _create_email_service()
 
 # Storage dependency placeholder (injected from main.py)
 _storage_service = None

@@ -50,6 +50,12 @@ class AppConfig:
     local_ai_hosts: List[str] = field(default_factory=lambda: list(DEFAULT_LOCAL_AI_HOSTS))
     max_request_body_bytes: int = 10 * 1024 * 1024  # 10 MB
     require_email_verification: bool = False
+    trust_proxy_headers: bool = False
+    smtp_host: Optional[str] = None
+    smtp_port: int = 587
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_from: Optional[str] = None
 
 
 def _get_or_create_local_secrets(secrets_dir: Optional[str] = None) -> dict:
@@ -96,6 +102,21 @@ def load_config() -> AppConfig:
 
     req_email = os.getenv("REQUIRE_EMAIL_VERIFICATION", "false").lower() in ("true", "1", "yes")
 
+    # Proxy headers configuration
+    trust_proxies_env = os.getenv("TRUST_PROXY_HEADERS")
+    if trust_proxies_env is not None:
+        trust_proxies = trust_proxies_env.strip().lower() in ("true", "1", "yes")
+    else:
+        # Auto-enable in production or when running on Render/cloud platforms
+        trust_proxies = (raw_mode == "production") or bool(os.getenv("RENDER"))
+
+    # SMTP configuration
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = int(os.getenv("SMTP_PORT", "587")) if os.getenv("SMTP_PORT") else 587
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_from = os.getenv("SMTP_FROM") or os.getenv("SMTP_USER")
+
     if raw_mode == "production":
         jwt_key = (os.getenv("JWT_SECRET_KEY") or "").strip()
         if not jwt_key:
@@ -122,6 +143,12 @@ def load_config() -> AppConfig:
             allowed_provider_hosts=allowed_hosts,
             local_ai_hosts=[],  # Local AI loopback hosts disabled in production
             require_email_verification=req_email,
+            trust_proxy_headers=trust_proxies,
+            smtp_host=smtp_host,
+            smtp_port=smtp_port,
+            smtp_user=smtp_user,
+            smtp_password=smtp_password,
+            smtp_from=smtp_from,
         )
 
     elif raw_mode == "local":
@@ -138,6 +165,12 @@ def load_config() -> AppConfig:
             allowed_provider_hosts=allowed_hosts,
             local_ai_hosts=list(DEFAULT_LOCAL_AI_HOSTS),
             require_email_verification=req_email,
+            trust_proxy_headers=trust_proxies,
+            smtp_host=smtp_host,
+            smtp_port=smtp_port,
+            smtp_user=smtp_user,
+            smtp_password=smtp_password,
+            smtp_from=smtp_from,
         )
 
     else:  # test mode
@@ -153,4 +186,11 @@ def load_config() -> AppConfig:
             allowed_provider_hosts=allowed_hosts,
             local_ai_hosts=list(DEFAULT_LOCAL_AI_HOSTS),
             require_email_verification=req_email,
+            trust_proxy_headers=trust_proxies,
+            smtp_host=smtp_host,
+            smtp_port=smtp_port,
+            smtp_user=smtp_user,
+            smtp_password=smtp_password,
+            smtp_from=smtp_from,
         )
+
