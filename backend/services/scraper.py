@@ -50,6 +50,11 @@ class ScraperService:
         })
 
     def scrape_url(self, url: str, timeout: int = 15) -> ScrapedJob:
+        from backend.services.outbound_http import outbound_budget
+        with outbound_budget(30):
+            return self._scrape_url(url, timeout)
+
+    def _scrape_url(self, url: str, timeout: int = 15) -> ScrapedJob:
         clean_url = url.strip()
         if not clean_url.startswith("http://") and not clean_url.startswith("https://"):
             clean_url = "https://" + clean_url
@@ -62,21 +67,6 @@ class ScraperService:
             )
 
         html = None
-
-        # 1. Try TLS browser impersonation via curl_cffi for anti-bot protected sites (Indeed, Glassdoor, Cloudflare)
-        if CURL_CFFI_AVAILABLE and is_safe_url(clean_url):
-            for profile in ("safari17_0", "safari15_5", "chrome124"):
-                try:
-                    cffi_resp = cffi_requests.get(clean_url, impersonate=profile, timeout=timeout, allow_redirects=False)
-                    if (
-                        cffi_resp.status_code == 200
-                        and "Authenticating..." not in cffi_resp.text
-                        and "Security Check" not in cffi_resp.text
-                    ):
-                        html = cffi_resp.text
-                        break
-                except Exception:
-                    continue
 
         # 2. Fallback to SafeHttpClient with redirect and body limits
         if not html:
@@ -562,8 +552,8 @@ class ScraperService:
 
         cxs_url = f"https://{host}/wday/cxs/{tenant}/{portal}/job/{job_slug}"
         try:
-            resp = self.session.get(cxs_url, headers={"Accept": "application/json"}, timeout=timeout)
-            if resp.ok:
+            resp = self.safe_client.get(cxs_url, headers={"Accept": "application/json"}, timeout=timeout)
+            if resp.is_success:
                 data = resp.json()
                 info = data.get("jobPostingInfo", {})
                 title = info.get("title", "")
