@@ -133,6 +133,7 @@ class ProviderProfileMetadata(BaseModel):
     model_name: str
     is_active: bool = False
     has_api_key: bool = False
+    needs_reentry: bool = False
     key_suffix: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

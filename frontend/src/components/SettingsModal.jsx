@@ -92,6 +92,9 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
 
   const maskKey = (profile) => {
     if (!profile) return 'No Key (Public / Local Endpoint)';
+    if (profile.needs_reentry) {
+      return 'Re-entry Needed (Server encryption key was rotated)';
+    }
     if (profile.has_api_key) {
       return profile.key_suffix ? `••••••••${profile.key_suffix}` : 'Configured (Server Encrypted)';
     }
@@ -410,6 +413,12 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
                             Loaded in Form
                           </span>
                         )}
+                        {item.needs_reentry && (
+                          <span className="badge-corporate bg-amber-100 border border-amber-300 text-amber-800 text-[10px] py-0.2 px-1.5 font-bold flex items-center gap-1">
+                            <AlertCircle size={10} />
+                            <span>Re-entry Needed</span>
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2 text-[11px] text-[#666666] truncate">
@@ -556,12 +565,22 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
                 {showKey ? 'Hide' : 'Reveal'}
               </button>
             </div>
+            {isEditingExisting && savedKeys.find((k) => k.id === editingId)?.needs_reentry && (
+              <div className="mb-2 p-2.5 rounded bg-amber-50 border border-amber-200 text-amber-800 text-[11px] flex items-start gap-2">
+                <AlertCircle size={14} className="shrink-0 mt-0.5 text-amber-600" />
+                <span>
+                  The server encryption key was rotated since this profile was saved. Please paste your API key below and click <strong>Save & Activate Key</strong> to re-encrypt and restore it.
+                </span>
+              </div>
+            )}
             <input
               type={showKey ? 'text' : 'password'}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder={
-                isEditingExisting && savedKeys.find((k) => k.id === editingId)?.has_api_key
+                isEditingExisting && savedKeys.find((k) => k.id === editingId)?.needs_reentry
+                  ? 'Paste API key here to re-encrypt with current server key'
+                  : isEditingExisting && savedKeys.find((k) => k.id === editingId)?.has_api_key
                   ? '•••••••• (Leave blank to keep existing key)'
                   : 'Paste your API key here (AIzaSy... or sk-...)'
               }

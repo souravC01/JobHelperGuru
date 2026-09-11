@@ -823,6 +823,13 @@ def test_ai(req: SettingsUpdate, current_user: User = Depends(get_current_user))
             s = storage.get_settings(user_id=current_user.id)
             if s.active_profile_id:
                 api_key = storage.get_provider_profile_secret(s.active_profile_id, user_id=current_user.id)
+                if not api_key:
+                    prof = storage.get_provider_profile(s.active_profile_id, user_id=current_user.id)
+                    if prof and prof.needs_reentry:
+                        return {
+                            "success": False,
+                            "message": "The server encryption key was changed since this provider key was saved. Please re-enter your API key and click 'Save & Activate Key'.",
+                        }
             if not api_key:
                 api_key = s.api_key
         ai = AIEngine(
