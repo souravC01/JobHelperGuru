@@ -1,4 +1,5 @@
 import hashlib
+import random
 import time
 from typing import Optional, Tuple
 from fastapi import Request
@@ -25,6 +26,14 @@ class RateLimiter:
             (allowed: bool, remaining: int, retry_after: float)
         """
         now = now_epoch if now_epoch is not None else time.time()
+
+        # Probabilistic cleanup of expired rate limit entries (approx 1 in 50 checks)
+        # to prevent unbounded storage growth in the database
+        if random.random() < 0.02:
+            try:
+                self.cleanup_expired(now)
+            except Exception:
+                pass
         with self.storage._get_cursor() as cursor:
             cursor.execute(
                 self.storage._format_sql(
@@ -84,9 +93,14 @@ class RateLimiter:
 def get_client_ip(request: Request, trust_proxy_headers: bool = False) -> str:
     """Returns the remote client IP safely."""
     if trust_proxy_headers:
+        render_client_ip = request.headers.get("render-proxy-client-ip")
+        if render_client_ip and render_client_ip.strip():
+            return render_client_ip.strip()
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
-            return forwarded.split(",")[0].strip()
+            first_ip = forwarded.split(",")[0].strip()
+            if first_ip:
+                return first_ip
     if request.client and request.client.host:
         return request.client.host
     return "127.0.0.1"

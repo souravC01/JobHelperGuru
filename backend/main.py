@@ -143,6 +143,17 @@ app.add_middleware(
     expose_headers=["Content-Disposition", "X-Fallback-Generated"],
 )
 
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
+    return response
+
+
 # Services
 storage = StorageService(db_path=os.environ.get("JOB_HELPER_DB", "data/tracker.db"))
 set_storage_service(storage)
@@ -327,6 +338,12 @@ def get_resumes(current_user: User = Depends(get_current_user)):
     return resumes
 
 
+MAX_RESUMES_PER_USER = 10
+MAX_USER_STORAGE_BYTES = 50 * 1024 * 1024  # 50 MB
+ALLOWED_RESUME_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md", ".rtf"}
+MAX_RESUME_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB per file
+
+
 @app.post("/api/resumes", response_model=Resume)
 def add_resume(req: ResumeCreate, current_user: User = Depends(get_current_user)):
     if not req.name.strip() or not req.content.strip():
@@ -337,16 +354,12 @@ def add_resume(req: ResumeCreate, current_user: User = Depends(get_current_user)
             detail="Resume content exceeds maximum limit of 100,000 characters.",
         )
     user_resume_count = storage.count_user_resumes(current_user.id)
-    if user_resume_count >= 30:
+    if user_resume_count >= MAX_RESUMES_PER_USER:
         raise HTTPException(
             status_code=422,
-            detail="Maximum limit of 30 resumes reached per account.",
+            detail=f"Maximum limit of {MAX_RESUMES_PER_USER} resumes reached per account.",
         )
     return storage.add_resume(name=req.name, content=req.content, file_key=None, user_id=current_user.id)
-
-
-ALLOWED_RESUME_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md", ".rtf"}
-MAX_RESUME_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 @app.post("/api/resumes/upload", response_model=Resume)
@@ -358,10 +371,10 @@ def upload_resume_file(
 ):
     try:
         user_resume_count = storage.count_user_resumes(current_user.id)
-        if user_resume_count >= 30:
+        if user_resume_count >= MAX_RESUMES_PER_USER:
             raise HTTPException(
                 status_code=422,
-                detail="Maximum limit of 30 resumes reached per account.",
+                detail=f"Maximum limit of {MAX_RESUMES_PER_USER} resumes reached per account.",
             )
 
         ext = Path(file.filename).suffix.lower()
@@ -379,10 +392,10 @@ def upload_resume_file(
             )
 
         current_bytes = storage.get_user_upload_bytes(current_user.id)
-        if current_bytes + len(content_bytes) > 100 * 1024 * 1024:
+        if current_bytes + len(content_bytes) > MAX_USER_STORAGE_BYTES:
             raise HTTPException(
                 status_code=422,
-                detail="Maximum total storage limit of 100MB reached for resumes.",
+                detail="Maximum total storage limit of 50MB reached for resumes.",
             )
 
         if content_override and content_override.strip():
@@ -527,7 +540,8 @@ def download_resume_file(
         raise HTTPException(status_code=404, detail="File is no longer available.")
 
     object_key = attachment.object_key if attachment else resume.file_key
-    original_filename = (attachment.original_filename if attachment else None) or f"{resume.name}.pdf"
+    raw_filename = (attachment.original_filename if attachment else None) or f"{resume.name}.pdf"
+    safe_filename = re.sub(r'[\r\n"\\]', '_', raw_filename).strip() or "resume.pdf"
     content_type = (attachment.content_type if attachment else None) or "application/octet-stream"
 
     file_bytes = None
@@ -539,7 +553,7 @@ def download_resume_file(
             content=file_bytes,
             media_type=content_type,
             headers={
-                "Content-Disposition": f'attachment; filename="{original_filename}"',
+                "Content-Disposition": f'attachment; filename="{safe_filename}"',
                 "Access-Control-Expose-Headers": "Content-Disposition, X-Fallback-Generated",
             },
         )
@@ -802,6 +816,7 @@ def delete_profile(profile_id: str, current_user: User = Depends(get_current_use
 
 @app.post("/api/settings/test-ai")
 def test_ai(req: SettingsUpdate, current_user: User = Depends(get_current_user)):
+    _check_user_ai_rate_limit(current_user.id)
     try:
         api_key = req.api_key
         if not api_key:

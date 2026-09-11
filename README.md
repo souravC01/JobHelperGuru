@@ -1,175 +1,225 @@
 # JobHelperGuru 🚀
-### Intelligent Job Application Assistant, ATS Optimizer & Excel Tracker
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-jobhelperguru.onrender.com-0a66c2?style=for-the-badge&logo=render&logoColor=white)](https://jobhelperguru.onrender.com)
-[![Backend Tests](https://img.shields.io/badge/Backend%20Tests-160%2F160%20Passing-057642?style=for-the-badge)](tests/)
-[![Frontend Tests](https://img.shields.io/badge/Frontend%20Tests-17%2F17%20Passing-057642?style=for-the-badge)](frontend/src/test/)
+**Understand job requirements, tailor your resume, and keep your applications organized.**
+
+[![Live Demo](https://img.shields.io/badge/Try%20the%20App-JobHelperGuru-0a66c2?style=for-the-badge)](https://jobhelperguru.onrender.com/)
 [![CI/CD Pipeline](https://github.com/souravC01/JobHelperGuru/actions/workflows/ci.yml/badge.svg)](https://github.com/souravC01/JobHelperGuru/actions/workflows/ci.yml)
 
-🌐 **Live Application:** [https://jobhelperguru.onrender.com](https://jobhelperguru.onrender.com)
+JobHelperGuru brings job analysis, resume matching, writing assistance, and application tracking into one workspace. Start with a job link or pasted description, compare your resumes against its requirements, draft tailored bullets and outreach, then track the application through to an outcome.
 
-**JobHelperGuru** is an AI-powered copilot for your job hunt. Paste any job posting URL or job description to extract core qualifications, identify missing ATS keywords, rank multiple resumes to identify the best fit, optimize resume bullet points using the **Resume Guide 2.0 / BulletSkill** framework, generate tailored 3-paragraph cover letters with Word (.docx) and PDF downloads, and track your applications with 1-click **Excel (.xlsx)** export.
+Use the built-in heuristic engine without an AI key, connect your own compatible AI provider, or run a local model with Ollama.
 
----
+[Explore the live app](https://jobhelperguru.onrender.com/) · [Run locally](#run-locally) · [Development](#development-and-tests) · [Deployment](#deployment)
 
-## Key Features
+![Live analysis of Amazon's Software Development Engineer, Early Career 2026 role, showing categorized requirements and ATS keywords](docs/images/job-analysis.jpg)
 
-1. **Smart Job Ingestion & Web Scraper:**
-   - Paste a job link (LinkedIn, Greenhouse, Lever, Indeed, Workday, etc.) or raw job text directly.
-   - Automatically extracts Company, Title, Location, Work Mode (Remote/Hybrid/Onsite), Salary Range, and Experience Level.
-   - Built-in SSRF protection prevents network abuse against private addresses or internal cloud metadata endpoints.
+*Captured from the live application with an Amazon early-career job posting. Screenshots show the job analysis and resume alignment results; scores are application estimates, not employer ATS results.*
 
-2. **Categorized Skills Matrix & ATS Keyword Bank:**
-   - Categorizes skills into **Required Must-Haves**, **Preferred Nice-to-Haves**, **Tech Stack & Tools**, and **Soft Skills**.
-   - Generates a high-frequency **ATS Keyword Bank** with a 1-click "Copy All" button.
+## What you can do
 
-3. **Multi-Resume Vault, Reader & Best-Fit Matcher:**
-   - Upload and store multiple tailored resumes (.pdf, .docx, .doc, .txt, .rtf, .md) backed by Cloudflare R2 object storage or local disk storage.
-   - **Direct Streaming Downloads:** Fast, authenticated file downloads directly through FastAPI, avoiding cross-origin presigned URL issues.
-   - **Graceful Fallback:** If an uploaded binary file is ever missing from cloud storage, the system automatically synthesizes a clean .docx document from saved resume text and alerts the user transparently.
-   - **Inline Renaming & Text Overrides:** Rename resumes in place and preserve manual text edits across uploads.
-   - **Full-Screen Reader:** Inspect extracted text with word count stats, copy actions, and instant preview.
-   - **Intelligent Best-Fit Ranking:** Compares all vault resumes against target jobs, computes match percentages (0-100%), and highlights matched vs. missing skills.
+| Feature | How it helps |
+|---|---|
+| **Job analysis** | Extract role, company, location, salary, experience requirements, and work mode from a job URL or pasted description. |
+| **Skills and ATS keywords** | Review required and preferred skills, tools, soft skills, and keywords in one place. |
+| **Resume vault and matching** | Store multiple resumes, edit their extracted text, rename them, and compare matched and missing skills against a target job. |
+| **Resume bullet optimizer** | Generate three alternatives using the WHAT + HOW + RESULT/REASON structure, with assumptions and confirmation prompts. |
+| **Cover letters and outreach** | Draft a three-paragraph cover letter, email subject, and short networking note. Download a Word document or use the browser print dialog to save a PDF. |
+| **Application tracker** | Manage notes, dates, and follow-ups in table or Kanban views. Move cards with status controls, including an Archived stage. |
+| **Excel export** | Download a styled two-sheet workbook with application details, skills, status colors, and supported job hyperlinks. Untrusted cell values are written as text. |
+| **Provider profiles** | Manage your own AI connections using server-side encrypted keys and masked profile metadata. |
 
-4. **BulletSkill 2.0 Resume Bullet Optimizer (powered by `Bulletskill.md`):**
-   - Click any missing keyword to generate targeted resume bullet points.
-   - Enforces the structured framework: **WHAT/Keyword + HOW it was used + RESULT and/or REASON**.
-   - Generates 3 alternative variations:
-     - **Candidate A:** ATS-focused
-     - **Candidate B:** Concise
-     - **Candidate C:** Technical and result-focused
-   - Strict claim classification:
-     - `VERIFIED`: Claims directly supported by your resume context.
-     - `UNVERIFIED_SKILL`: Flags missing skills with clear assumptions and confirmation prompts.
-     - `UNVERIFIED_METRIC`: Uses placeholders like `[X%]`, never fabricating unsupported metrics.
+The application pipeline covers **Wishlist → Applied → Interviewing → Offered → Rejected → Archived**. Follow-up reminders and dashboard totals stay connected to tracker changes.
 
-5. **Tailored 3-Paragraph Cover Letter & Outreach Generator:**
-   - Generates a full 3-paragraph application pitch tailored to the target role and matched resume evidence:
-     - **Salutation:** Formal greeting to the hiring team.
-     - **Paragraph 1:** Role hook, company interest, and domain overview.
-     - **Paragraph 2:** Concrete technical achievements and evidence matching target requirements.
-     - **Paragraph 3:** Value-add proposition and proactive call to action.
-     - **Sign-Off:** Professional closing with candidate name.
-   - **Account-Derived Candidate Name:** Automatically derives the candidate name from your account profile (Google account name or registration name) rather than the resume filename.
-   - **Zero Em-Dash Standard:** Formatted with standard ASCII punctuation for clean typography across all email and ATS clients.
-   - **Word (.docx) & PDF Export:** Export polished Microsoft Word (.docx) files with 1-inch margins and styling, or generate printable PDFs directly.
-   - **Networking Notes:** Generates a suggested email subject line and a concise LinkedIn / recruiter InMail note (<300 characters) with 1-click copy buttons.
+<details>
+<summary><strong>See resume matching in action</strong></summary>
 
-6. **Application Tracker (Table & Kanban Views):**
-   - Track applications across stages: `Wishlist` ➔ `Applied` ➔ `Interviewing` ➔ `Offered` ➔ `Rejected` ➔ `Archived`.
-   - Supports both interactive tabular list and drag-and-drop Kanban board views.
-   - Timezone-safe local dates prevent UTC rollover discrepancies.
-   - Automated **Follow-Up Reminder Banner** alerting you to applications due today or past due.
+Compare tailored resumes side by side, expand the best match, and review the skills that align with the role or need attention.
 
-7. **Professional Excel (.xlsx) Export with Security Protections:**
-   - 1-click export of a styled, multi-sheet Excel workbook (`job_tracker.xlsx`).
-   - Features frozen headers, deep navy corporate styling, auto-fitted columns, clickable hyperlinks, and color-coded status badges.
-   - Spreadsheet formula injection defenses sanitize cells starting with `=`, `+`, `-`, or `@` to protect against malicious workbook execution.
+![Four resumes ranked against the Amazon role, with matched technical skills and missing skills expanded for the top fit](docs/images/resume-matching.jpg)
 
-8. **Multi-Provider AI Engine & Secure Encryption:**
-   - Connect to **TokenRouter**, **OpenRouter**, **MiniMax**, **OpenAI**, **Anthropic**, or local **Ollama** models in the Settings modal.
-   - Full support for reasoning/thinking models (such as `GLM-5.3` and `DeepSeek-R1`) with automatic `<think>` tag and `reasoning_content` handling.
-   - User provider keys are encrypted at rest using server-side authenticated Fernet encryption (AES-128-CBC + HMAC-SHA256) and masked on retrieval.
-   - Built-in **heuristic NLP engine** with 600+ skills taxonomy operates free offline without requiring an external AI API key.
+</details>
 
-9. **Multi-Tenant Architecture & Security Hardening:**
-   - User authentication via Google One-Tap / OAuth 2.0 or email/password (JWT + bcrypt).
-   - Multi-tenant data isolation on Neon Serverless PostgreSQL with automatic fallback to local SQLite.
-   - Anti-automation sliding-window rate limiters protecting authentication, AI generation, and web scraping endpoints.
-   - Strict user-scoping across all application and resume endpoints prevents cross-account data leaks.
+### Resume files and generated drafts
 
----
+Supported uploads are **PDF, DOCX, TXT, Markdown, and RTF**, up to **10 MB per file**. Convert legacy binary `.doc` files to `.docx` or `.pdf` first. Text extraction also has limits on PDF pages, expanded DOCX size, and extracted text length.
 
-## Quick Start (Run Locally)
+Edits to extracted text are saved for matching and writing assistance; they do not rewrite the original uploaded document. Downloads require authentication. If the original binary is unavailable and saved text exists, the app can provide a clearly identified generated `.docx` copy.
 
-If you want to run JobHelperGuru locally on your machine:
+Match scores measure keyword alignment, not an employer's ATS result or a hiring prediction. The [BulletSkill framework](Bulletskill.md) guides draft structure, but generated claims, skills, and metrics still need your review before use.
 
-### 1. Install Backend Dependencies
+### AI and offline use
+
+- **Heuristic mode:** Analyze pasted descriptions and compare resume keywords without an external AI key. Template-based writing is more limited than model-generated output.
+- **AI providers:** Use any AI provider or LLM of your choice by adding its API key and endpoint link in Settings. You are not limited to a specific agent, model, or provider.
+
+Fetching job URLs requires internet access. Some job boards require login or block extraction; paste the description when a link cannot be read. When using an external model, the job and resume text needed for that action is sent to your selected provider.
+
+## Run locally
+
+The repository's CI and Docker configuration use **Python 3.11** and **Node.js 20**. Install those runtimes and Git before starting.
+
+### 1. Clone and install
+
 ```bash
-pip install -r backend/requirements.txt
+git clone https://github.com/souravC01/JobHelperGuru.git
+cd JobHelperGuru
+python -m venv .venv
 ```
 
-### 2. Launch the Application
-```bash
-python run.py
-```
-Open your browser to: **[http://localhost:8000](http://localhost:8000)**
+Activate the virtual environment:
 
----
-
-## Development Mode (Live Hot Reload)
-
-For active frontend and backend development with hot-reloading:
-
-1. **Start the backend server:**
-   ```bash
-   python -m uvicorn backend.main:app --reload --port 8000
-   ```
-2. **Start the frontend Vite server:**
-   ```bash
-   cd frontend
-   npm run dev
-   ```
-   Open: **[http://localhost:5173](http://localhost:5173)**
-
----
-
-## Running Automated Tests
-
-### Backend Test Suite (Pytest)
-Run all 160 unit and integration tests:
-```bash
-python -m pytest tests/ -v
-```
-Or run quietly:
-```bash
-python -m pytest -q
+```powershell
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
 ```
 
-### Frontend Test Suite (Vitest)
-Run all 17 component and workflow tests:
 ```bash
+# macOS / Linux
+source .venv/bin/activate
+```
+
+Install backend and frontend dependencies:
+
+```bash
+python -m pip install -r requirements.txt
 cd frontend
-npm run test:run
+npm ci
+cd ..
 ```
 
-### Frontend Production Build
-Validate production bundling:
+### 2. Configure local mode
+
+Create a `.env` file in the repository root with this minimal configuration:
+
+```dotenv
+APP_MODE=local
+APP_URL=http://localhost:8000
+DATABASE_URL=
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_ENDPOINT_URL=
+```
+
+With cloud settings empty, the app uses SQLite at `data/tracker.db` and files under `data/uploads/`. Local mode generates persistent secrets in `data/.local_secrets.json` when needed. Keep this file with your local data so encrypted settings remain readable across restarts.
+
+The [environment example](.env.example) lists optional integrations. Replace its cloud placeholders only when configuring those services; the minimal configuration above is sufficient for local storage and email/password sign-in. An AI key is optional.
+
+### 3. Build and launch
+
 ```bash
 cd frontend
 npm run build
+cd ..
+python run.py
 ```
 
----
+Open **[localhost:8000](http://localhost:8000)**. The backend serves the built frontend and API together. Rebuild after changing frontend code, or use development mode below.
 
-## Database Migrations
+## Development and tests
 
-Database migrations are explicit, transactional, and non-destructive:
+For hot reload, start these in separate terminals from the repository root, with the Python virtual environment activated. Set `APP_URL=http://localhost:5173` in `.env` for this workflow.
+
+**Backend:**
 
 ```bash
-# Perform a dry-run check without applying changes:
-python -m backend.migrate --dry-run
-
-# Apply pending migrations:
-python -m backend.migrate
+python -m uvicorn backend.main:app --reload --port 8000
 ```
 
----
+**Frontend:**
 
-## Production Deployment
+```bash
+cd frontend
+npm run dev
+```
 
-JobHelperGuru is configured for automated containerized deployment on Render with multi-stage Docker builds.
+Visit **[localhost:5173](http://localhost:5173)**. Vite proxies `/api` requests to the backend. Interactive API documentation is available at **[localhost:8000/docs](http://localhost:8000/docs)**.
 
-For configuration details and environment setup:
-- **[Render Deployment Guide](docs/RENDER_DEPLOYMENT_GUIDE.md)**
-- **[Render Blueprint Specification](render.yaml)**
-- **[Production Environment Template](.env.production.example)**
+Install development dependencies and run backend tests from the root:
 
----
+```bash
+python -m pip install -r requirements/dev.txt
+python -m pytest -q
+```
 
-## Tech Stack
+Run frontend checks from `frontend/`:
 
-- **Backend:** Python 3.12+, FastAPI, Neon Serverless PostgreSQL / SQLite, Cloudflare R2 / Local Disk Storage, python-docx, openpyxl, cryptography (Fernet), OpenAI SDK
-- **Frontend:** React 18, Vite, Tailwind CSS v4, Lucide Icons, Google Identity Services (OAuth 2.0)
-- **Testing:** Pytest, pytest-asyncio, Vitest, React Testing Library
-- **Deployment:** Render Web Service, Multi-stage Docker
+```bash
+npm run test:run
+npm run build
+```
+
+The test setup uses disposable storage and mocked external services. Regression coverage includes ownership, file access, outbound requests, identity flows, provider profiles, account switching, document handling, and tracker behavior. [GitHub Actions](.github/workflows/ci.yml) runs backend tests, frontend tests/build, and a Docker build check.
+
+## Configuration
+
+Set deployment values through the hosting environment. Never commit `.env`, provider keys, database credentials, or local secrets.
+
+| Variable | Purpose |
+|---|---|
+| `APP_MODE` | `local`, `test`, or `production`. Explicitly select the mode; absent configuration defaults to production. |
+| `JWT_SECRET_KEY` | Session-signing secret. Production configuration requires a non-default value of at least 32 characters. |
+| `SETTINGS_ENCRYPTION_KEY` | Server-side secret for Fernet-encrypted provider keys. Production configuration requires a non-default value of at least 32 characters. Preserve it when moving encrypted data. |
+| `DATABASE_URL` | PostgreSQL connection string. When unset, use local SQLite. |
+| `JOB_HELPER_DB` | Optional path for local SQLite storage. |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | Cloudflare R2 configuration for uploaded binaries. |
+| `GOOGLE_CLIENT_ID`, `VITE_GOOGLE_CLIENT_ID` | Matching Google sign-in client IDs for backend and frontend. Supply the frontend value when building the bundle. |
+| `APP_URL` | Public application URL used to construct verification and recovery links. |
+| `ALLOWED_ORIGINS` | Comma-separated frontend origins allowed by CORS. |
+| `ALLOWED_AI_HOSTS` | Additional exact provider hostnames permitted by outbound policy. |
+| `REQUIRE_EMAIL_VERIFICATION` | Optional verification enforcement. Configure and validate real email delivery before enabling it. |
+| `PORT` | Server port; the local launcher defaults to `8000`. |
+
+Generate each production secret independently, for example:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+The repository contains verification and password-reset routes plus an SMTP transport implementation. The default `EmailService()` uses an in-memory transport; enabling verification alone does not configure mail delivery. Wire a real transport and verify the complete email flow before requiring it for accounts.
+
+## Database import
+
+The explicit migration utility imports an existing SQLite database into a separate destination. It requires a source and either `--dry-run` or `--apply`; it is not a generic command to apply pending schema versions.
+
+For a local copy:
+
+```bash
+python -m backend.migrate --source backups/tracker.db --dest data/imported.db --dry-run
+python -m backend.migrate --source backups/tracker.db --dest data/imported.db --apply
+```
+
+Inspect the dry-run counts and unowned records, and back up both database and resume objects before applying an import. The source and destination must differ. `--map-unowned-to <user-id>` explicitly assigns legacy unowned records; use it only after confirming their owner. Copying database rows does not transfer uploaded file bytes.
+
+## Deployment
+
+The multi-stage [Dockerfile](Dockerfile) builds the React frontend and serves it with FastAPI/Uvicorn. The [Render blueprint](render.yaml) uses `/api/health` for health checks and disables Render's automatic deployment.
+
+The GitHub Actions workflow can trigger a Render deployment after all required jobs pass on a push to `main`, when the repository secret `RENDER_DEPLOY_HOOK_URL` is configured. Container checks do not publish an image.
+
+For hosted persistence, configure PostgreSQL and R2 rather than relying on an ephemeral container filesystem. Set production mode, secrets, origins, public URL, and any Google sign-in settings before releasing.
+
+- [Render deployment guide](docs/RENDER_DEPLOYMENT_GUIDE.md)
+- [Production environment template](.env.production.example)
+- [Remediation validation record](docs/REMEDIATION_VALIDATION.md)
+
+## Built with
+
+| Layer | Technologies |
+|---|---|
+| Frontend | React 18, Vite 6, Tailwind CSS 4, Lucide icons |
+| API and authentication | FastAPI, Pydantic, JWT, bcrypt, Google Identity Services |
+| Storage | PostgreSQL / SQLite, Cloudflare R2 / local files, Fernet encryption |
+| Analysis and documents | OpenAI SDK, heuristic skill matching, Beautiful Soup, Trafilatura, pypdf, python-docx, openpyxl |
+| Testing and delivery | pytest, Vitest, React Testing Library, GitHub Actions, Docker, Render |
+
+## Project layout
+
+```text
+backend/           API, authentication, storage, analysis, and document services
+frontend/src/      React components, API client, and frontend tests
+tests/             Backend and security regression tests
+requirements/      Runtime and development dependency lists
+docs/              Design, deployment, and remediation documentation
+Bulletskill.md     Resume bullet-writing framework
+```

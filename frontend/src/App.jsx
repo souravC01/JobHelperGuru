@@ -19,6 +19,7 @@ import CoverLetterModal from './components/CoverLetterModal';
 import SettingsModal from './components/SettingsModal';
 import OfflineSwitchModal from './components/OfflineSwitchModal';
 import AuthModal from './components/AuthModal';
+import PrivacyModal from './components/PrivacyModal';
 import UserNav from './components/UserNav';
 import ThemeToggle from './components/ThemeToggle';
 import {
@@ -66,6 +67,7 @@ export default function App() {
   const [isCoverLetterOpen, setIsCoverLetterOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isOnboardingSettings, setIsOnboardingSettings] = useState(false);
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   const [selectedResumeForJob, setSelectedResumeForJob] = useState(null);
   // Potentially added skills: { [resumeId]: string[] }
   const [adoptedSkillsMap, setAdoptedSkillsMap] = useState({});
@@ -615,9 +617,23 @@ export default function App() {
       />
 
       {/* Corporate Footer (Zero Em-Dash) */}
-      <footer className="border-t border-[#e0e0e0] bg-white py-6 text-center text-xs text-[#666666]">
-        <p>JobHelperGuru - Built for smarter, tailored job applications & ATS optimization.</p>
+      <footer className="border-t border-[#e0e0e0] bg-white py-6 text-center text-xs text-[#666666] dark:border-[#374151] dark:bg-[#111827] dark:text-[#9ca3af]">
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <p>JobHelperGuru - Built for smarter, tailored job applications & ATS optimization.</p>
+          <span className="hidden text-[#cccccc] sm:inline dark:text-[#4b5563]">|</span>
+          <button
+            onClick={() => setIsPrivacyOpen(true)}
+            className="font-medium text-[#0a66c2] hover:underline dark:text-[#70b5f9]"
+          >
+            Privacy & Terms
+          </button>
+        </div>
       </footer>
+
+      <PrivacyModal
+        isOpen={isPrivacyOpen}
+        onClose={() => setIsPrivacyOpen(false)}
+      />
     </div>
   );
 }
