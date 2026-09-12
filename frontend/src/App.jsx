@@ -214,6 +214,8 @@ export default function App() {
     setOptimizerSectionType(sectionType || 'work_history');
     if (targetResume) {
       setSelectedResumeForJob(targetResume);
+    } else if (!selectedResumeForJob && resumes.length > 0) {
+      setSelectedResumeForJob(resumes[0]);
     }
     setIsOptimizerOpen(true);
   };
@@ -464,7 +466,7 @@ export default function App() {
                   setIsAuthOpen(true);
                   return;
                 }
-                handleOpenOptimizer(kw);
+                handleOpenOptimizer(kw, selectedResumeForJob || resumes[0] || null);
               }}
               onOpenCoverLetter={() => {
                 if (!currentUser) {
@@ -596,17 +598,19 @@ export default function App() {
         }}
       />
 
-      <BulletOptimizerModal
-        key={`optimizer-${currentUser?.id || 'anon'}`}
-        isOpen={isOptimizerOpen}
-        onClose={() => setIsOptimizerOpen(false)}
-        initialKeywords={optimizerKeywords}
-        initialSectionType={optimizerSectionType}
-        targetJobTitle={currentJob?.title || 'Software Engineer'}
-        selectedResume={selectedResumeForJob}
-        onMarkSkillsAdded={(skills) => handleAdoptSkills(skills, selectedResumeForJob?.id)}
-        onAiError={handleAiError}
-      />
+      {isOptimizerOpen && (
+        <BulletOptimizerModal
+          key={`optimizer-${currentUser?.id || 'anon'}-${optimizerKeywords.join('_')}-${optimizerSectionType}`}
+          isOpen={isOptimizerOpen}
+          onClose={() => setIsOptimizerOpen(false)}
+          initialKeywords={optimizerKeywords}
+          initialSectionType={optimizerSectionType}
+          targetJobTitle={currentJob?.title || 'Software Engineer'}
+          selectedResume={selectedResumeForJob}
+          onMarkSkillsAdded={(skills) => handleAdoptSkills(skills, selectedResumeForJob?.id)}
+          onAiError={handleAiError}
+        />
+      )}
 
       <CoverLetterModal
         key={`cover-${currentUser?.id || 'anon'}`}

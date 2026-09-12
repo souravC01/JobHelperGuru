@@ -319,11 +319,18 @@ export default function JobAnalyzer({
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-2 pt-2 lg:pt-0">
                 <button
-                  onClick={() => onOpenBulletOptimizer && onOpenBulletOptimizer(currentJob.required_skills?.[0] || 'Target Skill')}
+                  onClick={() => {
+                    if (!onOpenBulletOptimizer) return;
+                    const skills = currentJob.required_skills?.length > 0
+                      ? currentJob.required_skills
+                      : (currentJob.ats_keywords?.length > 0 ? currentJob.ats_keywords.slice(0, 3) : ['Key Qualification']);
+                    onOpenBulletOptimizer(skills);
+                  }}
                   className="btn-secondary-corporate text-xs"
+                  title="Craft high-impact resume bullets with BulletCraft"
                 >
                   <Wand2 size={13} />
-                  <span>Bullet Optimizer</span>
+                  <span>BulletCraft</span>
                 </button>
 
                 <button

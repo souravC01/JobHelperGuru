@@ -25,9 +25,19 @@ export default function BulletOptimizerModal({
   onMarkSkillsAdded = null,
   onAiError = null,
 }) {
-  const [keywords, setKeywords] = useState([]);
+  const getInitialKeywords = () => {
+    if (initialKeywords && initialKeywords.length > 0) {
+      return [...initialKeywords];
+    }
+    if (initialKeyword) {
+      return [initialKeyword];
+    }
+    return [];
+  };
+
+  const [keywords, setKeywords] = useState(getInitialKeywords);
   const [newSkillInput, setNewSkillInput] = useState('');
-  const [sectionType, setSectionType] = useState('work_history'); // 'work_history' or 'project'
+  const [sectionType, setSectionType] = useState(initialSectionType || 'work_history');
   const [existingBullet, setExistingBullet] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -37,23 +47,12 @@ export default function BulletOptimizerModal({
   const [addedConfirmed, setAddedConfirmed] = useState(false);
 
   useEffect(() => {
-    let kwList = [];
-    if (initialKeywords && initialKeywords.length > 0) {
-      kwList = [...initialKeywords];
-    } else if (initialKeyword) {
-      kwList = [initialKeyword];
+    const initKws = getInitialKeywords();
+    const initSec = initialSectionType || 'work_history';
+    if (initKws.length > 0) {
+      handleGenerate(null, null, initKws, initSec);
     }
-    setKeywords(kwList);
-    setSectionType(initialSectionType || 'work_history');
-    setResult(null);
-    setExistingBullet('');
-  }, [initialKeyword, initialKeywords, initialSectionType, isOpen]);
-
-  useEffect(() => {
-    if (isOpen && keywords.length > 0 && !result && !loading) {
-      handleGenerate();
-    }
-  }, [isOpen, keywords]);
+  }, []);
 
   if (!isOpen) return null;
 
@@ -70,9 +69,17 @@ export default function BulletOptimizerModal({
     }
   };
 
-  const handleGenerate = async (e, overrideBullet = null) => {
+  const handleGenerate = async (
+    e = null,
+    overrideBullet = null,
+    targetKeywords = null,
+    targetSectionType = null
+  ) => {
     e?.preventDefault();
-    if (keywords.length === 0) {
+    const effectiveKeywords = targetKeywords !== null ? targetKeywords : keywords;
+    const effectiveSectionType = targetSectionType !== null ? targetSectionType : sectionType;
+
+    if (!effectiveKeywords || effectiveKeywords.length === 0) {
       setError('Please add at least one target skill to incorporate.');
       return;
     }
@@ -89,9 +96,9 @@ export default function BulletOptimizerModal({
 
       const res = await optimizeBullet({
         target_job_title: targetJobTitle || 'Software Engineer',
-        section_type: sectionType,
-        target_keyword: keywords.join(', '),
-        target_keywords: keywords,
+        section_type: effectiveSectionType,
+        target_keyword: effectiveKeywords.join(', '),
+        target_keywords: effectiveKeywords,
         existing_bullet: bulletToUse.trim(),
         evidence_context: evidenceContext,
       });
@@ -103,7 +110,7 @@ export default function BulletOptimizerModal({
     } catch (err) {
       setError(err.message || 'Failed to generate optimized bullet points.');
       if (onAiError && (err.canSwitchOffline || err.status === 502)) {
-        onAiError(err, () => handleGenerate(null, bulletToUse));
+        onAiError(err, () => handleGenerate(null, bulletToUse, effectiveKeywords, effectiveSectionType));
       }
     } finally {
       setLoading(false);
@@ -113,7 +120,7 @@ export default function BulletOptimizerModal({
   const handleSelectDifferentBullet = (bulletObj) => {
     setExistingBullet(bulletObj.bullet);
     setShowBulletPicker(false);
-    handleGenerate(null, bulletObj.bullet);
+    handleGenerate(null, bulletObj.bullet, keywords, sectionType);
   };
 
   const handleCopy = (text, idx) => {
@@ -140,7 +147,7 @@ export default function BulletOptimizerModal({
             </div>
             <div>
               <h3 className="text-base font-bold text-[#000000] tracking-tight">
-                BulletSkill 2.0 Resume Bullet Optimizer
+                BulletCraft Resume Optimizer
               </h3>
               <p className="text-xs text-[#666666]">
                 Incorporate target skills into <strong>{sectionType === 'project' ? 'Project' : 'Work History'}</strong> bullet points
@@ -217,6 +224,7 @@ export default function BulletOptimizerModal({
                 onClick={() => {
                   setSectionType('project');
                   setResult(null);
+                  handleGenerate(null, null, keywords, 'project');
                 }}
                 className={`flex items-center gap-1.5 py-1 px-3.5 rounded-full font-semibold transition-all ${
                   sectionType === 'project'
@@ -232,6 +240,7 @@ export default function BulletOptimizerModal({
                 onClick={() => {
                   setSectionType('work_history');
                   setResult(null);
+                  handleGenerate(null, null, keywords, 'work_history');
                 }}
                 className={`flex items-center gap-1.5 py-1 px-3.5 rounded-full font-semibold transition-all ${
                   sectionType === 'work_history'

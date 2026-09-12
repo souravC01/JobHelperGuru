@@ -338,7 +338,7 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
               )}
             </div>
             <p className="text-[11px] text-[#666666]">
-              Zero API keys required, zero network dependencies. Runs locally on your machine with high accuracy rule-based ATS matching and BulletSkill templates.
+              Zero API keys required, zero network dependencies. Runs locally on your machine with high accuracy rule-based ATS matching and BulletCraft templates.
             </p>
           </div>
 
