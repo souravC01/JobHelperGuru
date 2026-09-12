@@ -4,11 +4,14 @@ from pathlib import Path
 from typing import Optional, List
 
 from fastapi import FastAPI, HTTPException, Response, Depends, UploadFile, File, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
 
 from backend.config import load_config
 from backend.services.rate_limiter import RateLimiter, get_client_ip
@@ -861,7 +864,31 @@ def test_ai(req: SettingsUpdate, current_user: User = Depends(get_current_user))
         }
 
 
+class SPAStaticFiles(StaticFiles):
+    """
+    StaticFiles extension that serves index.html for Single Page Application
+    deep links (e.g. /verify-email, /reset-password) when the requested static
+    path does not exist and is not an API call.
+    """
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except (HTTPException, StarletteHTTPException) as ex:
+            normalized_path = path.replace("\\", "/").lstrip("/")
+            if ex.status_code == 404 and not normalized_path.startswith("api/") and normalized_path != "api":
+                index_path = Path(self.directory) / "index.html"
+                if index_path.is_file():
+                    return FileResponse(str(index_path))
+            raise
+
+
+
+
+
+
 # --- Static frontend files mounting ---
 dist_path = (Path(__file__).resolve().parent.parent / "frontend" / "dist").resolve()
 if dist_path.exists() and dist_path.is_dir():
-    app.mount("/", StaticFiles(directory=str(dist_path), html=True), name="frontend")
+    app.mount("/", SPAStaticFiles(directory=str(dist_path), html=True), name="frontend")
+

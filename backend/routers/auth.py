@@ -30,7 +30,7 @@ from backend.services.auth_service import (
     hash_password,
     verify_password,
 )
-from backend.services.email_service import EmailService, SMTPEmailTransport
+from backend.services.email_service import EmailService, SMTPEmailTransport, BrevoEmailTransport
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 oauth2_scheme = HTTPBearer(auto_error=False)
@@ -38,6 +38,13 @@ oauth2_scheme = HTTPBearer(auto_error=False)
 
 def _create_email_service() -> EmailService:
     cfg = load_config()
+    if cfg.brevo_api_key:
+        transport = BrevoEmailTransport(
+            api_key=cfg.brevo_api_key,
+            sender_email=cfg.brevo_sender_email or "noreply@jobhelper.guru",
+            sender_name=cfg.brevo_sender_name or "JobHelperGuru",
+        )
+        return EmailService(transport=transport)
     if cfg.smtp_host:
         transport = SMTPEmailTransport(
             host=cfg.smtp_host,
@@ -48,6 +55,7 @@ def _create_email_service() -> EmailService:
         )
         return EmailService(transport=transport)
     return EmailService()
+
 
 
 # Email service instance (mockable in tests)

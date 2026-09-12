@@ -43,6 +43,13 @@ async function parseApiError(res, defaultMsg) {
   let errorMsg = defaultMsg;
   let canSwitchOffline = res.status === 502;
   let modelName = '';
+  let retryAfter = null;
+
+  const retryHeader = res.headers?.get?.('Retry-After');
+  if (retryHeader) {
+    const parsed = parseInt(retryHeader, 10);
+    if (!isNaN(parsed)) retryAfter = parsed;
+  }
 
   try {
     const data = await res.json();
@@ -63,7 +70,21 @@ async function parseApiError(res, defaultMsg) {
   err.canSwitchOffline = canSwitchOffline;
   err.modelName = modelName;
   err.status = res.status;
+  if (retryAfter !== null) {
+    err.retryAfter = retryAfter;
+  }
   return err;
+}
+
+export async function authFetchWithRetry(url, options = {}, maxRetries = 1) {
+  const res = await authFetch(url, options);
+  if (res.status === 429 && maxRetries > 0) {
+    const retryHeader = res.headers?.get?.('Retry-After');
+    const delaySec = Math.min(Math.max(parseInt(retryHeader || '1', 10), 1), 10);
+    await new Promise((resolve) => setTimeout(resolve, delaySec * 1000));
+    return authFetchWithRetry(url, options, maxRetries - 1);
+  }
+  return res;
 }
 
 
@@ -106,6 +127,10 @@ export async function requestEmailVerification(email) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ detail: 'Failed to request verification email' }));
+    throw new Error(data.detail || 'Failed to request verification email');
+  }
   return res.json();
 }
 
@@ -128,6 +153,10 @@ export async function requestPasswordReset(email) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ detail: 'Failed to request password reset' }));
+    throw new Error(data.detail || 'Failed to request password reset');
+  }
   return res.json();
 }
 
@@ -143,6 +172,7 @@ export async function confirmPasswordReset(token, new_password) {
   }
   return res.json();
 }
+
 
 export async function googleAuthUser(credential) {
   const res = await fetch(`${API_BASE}/auth/google`, {
