@@ -12,6 +12,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from backend.config import load_config
 from backend.services.rate_limiter import RateLimiter, get_client_ip
+from backend.services.resource_leases import ResourceLeases
 from backend.models import (
     Application,
     ApplicationCreate,
@@ -227,8 +228,16 @@ def analyze_job(
     if not req.url and not job_input_text:
         raise HTTPException(status_code=400, detail="Either a URL or job text must be provided.")
 
-    if not current_user:
-        limiter = RateLimiter(storage)
+    limiter = RateLimiter(storage)
+    if current_user:
+        allowed, _, retry_after = limiter.check("user_ai_ops", current_user.id, limit=30, window_seconds=60)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many analysis requests. Please try again later.",
+                headers={"Retry-After": str(int(retry_after))},
+            )
+    else:
         cfg = load_config()
         client_ip = get_client_ip(request, trust_proxy_headers=getattr(cfg, "trust_proxy_headers", False))
         allowed, _, retry_after = limiter.check("anon_analysis", client_ip, limit=10, window_seconds=60)
@@ -239,91 +248,100 @@ def analyze_job(
                 headers={"Retry-After": str(int(retry_after))},
             )
 
-    scraped_title = ""
-    scraped_company = ""
-    scraped_location = ""
-    job_text = ""
-    source_url = req.url or ""
+    cfg = load_config()
+    client_ip = get_client_ip(request, trust_proxy_headers=getattr(cfg, "trust_proxy_headers", False))
+    lease_service = ResourceLeases(storage)
+    lease_subject = current_user.id if current_user else f"anon:{client_ip}"
+    lease_id = lease_service.acquire(user_id=lease_subject, kind="analysis", ttl_seconds=30)
 
-    if req.url:
-        scraped = scraper.scrape_url(req.url)
-        scraped_title = scraped.title
-        scraped_company = scraped.company
-        scraped_location = scraped.location
-        job_text = scraped.raw_text
-    elif job_input_text:
-        parsed = scraper.parse_raw_text(job_input_text)
-        scraped_title = parsed.title
-        scraped_company = parsed.company
-        scraped_location = parsed.location
-        job_text = parsed.raw_text
-
-    if (
-        not job_text
-        or len(job_text.strip()) < 30
-        or job_text.strip().startswith("Error fetching URL:")
-        or job_text.strip().startswith("Disallowed or private URL target")
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Could not extract readable text from this job URL (it may require login or block automated scraping). "
-                "Please copy and paste the job description text directly into the 'Paste Job Text' tab."
-            ),
-        )
-
-    user_id = current_user.id if current_user else None
-    ai = get_ai_engine(user_id=user_id)
     try:
-        analysis = ai.analyze_job(job_text, source_url=source_url)
-    except Exception as e:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "message": str(e),
-                "can_switch_offline": True,
-                "error_type": "ai_api_error",
-                "model_name": ai.model_name,
-            },
-        )
+        scraped_title = ""
+        scraped_company = ""
+        scraped_location = ""
+        job_text = ""
+        source_url = req.url or ""
 
-    UNKNOWN_TITLES = {"", "Open Position", "Detected Role", "Unknown Role", "Role Title", "Exact Role Title"}
-    UNKNOWN_COMPANIES = {"", "Unknown Company", "Company", "Company Name", "Detected Company"}
-    UNKNOWN_LOCATIONS = {"", "Unknown", "Identified Location", "City, State or Remote/Hybrid", "Unknown Location"}
+        if req.url:
+            scraped = scraper.scrape_url(req.url)
+            scraped_title = scraped.title
+            scraped_company = scraped.company
+            scraped_location = scraped.location
+            job_text = scraped.raw_text
+        elif job_input_text:
+            parsed = scraper.parse_raw_text(job_input_text)
+            scraped_title = parsed.title
+            scraped_company = parsed.company
+            scraped_location = parsed.location
+            job_text = parsed.raw_text
 
-    # Prefer scraped title/company/location if AI/heuristic returned generic placeholders
-    if (not analysis.title or analysis.title in UNKNOWN_TITLES) and scraped_title and scraped_title not in UNKNOWN_TITLES:
-        analysis.title = scraped_title
-    if (not analysis.company or analysis.company in UNKNOWN_COMPANIES) and scraped_company and scraped_company not in UNKNOWN_COMPANIES:
-        analysis.company = scraped_company
-    if (not analysis.location or analysis.location in UNKNOWN_LOCATIONS) and scraped_location and scraped_location not in UNKNOWN_LOCATIONS:
-        analysis.location = scraped_location
+        if (
+            not job_text
+            or len(job_text.strip()) < 30
+            or job_text.strip().startswith("Error fetching URL:")
+            or job_text.strip().startswith("Disallowed or private URL target")
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Could not extract readable text from this job URL (it may require login or block automated scraping). "
+                    "Please copy and paste the job description text directly into the 'Paste Job Text' tab."
+                ),
+            )
 
-    analysis_dict = analysis.model_dump()
-    analysis_dict["title"] = analysis.title
-    analysis_dict["company"] = analysis.company
-    analysis_dict["location"] = analysis.location
+        user_id = current_user.id if current_user else None
+        ai = get_ai_engine(user_id=user_id)
+        try:
+            analysis = ai.analyze_job(job_text, source_url=source_url)
+        except Exception as e:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "message": str(e),
+                    "can_switch_offline": True,
+                    "error_type": "ai_api_error",
+                    "model_name": ai.model_name,
+                },
+            )
 
-    return {
-        "analysis": analysis_dict,
-        "raw_text": job_text,
-        "source_url": source_url,
-        "title": analysis.title,
-        "company": analysis.company,
-        "location": analysis.location,
-        "salary_range": analysis.salary_range,
-        "work_mode": analysis.work_mode,
-        "experience_level": analysis.experience_level,
-        "experience_required": analysis.experience_required,
-        "is_new_grad_role": analysis.is_new_grad_role,
-        "new_grad_criteria": analysis.new_grad_criteria,
-        "required_skills": analysis.required_skills,
-        "preferred_skills": analysis.preferred_skills,
-        "tech_stack": analysis.tech_stack,
-        "soft_skills": analysis.soft_skills,
-        "ats_keywords": analysis.ats_keywords,
-        "summary": analysis.summary,
-    }
+        UNKNOWN_TITLES = {"", "Open Position", "Detected Role", "Unknown Role", "Role Title", "Exact Role Title"}
+        UNKNOWN_COMPANIES = {"", "Unknown Company", "Company", "Company Name", "Detected Company"}
+        UNKNOWN_LOCATIONS = {"", "Unknown", "Identified Location", "City, State or Remote/Hybrid", "Unknown Location"}
+
+        # Prefer scraped title/company/location if AI/heuristic returned generic placeholders
+        if (not analysis.title or analysis.title in UNKNOWN_TITLES) and scraped_title and scraped_title not in UNKNOWN_TITLES:
+            analysis.title = scraped_title
+        if (not analysis.company or analysis.company in UNKNOWN_COMPANIES) and scraped_company and scraped_company not in UNKNOWN_COMPANIES:
+            analysis.company = scraped_company
+        if (not analysis.location or analysis.location in UNKNOWN_LOCATIONS) and scraped_location and scraped_location not in UNKNOWN_LOCATIONS:
+            analysis.location = scraped_location
+
+        analysis_dict = analysis.model_dump()
+        analysis_dict["title"] = analysis.title
+        analysis_dict["company"] = analysis.company
+        analysis_dict["location"] = analysis.location
+
+        return {
+            "analysis": analysis_dict,
+            "raw_text": job_text,
+            "source_url": source_url,
+            "title": analysis.title,
+            "company": analysis.company,
+            "location": analysis.location,
+            "salary_range": analysis.salary_range,
+            "work_mode": analysis.work_mode,
+            "experience_level": analysis.experience_level,
+            "experience_required": analysis.experience_required,
+            "is_new_grad_role": analysis.is_new_grad_role,
+            "new_grad_criteria": analysis.new_grad_criteria,
+            "required_skills": analysis.required_skills,
+            "preferred_skills": analysis.preferred_skills,
+            "tech_stack": analysis.tech_stack,
+            "soft_skills": analysis.soft_skills,
+            "ats_keywords": analysis.ats_keywords,
+            "summary": analysis.summary,
+        }
+    finally:
+        lease_service.release(lease_id)
 
 
 from backend.services.document_parser import extract_text_from_file

@@ -161,6 +161,30 @@ class StorageService:
             finally:
                 conn.close()
 
+    @contextmanager
+    def _get_immediate_cursor(self):
+        """Yields a cursor inside an immediate transaction for SQLite or normal cursor for PostgreSQL."""
+        if self.is_postgres:
+            with self._get_cursor() as cursor:
+                yield cursor
+        else:
+            conn = sqlite3.connect(self.db_path, timeout=30.0)
+            conn.row_factory = sqlite3.Row
+            conn.isolation_level = None
+            cursor = conn.cursor()
+            try:
+                cursor.execute("BEGIN IMMEDIATE")
+                yield cursor
+                cursor.execute("COMMIT")
+            except Exception:
+                try:
+                    cursor.execute("ROLLBACK")
+                except Exception:
+                    pass
+                raise
+            finally:
+                conn.close()
+
     def close(self):
         """Closes all connections in the pool if active."""
         if self.is_postgres and self.pool:
@@ -335,6 +359,17 @@ class StorageService:
                     PRIMARY KEY (bucket, subject)
                 )
             """)
+            # Resource leases table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS resource_leases (
+                    lease_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    expires_at REAL NOT NULL
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_resource_leases_user ON resource_leases(user_id, kind)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_resource_leases_expires ON resource_leases(expires_at)")
 
     # --- Users CRUD ---
     def create_user(

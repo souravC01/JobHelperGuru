@@ -1,5 +1,6 @@
 import hashlib
 import random
+import threading
 import time
 from typing import Optional, Tuple
 from fastapi import Request
@@ -8,6 +9,7 @@ from backend.storage import StorageService
 
 class RateLimiter:
     """Database-backed atomic rate limiter with sliding window reset."""
+    _lock = threading.Lock()
 
     def __init__(self, storage: StorageService):
         self.storage = storage
@@ -34,50 +36,82 @@ class RateLimiter:
                 self.cleanup_expired(now)
             except Exception:
                 pass
-        with self.storage._get_cursor() as cursor:
-            cursor.execute(
-                self.storage._format_sql(
-                    "SELECT count, reset_at FROM rate_limits WHERE bucket = ? AND subject = ?"
-                ),
-                (bucket, subject),
-            )
-            row = cursor.fetchone()
-            if not row:
-                reset_at = now + window_seconds
-                cursor.execute(
-                    self.storage._format_sql(
-                        "INSERT INTO rate_limits (bucket, subject, count, reset_at) VALUES (?, ?, ?, ?)"
-                    ),
-                    (bucket, subject, 1, reset_at),
-                )
-                return True, max(0, limit - 1), 0.0
 
-            r = dict(row)
-            count = int(r["count"])
-            reset_at = float(r["reset_at"])
+        with self._lock:
+            if self.storage.is_postgres:
+                with self.storage._get_cursor() as cursor:
+                    cursor.execute(
+                        """
+                        INSERT INTO rate_limits (bucket, subject, count, reset_at)
+                        VALUES (%s, %s, 0, %s)
+                        ON CONFLICT (bucket, subject) DO NOTHING
+                        """,
+                        (bucket, subject, now + window_seconds),
+                    )
+                    cursor.execute(
+                        "SELECT count, reset_at FROM rate_limits WHERE bucket = %s AND subject = %s FOR UPDATE",
+                        (bucket, subject),
+                    )
+                    row = cursor.fetchone()
+                    r = dict(row)
+                    count = int(r["count"])
+                    reset_at = float(r["reset_at"])
 
-            if now >= reset_at:
-                new_reset_at = now + window_seconds
-                cursor.execute(
-                    self.storage._format_sql(
-                        "UPDATE rate_limits SET count = 1, reset_at = ? WHERE bucket = ? AND subject = ?"
-                    ),
-                    (new_reset_at, bucket, subject),
-                )
-                return True, max(0, limit - 1), 0.0
+                    if count == 0 or now >= reset_at:
+                        new_reset_at = now + window_seconds
+                        cursor.execute(
+                            "UPDATE rate_limits SET count = 1, reset_at = %s WHERE bucket = %s AND subject = %s",
+                            (new_reset_at, bucket, subject),
+                        )
+                        return True, max(0, limit - 1), 0.0
 
-            if count < limit:
-                new_count = count + 1
-                cursor.execute(
-                    self.storage._format_sql(
-                        "UPDATE rate_limits SET count = ?, reset_at = ? WHERE bucket = ? AND subject = ?"
-                    ),
-                    (new_count, reset_at, bucket, subject),
-                )
-                return True, max(0, limit - new_count), 0.0
+                    if count < limit:
+                        new_count = count + 1
+                        cursor.execute(
+                            "UPDATE rate_limits SET count = %s WHERE bucket = %s AND subject = %s",
+                            (new_count, bucket, subject),
+                        )
+                        return True, max(0, limit - new_count), 0.0
+                    else:
+                        retry_after = max(1.0, reset_at - now)
+                        return False, 0, retry_after
             else:
-                retry_after = max(1.0, reset_at - now)
-                return False, 0, retry_after
+                with self.storage._get_immediate_cursor() as cursor:
+                    cursor.execute(
+                        "SELECT count, reset_at FROM rate_limits WHERE bucket = ? AND subject = ?",
+                        (bucket, subject),
+                    )
+                    row = cursor.fetchone()
+                    if not row:
+                        reset_at = now + window_seconds
+                        cursor.execute(
+                            "INSERT INTO rate_limits (bucket, subject, count, reset_at) VALUES (?, ?, 1, ?)",
+                            (bucket, subject, reset_at),
+                        )
+                        return True, max(0, limit - 1), 0.0
+
+                    r = dict(row)
+                    count = int(r["count"])
+                    reset_at = float(r["reset_at"])
+
+                    if now >= reset_at:
+                        new_reset_at = now + window_seconds
+                        cursor.execute(
+                            "UPDATE rate_limits SET count = 1, reset_at = ? WHERE bucket = ? AND subject = ?",
+                            (new_reset_at, bucket, subject),
+                        )
+                        return True, max(0, limit - 1), 0.0
+
+                    if count < limit:
+                        new_count = count + 1
+                        cursor.execute(
+                            "UPDATE rate_limits SET count = ?, reset_at = ? WHERE bucket = ? AND subject = ?",
+                            (new_count, reset_at, bucket, subject),
+                        )
+                        return True, max(0, limit - new_count), 0.0
+                    else:
+                        retry_after = max(1.0, reset_at - now)
+                        return False, 0, retry_after
 
     def cleanup_expired(self, now_epoch: Optional[float] = None) -> int:
         """Removes expired rate limit records."""

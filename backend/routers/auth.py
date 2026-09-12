@@ -428,10 +428,22 @@ def confirm_password_reset(req: PasswordResetConfirm):
 
 
 @router.post("/google", response_model=AuthResponse)
-def google_auth(req: GoogleAuthRequest):
+def google_auth(req: GoogleAuthRequest, request: Request):
     token = req.credential.strip()
     if not token:
         raise HTTPException(status_code=400, detail="Google credential token is missing.")
+
+    storage = get_storage()
+    cfg = load_config()
+    client_ip = get_client_ip(request, trust_proxy_headers=getattr(cfg, "trust_proxy_headers", False))
+    limiter = RateLimiter(storage)
+    allowed, _, retry_after = limiter.check("google_login", client_ip, limit=10, window_seconds=60)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many Google login attempts. Please try again later.",
+            headers={"Retry-After": str(int(retry_after))},
+        )
 
     try:
         token_data = verify_google_id_token(token)
