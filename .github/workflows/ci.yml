@@ -15,9 +15,49 @@ name: CI/CD Pipeline
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  queue: ${{ github.ref == 'refs/heads/main' && 'max' || 'single' }}
+
+permissions:
+  contents: read
 
 jobs:
+  backend-changes:
+    name: Detect Backend Changes
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
+    steps:
+      - name: Checkout repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check backend deployment paths
+        id: changes
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$BEFORE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            BEFORE_SHA=$(git hash-object -t tree /dev/null)
+          elif ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "$BEFORE_SHA"
+          fi
+          if git diff --quiet "$BEFORE_SHA" "$AFTER_SHA" -- \
+            backend/ requirements.txt requirements/ Dockerfile.cloudrun .github/workflows/ci.yml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            result=$?
+            if [[ "$result" -ne 1 ]]; then
+              exit "$result"
+            fi
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
   backend-ci:
     name: Backend Tests & Validation
     runs-on: ubuntu-latest
@@ -115,6 +155,14 @@ jobs:
           push: false
           tags: jobhelperguru:ci-test
 
+      - name: Build Cloud Run container image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.cloudrun
+          push: false
+          tags: jobhelperguru-backend:ci-test
+
   ci-success:
     name: CI Pipeline Passed
     needs: [backend-ci, frontend-ci, docker-ci]
@@ -123,18 +171,68 @@ jobs:
       - name: Validate All Required Checks Passed
         run: echo "All backend, frontend, and Docker validation checks passed successfully."
 
-  deploy-render:
-    name: Trigger Render Deployment
-    needs: ci-success
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  deploy-cloud-run:
+    name: Deploy Cloud Run Backend
+    needs: [ci-success, backend-changes]
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.backend-changes.outputs.changed == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE: us-east5-docker.pkg.dev/jobhelperguru/jobhelperguru/jobhelperguru-backend:${{ github.sha }}
     steps:
-      - name: Trigger Render Deploy Hook
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Build before requesting short-lived credentials.
+      - name: Build backend image
+        run: docker build --file Dockerfile.cloudrun --tag "$IMAGE" .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: jobhelperguru
+          workload_identity_provider: projects/999060759573/locations/global/workloadIdentityPools/jobhelperguru-github/providers/github-main
+          service_account: jobhelperguru-github-deployer@jobhelperguru.iam.gserviceaccount.com
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Push backend image
         run: |
-          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
-            echo "::warning ::RENDER_DEPLOY_HOOK_URL secret is not configured in repository secrets. Skipping deploy hook trigger."
-          else
-            echo "Triggering Render deployment..."
-            curl -f -s -S -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
-            echo "Render deploy hook triggered successfully!"
-          fi
+          gcloud auth configure-docker us-east5-docker.pkg.dev --quiet
+          docker push "$IMAGE"
+
+      - name: Update Cloud Run image
+        run: |
+          gcloud run services update jobhelperguru-backend \
+            --project=jobhelperguru \
+            --region=us-east5 \
+            --image="$IMAGE" \
+            --quiet
+
+      - name: Verify production health through Vercel
+        shell: python
+        run: |
+          import json
+          import time
+          import urllib.request
+
+          url = "https://jobhelperguru.vercel.app/api/health"
+          for attempt in range(12):
+              try:
+                  with urllib.request.urlopen(url, timeout=20) as response:
+                      health = json.load(response)
+                  assert health.get("status") == "ok", "Backend is not healthy"
+                  assert health.get("database") == "postgresql", "Unexpected database"
+                  assert health.get("object_storage") == "cloudflare_r2", "Unexpected object storage"
+                  print("Production health verified: ok, postgresql, cloudflare_r2")
+                  break
+              except Exception:
+                  if attempt == 11:
+                      raise
+                  time.sleep(10)

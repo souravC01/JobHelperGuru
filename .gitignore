@@ -10,3 +10,4 @@ dist/
 .DS_Store
 scratch/
 docs/superpowers/
+gha-creds-*.json
