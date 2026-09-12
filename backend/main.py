@@ -2,6 +2,9 @@ import os
 import re
 from pathlib import Path
 from typing import Optional, List
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
 
 from fastapi import FastAPI, HTTPException, Response, Depends, UploadFile, File, Form, Request
 from fastapi.responses import RedirectResponse, FileResponse
