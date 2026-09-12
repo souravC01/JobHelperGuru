@@ -71,6 +71,14 @@ def run_migration(
         "user_settings_count": user_settings_count,
         "global_settings_count": global_settings_count,
         "provider_profiles_count": provider_profiles_count,
+        "migrated_users": 0,
+        "migrated_applications": 0,
+        "migrated_resumes": 0,
+        "migrated_attachments": 0,
+        "migrated_user_settings": 0,
+        "migrated_global_settings": 0,
+        "migrated_provider_profiles": 0,
+        "errors": [],
     }
 
     if dry_run:
@@ -78,219 +86,245 @@ def run_migration(
         return summary
 
     # Apply migration to destination
-    dest_storage = StorageService(db_path=dest_target)
+    is_postgres = dest_target.startswith("postgres://") or dest_target.startswith("postgresql://")
+    if is_postgres:
+        dest_storage = StorageService(database_url=dest_target)
+    else:
+        dest_storage = StorageService(db_path=dest_target, force_sqlite=True)
+
     now = datetime.now().isoformat()
 
-    with dest_storage._get_cursor() as dst_cursor:
-        # Create migration ledger
-        dst_cursor.execute("""
-            CREATE TABLE IF NOT EXISTS _migration_ledger (
-                source_id TEXT,
-                table_name TEXT,
-                target_id TEXT,
-                migrated_at TEXT,
-                PRIMARY KEY (table_name, source_id)
-            )
-        """)
+    try:
+        with dest_storage._get_cursor() as dst_cursor:
+            # Create migration ledger
+            dst_cursor.execute("""
+                CREATE TABLE IF NOT EXISTS _migration_ledger (
+                    source_id TEXT,
+                    table_name TEXT,
+                    target_id TEXT,
+                    migrated_at TEXT,
+                    PRIMARY KEY (table_name, source_id)
+                )
+            """)
 
-        # 1. Migrate Users
-        try:
-            src_users = src_cursor.execute("SELECT * FROM users").fetchall()
-            for u in src_users:
-                # Check ledger
-                dst_cursor.execute(
-                    dest_storage._format_sql("SELECT 1 FROM _migration_ledger WHERE table_name = ? AND source_id = ?"),
-                    ("users", u["id"]),
-                )
-                if dst_cursor.fetchone():
-                    continue
-                pwd = u["hashed_password"] if "hashed_password" in u.keys() else (u["password_hash"] if "password_hash" in u.keys() else None)
-                ev = bool(u["email_verified"]) if "email_verified" in u.keys() else False
-                sv = int(u["session_version"]) if "session_version" in u.keys() else 1
-                gsub = u["google_sub"] if "google_sub" in u.keys() else None
-                # Insert user
-                dst_cursor.execute(
-                    dest_storage._format_sql(
-                        "INSERT INTO users (id, email, hashed_password, name, avatar_url, provider, email_verified, session_version, google_sub, created_at, updated_at) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-                        + ("ON CONFLICT (id) DO NOTHING" if dest_storage.is_postgres else "ON CONFLICT(id) DO NOTHING")
-                    ),
-                    (u["id"], u["email"], pwd, u["name"], u["avatar_url"], u["provider"], ev, sv, gsub, u["created_at"], u["updated_at"]),
-                )
-                dst_cursor.execute(
-                    dest_storage._format_sql("INSERT INTO _migration_ledger VALUES (?, ?, ?, ?)"),
-                    (u["id"], "users", u["id"], now),
-                )
-        except Exception as e:
-            print(f"[WARN] Error migrating users: {e}")
+            # 1. Migrate Users
+            try:
+                src_users = src_cursor.execute("SELECT * FROM users").fetchall()
+                for u in src_users:
+                    # Check ledger
+                    dst_cursor.execute(
+                        dest_storage._format_sql("SELECT 1 FROM _migration_ledger WHERE table_name = ? AND source_id = ?"),
+                        ("users", u["id"]),
+                    )
+                    if dst_cursor.fetchone():
+                        continue
+                    pwd = u["hashed_password"] if "hashed_password" in u.keys() else (u["password_hash"] if "password_hash" in u.keys() else None)
+                    ev = bool(u["email_verified"]) if "email_verified" in u.keys() else False
+                    sv = int(u["session_version"]) if "session_version" in u.keys() else 1
+                    gsub = u["google_sub"] if "google_sub" in u.keys() else None
+                    # Insert user
+                    dst_cursor.execute(
+                        dest_storage._format_sql(
+                            "INSERT INTO users (id, email, hashed_password, name, avatar_url, provider, email_verified, session_version, google_sub, created_at, updated_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                            + ("ON CONFLICT (id) DO NOTHING" if dest_storage.is_postgres else "ON CONFLICT(id) DO NOTHING")
+                        ),
+                        (u["id"], u["email"], pwd, u["name"], u["avatar_url"], u["provider"], ev, sv, gsub, u["created_at"], u["updated_at"]),
+                    )
+                    dst_cursor.execute(
+                        dest_storage._format_sql("INSERT INTO _migration_ledger VALUES (?, ?, ?, ?)"),
+                        (u["id"], "users", u["id"], now),
+                    )
+                    summary["migrated_users"] += 1
+            except Exception as e:
+                summary["errors"].append(f"users: {e}")
+                print(f"[WARN] Error migrating users: {e}")
 
-        # 2. Migrate Attachments
-        try:
-            src_attachments = src_cursor.execute("SELECT * FROM attachments").fetchall()
-            for a in src_attachments:
-                dst_cursor.execute(
-                    dest_storage._format_sql("SELECT 1 FROM _migration_ledger WHERE table_name = ? AND source_id = ?"),
-                    ("attachments", a["id"]),
-                )
-                if dst_cursor.fetchone():
-                    continue
-                target_user_id = a["user_id"] or map_unowned_to
-                dst_cursor.execute(
-                    dest_storage._format_sql(
-                        "INSERT INTO attachments (id, user_id, storage_backend, object_key, original_filename, content_type, size_bytes, deletion_state, created_at, updated_at) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-                        + ("ON CONFLICT (id) DO NOTHING" if dest_storage.is_postgres else "ON CONFLICT(id) DO NOTHING")
-                    ),
-                    (a["id"], target_user_id, a["storage_backend"], a["object_key"], a["original_filename"], a["content_type"], a["size_bytes"], a["deletion_state"], a["created_at"], a["updated_at"]),
-                )
-                dst_cursor.execute(
-                    dest_storage._format_sql("INSERT INTO _migration_ledger VALUES (?, ?, ?, ?)"),
-                    (a["id"], "attachments", a["id"], now),
-                )
-        except Exception as e:
-            print(f"[WARN] Error migrating attachments: {e}")
+            # 2. Migrate Attachments
+            try:
+                src_attachments = src_cursor.execute("SELECT * FROM attachments").fetchall()
+                for a in src_attachments:
+                    dst_cursor.execute(
+                        dest_storage._format_sql("SELECT 1 FROM _migration_ledger WHERE table_name = ? AND source_id = ?"),
+                        ("attachments", a["id"]),
+                    )
+                    if dst_cursor.fetchone():
+                        continue
+                    target_user_id = a["user_id"] or map_unowned_to
+                    dst_cursor.execute(
+                        dest_storage._format_sql(
+                            "INSERT INTO attachments (id, user_id, storage_backend, object_key, original_filename, content_type, size_bytes, deletion_state, created_at, updated_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                            + ("ON CONFLICT (id) DO NOTHING" if dest_storage.is_postgres else "ON CONFLICT(id) DO NOTHING")
+                        ),
+                        (a["id"], target_user_id, a["storage_backend"], a["object_key"], a["original_filename"], a["content_type"], a["size_bytes"], a["deletion_state"], a["created_at"], a["updated_at"]),
+                    )
+                    dst_cursor.execute(
+                        dest_storage._format_sql("INSERT INTO _migration_ledger VALUES (?, ?, ?, ?)"),
+                        (a["id"], "attachments", a["id"], now),
+                    )
+                    summary["migrated_attachments"] += 1
+            except Exception as e:
+                summary["errors"].append(f"attachments: {e}")
+                print(f"[WARN] Error migrating attachments: {e}")
 
-        # 3. Migrate Resumes
-        try:
-            src_resumes = src_cursor.execute("SELECT * FROM resumes").fetchall()
-            for r in src_resumes:
-                dst_cursor.execute(
-                    dest_storage._format_sql("SELECT 1 FROM _migration_ledger WHERE table_name = ? AND source_id = ?"),
-                    ("resumes", r["id"]),
-                )
-                if dst_cursor.fetchone():
-                    continue
-                target_user_id = r["user_id"] or map_unowned_to
-                att_id = r["attachment_id"] if "attachment_id" in r.keys() else None
-                dst_cursor.execute(
-                    dest_storage._format_sql(
-                        "INSERT INTO resumes (id, user_id, name, content, file_key, attachment_id, created_at, updated_at) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
-                        + ("ON CONFLICT (id) DO NOTHING" if dest_storage.is_postgres else "ON CONFLICT(id) DO NOTHING")
-                    ),
-                    (r["id"], target_user_id, r["name"], r["content"], r["file_key"], att_id, r["created_at"], r["updated_at"]),
-                )
-                dst_cursor.execute(
-                    dest_storage._format_sql("INSERT INTO _migration_ledger VALUES (?, ?, ?, ?)"),
-                    (r["id"], "resumes", r["id"], now),
-                )
-        except Exception as e:
-            print(f"[WARN] Error migrating resumes: {e}")
+            # 3. Migrate Resumes
+            try:
+                src_resumes = src_cursor.execute("SELECT * FROM resumes").fetchall()
+                for r in src_resumes:
+                    dst_cursor.execute(
+                        dest_storage._format_sql("SELECT 1 FROM _migration_ledger WHERE table_name = ? AND source_id = ?"),
+                        ("resumes", r["id"]),
+                    )
+                    if dst_cursor.fetchone():
+                        continue
+                    target_user_id = r["user_id"] or map_unowned_to
+                    att_id = r["attachment_id"] if "attachment_id" in r.keys() else None
+                    dst_cursor.execute(
+                        dest_storage._format_sql(
+                            "INSERT INTO resumes (id, user_id, name, content, file_key, attachment_id, created_at, updated_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                            + ("ON CONFLICT (id) DO NOTHING" if dest_storage.is_postgres else "ON CONFLICT(id) DO NOTHING")
+                        ),
+                        (r["id"], target_user_id, r["name"], r["content"], r["file_key"], att_id, r["created_at"], r["updated_at"]),
+                    )
+                    dst_cursor.execute(
+                        dest_storage._format_sql("INSERT INTO _migration_ledger VALUES (?, ?, ?, ?)"),
+                        (r["id"], "resumes", r["id"], now),
+                    )
+                    summary["migrated_resumes"] += 1
+            except Exception as e:
+                summary["errors"].append(f"resumes: {e}")
+                print(f"[WARN] Error migrating resumes: {e}")
 
-        # 4. Migrate Applications
-        try:
-            src_apps = src_cursor.execute("SELECT * FROM applications").fetchall()
-            for app in src_apps:
-                dst_cursor.execute(
-                    dest_storage._format_sql("SELECT 1 FROM _migration_ledger WHERE table_name = ? AND source_id = ?"),
-                    ("applications", app["id"]),
-                )
-                if dst_cursor.fetchone():
-                    continue
-                target_user_id = app["user_id"] or map_unowned_to
-                date_added = app["date_added"] if "date_added" in app.keys() else app["created_at"]
-                app_date = app["application_date"] if "application_date" in app.keys() else None
-                dst_cursor.execute(
-                    dest_storage._format_sql(
-                        "INSERT INTO applications (id, user_id, company, role, status, location, salary, url, required_skills, ats_keywords, date_added, application_date, follow_up_date, notes, best_resume_id, created_at, updated_at) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-                        + ("ON CONFLICT (id) DO NOTHING" if dest_storage.is_postgres else "ON CONFLICT(id) DO NOTHING")
-                    ),
-                    (
-                        app["id"],
-                        target_user_id,
-                        app["company"],
-                        app["role"],
-                        app["status"],
-                        app["location"],
-                        app["salary"],
-                        app["url"],
-                        app["required_skills"],
-                        app["ats_keywords"],
-                        date_added,
-                        app_date,
-                        app["follow_up_date"],
-                        app["notes"],
-                        app["best_resume_id"],
-                        app["created_at"],
-                        app["updated_at"],
-                    ),
-                )
-                dst_cursor.execute(
-                    dest_storage._format_sql("INSERT INTO _migration_ledger VALUES (?, ?, ?, ?)"),
-                    (app["id"], "applications", app["id"], now),
-                )
-        except Exception as e:
-            print(f"[WARN] Error migrating applications: {e}")
+            # 4. Migrate Applications
+            try:
+                src_apps = src_cursor.execute("SELECT * FROM applications").fetchall()
+                for app in src_apps:
+                    dst_cursor.execute(
+                        dest_storage._format_sql("SELECT 1 FROM _migration_ledger WHERE table_name = ? AND source_id = ?"),
+                        ("applications", app["id"]),
+                    )
+                    if dst_cursor.fetchone():
+                        continue
+                    target_user_id = app["user_id"] or map_unowned_to
+                    date_added = app["date_added"] if "date_added" in app.keys() else app["created_at"]
+                    app_date = app["application_date"] if "application_date" in app.keys() else None
+                    dst_cursor.execute(
+                        dest_storage._format_sql(
+                            "INSERT INTO applications (id, user_id, company, role, status, location, salary, url, required_skills, ats_keywords, date_added, application_date, follow_up_date, notes, best_resume_id, created_at, updated_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                            + ("ON CONFLICT (id) DO NOTHING" if dest_storage.is_postgres else "ON CONFLICT(id) DO NOTHING")
+                        ),
+                        (
+                            app["id"],
+                            target_user_id,
+                            app["company"],
+                            app["role"],
+                            app["status"],
+                            app["location"],
+                            app["salary"],
+                            app["url"],
+                            app["required_skills"],
+                            app["ats_keywords"],
+                            date_added,
+                            app_date,
+                            app["follow_up_date"],
+                            app["notes"],
+                            app["best_resume_id"],
+                            app["created_at"],
+                            app["updated_at"],
+                        ),
+                    )
+                    dst_cursor.execute(
+                        dest_storage._format_sql("INSERT INTO _migration_ledger VALUES (?, ?, ?, ?)"),
+                        (app["id"], "applications", app["id"], now),
+                    )
+                    summary["migrated_applications"] += 1
+            except Exception as e:
+                summary["errors"].append(f"applications: {e}")
+                print(f"[WARN] Error migrating applications: {e}")
 
-        # 5. Migrate User Settings
-        try:
-            src_user_settings = src_cursor.execute("SELECT * FROM user_settings").fetchall()
-            for s in src_user_settings:
-                dst_cursor.execute(
-                    dest_storage._format_sql(
-                        "INSERT INTO user_settings (user_id, key, value, created_at, updated_at) "
-                        "VALUES (?, ?, ?, ?, ?) "
-                        + ("ON CONFLICT (user_id, key) DO NOTHING" if dest_storage.is_postgres else "ON CONFLICT(user_id, key) DO NOTHING")
-                    ),
-                    (s["user_id"], s["key"], s["value"], s["created_at"], s["updated_at"]),
-                )
-        except Exception:
-            pass
+            # 5. Migrate User Settings
+            try:
+                src_user_settings = src_cursor.execute("SELECT * FROM user_settings").fetchall()
+                for s in src_user_settings:
+                    dst_cursor.execute(
+                        dest_storage._format_sql(
+                            "INSERT INTO user_settings (user_id, key, value) "
+                            "VALUES (?, ?, ?) "
+                            + ("ON CONFLICT (user_id, key) DO UPDATE SET value = excluded.value" if dest_storage.is_postgres else "ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value")
+                        ),
+                        (s["user_id"], s["key"], s["value"]),
+                    )
+                    summary["migrated_user_settings"] += 1
+            except Exception as e:
+                summary["errors"].append(f"user_settings: {e}")
+                print(f"[WARN] Error migrating user_settings: {e}")
 
-        # 6. Migrate Global Settings
-        try:
-            src_settings = src_cursor.execute("SELECT * FROM settings").fetchall()
-            for gs in src_settings:
-                dst_cursor.execute(
-                    dest_storage._format_sql(
-                        "INSERT INTO settings (key, value) "
-                        "VALUES (?, ?) "
-                        + ("ON CONFLICT (key) DO NOTHING" if dest_storage.is_postgres else "ON CONFLICT(key) DO NOTHING")
-                    ),
-                    (gs["key"], gs["value"]),
-                )
-        except Exception:
-            pass
+            # 6. Migrate Global Settings
+            try:
+                src_settings = src_cursor.execute("SELECT * FROM settings").fetchall()
+                for gs in src_settings:
+                    dst_cursor.execute(
+                        dest_storage._format_sql(
+                            "INSERT INTO settings (key, value) "
+                            "VALUES (?, ?) "
+                            + ("ON CONFLICT (key) DO UPDATE SET value = excluded.value" if dest_storage.is_postgres else "ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                        ),
+                        (gs["key"], gs["value"]),
+                    )
+                    summary["migrated_global_settings"] += 1
+            except Exception as e:
+                summary["errors"].append(f"settings: {e}")
+                print(f"[WARN] Error migrating settings: {e}")
 
-        # 7. Migrate Provider Profiles
-        try:
-            src_profiles = src_cursor.execute("SELECT * FROM provider_profiles").fetchall()
-            for p in src_profiles:
-                dst_cursor.execute(
-                    dest_storage._format_sql("SELECT 1 FROM _migration_ledger WHERE table_name = ? AND source_id = ?"),
-                    ("provider_profiles", p["id"]),
-                )
-                if dst_cursor.fetchone():
-                    continue
-                target_user_id = p["user_id"] or map_unowned_to
-                dst_cursor.execute(
-                    dest_storage._format_sql(
-                        "INSERT INTO provider_profiles (id, user_id, name, api_base_url, model_name, api_key_encrypted, key_suffix, is_active, created_at, updated_at) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-                        + ("ON CONFLICT (id) DO NOTHING" if dest_storage.is_postgres else "ON CONFLICT(id) DO NOTHING")
-                    ),
-                    (
-                        p["id"],
-                        target_user_id,
-                        p["name"],
-                        p["api_base_url"],
-                        p["model_name"],
-                        p["api_key_encrypted"],
-                        p["key_suffix"],
-                        p["is_active"],
-                        p["created_at"],
-                        p["updated_at"],
-                    ),
-                )
-                dst_cursor.execute(
-                    dest_storage._format_sql("INSERT INTO _migration_ledger VALUES (?, ?, ?, ?)"),
-                    (p["id"], "provider_profiles", p["id"], now),
-                )
-        except Exception:
-            pass
+            # 7. Migrate Provider Profiles
+            try:
+                src_profiles = src_cursor.execute("SELECT * FROM provider_profiles").fetchall()
+                for p in src_profiles:
+                    dst_cursor.execute(
+                        dest_storage._format_sql("SELECT 1 FROM _migration_ledger WHERE table_name = ? AND source_id = ?"),
+                        ("provider_profiles", p["id"]),
+                    )
+                    if dst_cursor.fetchone():
+                        continue
+                    target_user_id = p["user_id"] or map_unowned_to
+                    dst_cursor.execute(
+                        dest_storage._format_sql(
+                            "INSERT INTO provider_profiles (id, user_id, name, api_base_url, model_name, api_key_encrypted, key_suffix, is_active, created_at, updated_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                            + ("ON CONFLICT (id) DO NOTHING" if dest_storage.is_postgres else "ON CONFLICT(id) DO NOTHING")
+                        ),
+                        (
+                            p["id"],
+                            target_user_id,
+                            p["name"],
+                            p["api_base_url"],
+                            p["model_name"],
+                            p["api_key_encrypted"],
+                            p["key_suffix"],
+                            p["is_active"],
+                            p["created_at"],
+                            p["updated_at"],
+                        ),
+                    )
+                    dst_cursor.execute(
+                        dest_storage._format_sql("INSERT INTO _migration_ledger VALUES (?, ?, ?, ?)"),
+                        (p["id"], "provider_profiles", p["id"], now),
+                    )
+                    summary["migrated_provider_profiles"] += 1
+            except Exception as e:
+                summary["errors"].append(f"provider_profiles: {e}")
+                print(f"[WARN] Error migrating provider_profiles: {e}")
 
-    src_conn.close()
+    finally:
+        dest_storage.close()
+        src_conn.close()
+
+    if summary["errors"]:
+        summary["success"] = False
+
     return summary
 
 
@@ -316,13 +350,17 @@ def main():
         print(f"Mode: {'DRY RUN' if res['dry_run'] else 'APPLIED'}")
         print(f"Source: {res['source']}")
         print(f"Destination: {res['destination']}")
-        print(f"Users: {res['users_count']}")
-        print(f"Applications: {res['applications_count']} (unowned: {res['unowned_applications']})")
-        print(f"Resumes: {res['resumes_count']} (unowned: {res['unowned_resumes']})")
-        print(f"Attachments: {res['attachments_count']}")
-        print(f"User Settings: {res['user_settings_count']}")
-        print(f"Global Settings: {res['global_settings_count']}")
-        print(f"Provider Profiles: {res['provider_profiles_count']}")
+        print(f"Users: {res['users_count']} (migrated: {res.get('migrated_users', 0)})")
+        print(f"Applications: {res['applications_count']} (migrated: {res.get('migrated_applications', 0)}, unowned: {res['unowned_applications']})")
+        print(f"Resumes: {res['resumes_count']} (migrated: {res.get('migrated_resumes', 0)}, unowned: {res['unowned_resumes']})")
+        print(f"Attachments: {res['attachments_count']} (migrated: {res.get('migrated_attachments', 0)})")
+        print(f"User Settings: {res['user_settings_count']} (migrated: {res.get('migrated_user_settings', 0)})")
+        print(f"Global Settings: {res['global_settings_count']} (migrated: {res.get('migrated_global_settings', 0)})")
+        print(f"Provider Profiles: {res['provider_profiles_count']} (migrated: {res.get('migrated_provider_profiles', 0)})")
+        if res.get("errors"):
+            print("Errors encountered:")
+            for err in res["errors"]:
+                print(f"  - {err}")
     except Exception as e:
         print(f"Migration error: {e}", file=sys.stderr)
         sys.exit(1)

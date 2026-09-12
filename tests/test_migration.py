@@ -84,6 +84,20 @@ def create_sample_source_db(db_path: Path):
             value TEXT NOT NULL
         )
     """)
+    cursor.execute("""
+        CREATE TABLE provider_profiles (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            api_base_url TEXT,
+            model_name TEXT,
+            api_key_encrypted TEXT,
+            key_suffix TEXT,
+            is_active INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
 
     # Seed data: 2 users
     cursor.execute(
@@ -120,7 +134,7 @@ def create_sample_source_db(db_path: Path):
         ("res-1", "user-1", "Primary Resume", "Experienced Developer", "resumes/user-1/uuid_resume.pdf", "att-1", "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
     )
 
-    # User Settings & Global Settings
+    # User Settings & Global Settings & Provider Profiles
     cursor.execute(
         "INSERT INTO user_settings VALUES (?, ?, ?, ?, ?)",
         ("user-1", "model_name", "gemini-2.0-flash", "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
@@ -128,6 +142,10 @@ def create_sample_source_db(db_path: Path):
     cursor.execute(
         "INSERT INTO settings VALUES (?, ?)",
         ("system_version", "1.0"),
+    )
+    cursor.execute(
+        "INSERT INTO provider_profiles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("prof-1", "user-1", "My OpenAI", "https://api.openai.com/v1", "gpt-4o", "enc_key", "...1234", 1, "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
     )
 
     conn.commit()
@@ -147,6 +165,9 @@ def test_dry_run_reports_counts_and_leaves_destination_empty(tmp_path):
     assert result["unowned_applications"] == 1
     assert result["resumes_count"] == 1
     assert result["attachments_count"] == 1
+    assert result["user_settings_count"] == 1
+    assert result["global_settings_count"] == 1
+    assert result["provider_profiles_count"] == 1
 
     # Destination DB should not exist or be empty
     if dest_db.exists():
@@ -164,6 +185,10 @@ def test_apply_migrates_all_records_and_relationships(tmp_path):
     result = run_migration(source_path=str(source_db), dest_path=str(dest_db), dry_run=False)
     assert result["success"] is True
     assert result["dry_run"] is False
+    assert result["migrated_user_settings"] == 1
+    assert result["migrated_global_settings"] == 1
+    assert result["migrated_provider_profiles"] == 1
+    assert result["errors"] == []
 
     # Connect to dest and verify records
     conn = sqlite3.connect(str(dest_db))
@@ -186,6 +211,18 @@ def test_apply_migrates_all_records_and_relationships(tmp_path):
     resumes = cursor.execute("SELECT id, user_id, attachment_id FROM resumes").fetchall()
     assert len(resumes) == 1
     assert resumes[0] == ("res-1", "user-1", "att-1")
+
+    user_settings = cursor.execute("SELECT user_id, key, value FROM user_settings").fetchall()
+    assert len(user_settings) == 1
+    assert user_settings[0] == ("user-1", "model_name", "gemini-2.0-flash")
+
+    global_settings = cursor.execute("SELECT key, value FROM settings").fetchall()
+    assert len(global_settings) == 1
+    assert global_settings[0] == ("system_version", "1.0")
+
+    profiles = cursor.execute("SELECT id, user_id, name, model_name FROM provider_profiles").fetchall()
+    assert len(profiles) == 1
+    assert profiles[0] == ("prof-1", "user-1", "My OpenAI", "gpt-4o")
 
     # Ledger exists
     ledger = cursor.execute("SELECT count(*) FROM _migration_ledger").fetchone()[0]
@@ -210,6 +247,9 @@ def test_apply_is_idempotent(tmp_path):
     assert cursor.execute("SELECT count(*) FROM users").fetchone()[0] == 2
     assert cursor.execute("SELECT count(*) FROM applications").fetchone()[0] == 3
     assert cursor.execute("SELECT count(*) FROM resumes").fetchone()[0] == 1
+    assert cursor.execute("SELECT count(*) FROM user_settings").fetchone()[0] == 1
+    assert cursor.execute("SELECT count(*) FROM settings").fetchone()[0] == 1
+    assert cursor.execute("SELECT count(*) FROM provider_profiles").fetchone()[0] == 1
     conn.close()
 
 
@@ -218,3 +258,50 @@ def test_source_equals_destination_is_rejected(tmp_path):
     Path(same_db).touch()
     with pytest.raises(ValueError, match="Source and destination cannot be identical"):
         run_migration(source_path=same_db, dest_path=same_db, dry_run=False)
+
+
+def test_postgres_destination_initialization(monkeypatch, tmp_path):
+    source_db = tmp_path / "source.db"
+    create_sample_source_db(source_db)
+
+    captured = {}
+
+    class MockStorageService:
+        def __init__(self, db_path=None, force_sqlite=False, database_url=None):
+            captured["db_path"] = db_path
+            captured["force_sqlite"] = force_sqlite
+            captured["database_url"] = database_url
+            self.is_postgres = True
+
+        def _get_cursor(self):
+            from contextlib import contextmanager
+
+            @contextmanager
+            def _cur():
+                class DummyCursor:
+                    def execute(self, *args, **kwargs):
+                        pass
+                    def fetchall(self):
+                        return []
+                    def fetchone(self):
+                        return None
+                yield DummyCursor()
+            return _cur()
+
+        def _format_sql(self, sql):
+            return sql
+
+        def close(self):
+            captured["closed"] = True
+
+    monkeypatch.setattr("backend.migrate.StorageService", MockStorageService)
+
+    result = run_migration(
+        source_path=str(source_db),
+        dest_path="postgresql://user:pass@host:5432/testdb",
+        dry_run=False,
+    )
+    assert result["success"] is True
+    assert captured["database_url"] == "postgresql://user:pass@host:5432/testdb"
+    assert captured["db_path"] is None
+    assert captured["closed"] is True
