@@ -27,7 +27,11 @@ GitHub OIDC tokens matching repository ID `1355476075`, owner ID `114119117`,
 repository `souravC01/JobHelperGuru`, branch `refs/heads/main`, event `push`, and
 workflow `souravC01/JobHelperGuru/.github/workflows/ci.yml@refs/heads/main`.
 The deployer impersonation binding additionally requires the exact main-branch
-OIDC subject. Pull requests, forks, other branches, manual dispatches, and other
+OIDC subject `repo:souravC01@114119117/JobHelperGuru@1355476075:ref:refs/heads/main`.
+This repository uses GitHub's immutable subject format. Check
+`gh api repos/souravC01/JobHelperGuru/actions/oidc/customization/sub` before
+recreating federation; a name-only subject will be rejected even when all other
+claims match. Pull requests, forks, other branches, manual dispatches, and other
 workflow files cannot use this provider. No service-account JSON keys or new
 GitHub secrets are needed. The provider identifier and account email in the
 workflow are public configuration.
