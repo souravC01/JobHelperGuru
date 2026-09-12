@@ -9,6 +9,7 @@ pool=jobhelperguru-github
 provider=github-main
 deployer=jobhelperguru-github-deployer@jobhelperguru.iam.gserviceaccount.com
 runtime=jobhelperguru-runner@jobhelperguru.iam.gserviceaccount.com
+subject='repo:souravC01@114119117/JobHelperGuru@1355476075:ref:refs/heads/main'
 
 actual_number=$(gcloud projects describe "$project" --format='value(projectNumber)')
 [[ "$actual_number" == "$project_number" ]] || { echo 'Unexpected project number'; exit 1; }
@@ -28,7 +29,7 @@ gcloud iam workload-identity-pools create "$pool" \
 
 # Numeric IDs prevent a renamed or recreated repository or owner from inheriting
 # access. Also require the exact repository, branch, event, and workflow file.
-condition="assertion.repository_id == '1355476075' && assertion.repository_owner_id == '114119117' && assertion.repository == 'souravC01/JobHelperGuru' && assertion.ref == 'refs/heads/main' && assertion.event_name == 'push' && assertion.workflow_ref == 'souravC01/JobHelperGuru/.github/workflows/ci.yml@refs/heads/main' && assertion.sub == 'repo:souravC01/JobHelperGuru:ref:refs/heads/main'"
+condition="assertion.repository_id == '1355476075' && assertion.repository_owner_id == '114119117' && assertion.repository == 'souravC01/JobHelperGuru' && assertion.ref == 'refs/heads/main' && assertion.event_name == 'push' && assertion.workflow_ref == 'souravC01/JobHelperGuru/.github/workflows/ci.yml@refs/heads/main' && assertion.sub == '$subject'"
 gcloud iam workload-identity-pools providers create-oidc "$provider" \
   --project="$project" --location=global --workload-identity-pool="$pool" \
   --display-name='GitHub main CI workflow' \
@@ -38,7 +39,7 @@ gcloud iam workload-identity-pools providers create-oidc "$provider" \
 
 gcloud iam service-accounts add-iam-policy-binding "$deployer" \
   --project="$project" --role=roles/iam.workloadIdentityUser \
-  --member="principal://iam.googleapis.com/projects/$project_number/locations/global/workloadIdentityPools/$pool/subject/repo:souravC01/JobHelperGuru:ref:refs/heads/main" \
+  --member="principal://iam.googleapis.com/projects/$project_number/locations/global/workloadIdentityPools/$pool/subject/$subject" \
   --condition=None
 gcloud artifacts repositories add-iam-policy-binding jobhelperguru \
   --project="$project" --location="$region" \
