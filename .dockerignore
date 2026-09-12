@@ -21,3 +21,4 @@ scratch
 .DS_Store
 Thumbs.db
 *.log
+gha-creds-*.json
