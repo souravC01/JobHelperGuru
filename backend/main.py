@@ -2,16 +2,23 @@ import os
 import re
 from pathlib import Path
 from typing import Optional, List
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
 
 from fastapi import FastAPI, HTTPException, Response, Depends, UploadFile, File, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
 
 from backend.config import load_config
 from backend.services.rate_limiter import RateLimiter, get_client_ip
+from backend.services.resource_leases import ResourceLeases
 from backend.models import (
     Application,
     ApplicationCreate,
@@ -38,7 +45,9 @@ from backend.services.scraper import ScraperService
 from backend.services.ai_engine import AIEngine, extract_raw_content_from_response
 from backend.services.excel_exporter import ExcelExporter
 from backend.services.object_storage import ObjectStorageService
+from backend.services.resume_files import ResumeFileManager, format_content_disposition
 from backend.services.outbound_http import SSRFBlockedError
+
 from backend.routers.auth import router as auth_router, get_current_user, get_optional_user, set_storage_service
 
 
@@ -170,6 +179,10 @@ if object_storage.is_configured:
 else:
     print("[INFO] Cloudflare R2 not configured. Using local file storage fallback.")
 
+def get_resume_file_manager() -> ResumeFileManager:
+    return ResumeFileManager(storage, object_storage)
+
+
 
 def get_ai_engine(user_id: Optional[str] = None) -> AIEngine:
     if not user_id:
@@ -227,8 +240,16 @@ def analyze_job(
     if not req.url and not job_input_text:
         raise HTTPException(status_code=400, detail="Either a URL or job text must be provided.")
 
-    if not current_user:
-        limiter = RateLimiter(storage)
+    limiter = RateLimiter(storage)
+    if current_user:
+        allowed, _, retry_after = limiter.check("user_ai_ops", current_user.id, limit=30, window_seconds=60)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many analysis requests. Please try again later.",
+                headers={"Retry-After": str(int(retry_after))},
+            )
+    else:
         cfg = load_config()
         client_ip = get_client_ip(request, trust_proxy_headers=getattr(cfg, "trust_proxy_headers", False))
         allowed, _, retry_after = limiter.check("anon_analysis", client_ip, limit=10, window_seconds=60)
@@ -239,91 +260,100 @@ def analyze_job(
                 headers={"Retry-After": str(int(retry_after))},
             )
 
-    scraped_title = ""
-    scraped_company = ""
-    scraped_location = ""
-    job_text = ""
-    source_url = req.url or ""
+    cfg = load_config()
+    client_ip = get_client_ip(request, trust_proxy_headers=getattr(cfg, "trust_proxy_headers", False))
+    lease_service = ResourceLeases(storage)
+    lease_subject = current_user.id if current_user else f"anon:{client_ip}"
+    lease_id = lease_service.acquire(user_id=lease_subject, kind="analysis", ttl_seconds=30)
 
-    if req.url:
-        scraped = scraper.scrape_url(req.url)
-        scraped_title = scraped.title
-        scraped_company = scraped.company
-        scraped_location = scraped.location
-        job_text = scraped.raw_text
-    elif job_input_text:
-        parsed = scraper.parse_raw_text(job_input_text)
-        scraped_title = parsed.title
-        scraped_company = parsed.company
-        scraped_location = parsed.location
-        job_text = parsed.raw_text
-
-    if (
-        not job_text
-        or len(job_text.strip()) < 30
-        or job_text.strip().startswith("Error fetching URL:")
-        or job_text.strip().startswith("Disallowed or private URL target")
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Could not extract readable text from this job URL (it may require login or block automated scraping). "
-                "Please copy and paste the job description text directly into the 'Paste Job Text' tab."
-            ),
-        )
-
-    user_id = current_user.id if current_user else None
-    ai = get_ai_engine(user_id=user_id)
     try:
-        analysis = ai.analyze_job(job_text, source_url=source_url)
-    except Exception as e:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "message": str(e),
-                "can_switch_offline": True,
-                "error_type": "ai_api_error",
-                "model_name": ai.model_name,
-            },
-        )
+        scraped_title = ""
+        scraped_company = ""
+        scraped_location = ""
+        job_text = ""
+        source_url = req.url or ""
 
-    UNKNOWN_TITLES = {"", "Open Position", "Detected Role", "Unknown Role", "Role Title", "Exact Role Title"}
-    UNKNOWN_COMPANIES = {"", "Unknown Company", "Company", "Company Name", "Detected Company"}
-    UNKNOWN_LOCATIONS = {"", "Unknown", "Identified Location", "City, State or Remote/Hybrid", "Unknown Location"}
+        if req.url:
+            scraped = scraper.scrape_url(req.url)
+            scraped_title = scraped.title
+            scraped_company = scraped.company
+            scraped_location = scraped.location
+            job_text = scraped.raw_text
+        elif job_input_text:
+            parsed = scraper.parse_raw_text(job_input_text)
+            scraped_title = parsed.title
+            scraped_company = parsed.company
+            scraped_location = parsed.location
+            job_text = parsed.raw_text
 
-    # Prefer scraped title/company/location if AI/heuristic returned generic placeholders
-    if (not analysis.title or analysis.title in UNKNOWN_TITLES) and scraped_title and scraped_title not in UNKNOWN_TITLES:
-        analysis.title = scraped_title
-    if (not analysis.company or analysis.company in UNKNOWN_COMPANIES) and scraped_company and scraped_company not in UNKNOWN_COMPANIES:
-        analysis.company = scraped_company
-    if (not analysis.location or analysis.location in UNKNOWN_LOCATIONS) and scraped_location and scraped_location not in UNKNOWN_LOCATIONS:
-        analysis.location = scraped_location
+        if (
+            not job_text
+            or len(job_text.strip()) < 30
+            or job_text.strip().startswith("Error fetching URL:")
+            or job_text.strip().startswith("Disallowed or private URL target")
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Could not extract readable text from this job URL (it may require login or block automated scraping). "
+                    "Please copy and paste the job description text directly into the 'Paste Job Text' tab."
+                ),
+            )
 
-    analysis_dict = analysis.model_dump()
-    analysis_dict["title"] = analysis.title
-    analysis_dict["company"] = analysis.company
-    analysis_dict["location"] = analysis.location
+        user_id = current_user.id if current_user else None
+        ai = get_ai_engine(user_id=user_id)
+        try:
+            analysis = ai.analyze_job(job_text, source_url=source_url)
+        except Exception as e:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "message": str(e),
+                    "can_switch_offline": True,
+                    "error_type": "ai_api_error",
+                    "model_name": ai.model_name,
+                },
+            )
 
-    return {
-        "analysis": analysis_dict,
-        "raw_text": job_text,
-        "source_url": source_url,
-        "title": analysis.title,
-        "company": analysis.company,
-        "location": analysis.location,
-        "salary_range": analysis.salary_range,
-        "work_mode": analysis.work_mode,
-        "experience_level": analysis.experience_level,
-        "experience_required": analysis.experience_required,
-        "is_new_grad_role": analysis.is_new_grad_role,
-        "new_grad_criteria": analysis.new_grad_criteria,
-        "required_skills": analysis.required_skills,
-        "preferred_skills": analysis.preferred_skills,
-        "tech_stack": analysis.tech_stack,
-        "soft_skills": analysis.soft_skills,
-        "ats_keywords": analysis.ats_keywords,
-        "summary": analysis.summary,
-    }
+        UNKNOWN_TITLES = {"", "Open Position", "Detected Role", "Unknown Role", "Role Title", "Exact Role Title"}
+        UNKNOWN_COMPANIES = {"", "Unknown Company", "Company", "Company Name", "Detected Company"}
+        UNKNOWN_LOCATIONS = {"", "Unknown", "Identified Location", "City, State or Remote/Hybrid", "Unknown Location"}
+
+        # Prefer scraped title/company/location if AI/heuristic returned generic placeholders
+        if (not analysis.title or analysis.title in UNKNOWN_TITLES) and scraped_title and scraped_title not in UNKNOWN_TITLES:
+            analysis.title = scraped_title
+        if (not analysis.company or analysis.company in UNKNOWN_COMPANIES) and scraped_company and scraped_company not in UNKNOWN_COMPANIES:
+            analysis.company = scraped_company
+        if (not analysis.location or analysis.location in UNKNOWN_LOCATIONS) and scraped_location and scraped_location not in UNKNOWN_LOCATIONS:
+            analysis.location = scraped_location
+
+        analysis_dict = analysis.model_dump()
+        analysis_dict["title"] = analysis.title
+        analysis_dict["company"] = analysis.company
+        analysis_dict["location"] = analysis.location
+
+        return {
+            "analysis": analysis_dict,
+            "raw_text": job_text,
+            "source_url": source_url,
+            "title": analysis.title,
+            "company": analysis.company,
+            "location": analysis.location,
+            "salary_range": analysis.salary_range,
+            "work_mode": analysis.work_mode,
+            "experience_level": analysis.experience_level,
+            "experience_required": analysis.experience_required,
+            "is_new_grad_role": analysis.is_new_grad_role,
+            "new_grad_criteria": analysis.new_grad_criteria,
+            "required_skills": analysis.required_skills,
+            "preferred_skills": analysis.preferred_skills,
+            "tech_stack": analysis.tech_stack,
+            "soft_skills": analysis.soft_skills,
+            "ats_keywords": analysis.ats_keywords,
+            "summary": analysis.summary,
+        }
+    finally:
+        lease_service.release(lease_id)
 
 
 from backend.services.document_parser import extract_text_from_file
@@ -353,13 +383,16 @@ def add_resume(req: ResumeCreate, current_user: User = Depends(get_current_user)
             status_code=422,
             detail="Resume content exceeds maximum limit of 100,000 characters.",
         )
-    user_resume_count = storage.count_user_resumes(current_user.id)
-    if user_resume_count >= MAX_RESUMES_PER_USER:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Maximum limit of {MAX_RESUMES_PER_USER} resumes reached per account.",
+    try:
+        return storage.add_resume(
+            name=req.name,
+            content=req.content,
+            file_key=None,
+            user_id=current_user.id,
+            max_resumes=MAX_RESUMES_PER_USER,
         )
-    return storage.add_resume(name=req.name, content=req.content, file_key=None, user_id=current_user.id)
+    except ValueError as ve:
+        raise HTTPException(status_code=422, detail=str(ve))
 
 
 @app.post("/api/resumes/upload", response_model=Resume)
@@ -391,13 +424,6 @@ def upload_resume_file(
                 detail="File exceeds maximum allowed size of 10MB.",
             )
 
-        current_bytes = storage.get_user_upload_bytes(current_user.id)
-        if current_bytes + len(content_bytes) > MAX_USER_STORAGE_BYTES:
-            raise HTTPException(
-                status_code=422,
-                detail="Maximum total storage limit of 50MB reached for resumes.",
-            )
-
         if content_override and content_override.strip():
             if len(content_override) > 100_000:
                 raise HTTPException(
@@ -411,40 +437,28 @@ def upload_resume_file(
                 raise HTTPException(status_code=400, detail="No readable text could be extracted from this document.")
             final_content = extracted_text.strip()
 
-        # Upload binary to Cloudflare R2 or local directory scoped to user_id
-        try:
-            file_key = object_storage.upload_file(
-                content_bytes=content_bytes,
-                filename=file.filename,
-                content_type=file.content_type,
-                user_id=current_user.id,
-            )
-        except RuntimeError as re:
-            raise HTTPException(status_code=503, detail="Storage service temporarily unavailable.")
-
-        storage_backend = "r2" if object_storage.is_configured else "local"
-        attachment = storage.create_attachment(
-            user_id=current_user.id,
-            storage_backend=storage_backend,
-            object_key=file_key,
-            original_filename=file.filename,
-            content_type=file.content_type,
-            size_bytes=len(content_bytes),
-        )
-
         resume_name = name.strip() if (name and name.strip()) else Path(file.filename).stem
         try:
-            resume = storage.add_resume(
-                name=resume_name,
-                content=final_content,
-                file_key=file_key,
+            resume_file_manager = get_resume_file_manager()
+            resume = resume_file_manager.reserve_and_upload(
+
                 user_id=current_user.id,
-                attachment_id=attachment.id,
+                filename=file.filename,
+                content_type=file.content_type,
+                content_bytes=content_bytes,
+                resume_name=resume_name,
+                text_content=final_content,
+                max_resumes=MAX_RESUMES_PER_USER,
+                max_storage_bytes=MAX_USER_STORAGE_BYTES,
             )
+        except ValueError as ve:
+            raise HTTPException(status_code=422, detail=str(ve))
+        except RuntimeError as re:
+            print(f"[RESUME UPLOAD ERROR] {re}")
+            raise HTTPException(status_code=503, detail=f"Storage service temporarily unavailable: {str(re)}")
         except Exception as e:
-            object_storage.delete_file(file_key, user_id=current_user.id)
-            storage.update_attachment_deletion_state(attachment.id, "failed", user_id=current_user.id)
-            raise HTTPException(status_code=500, detail="Failed to save resume record.")
+            print(f"[RESUME UPLOAD ERROR] {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to save resume record: {str(e)}")
 
         resume.download_url = f"/api/resumes/{resume.id}/download"
         return resume
@@ -454,6 +468,7 @@ def upload_resume_file(
         raise HTTPException(status_code=422, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+
 
 
 @app.post("/api/resumes/parse-file")
@@ -553,7 +568,7 @@ def download_resume_file(
             content=file_bytes,
             media_type=content_type,
             headers={
-                "Content-Disposition": f'attachment; filename="{safe_filename}"',
+                "Content-Disposition": format_content_disposition(raw_filename),
                 "Access-Control-Expose-Headers": "Content-Disposition, X-Fallback-Generated",
             },
         )
@@ -563,12 +578,13 @@ def download_resume_file(
     if raw_text:
         fallback_bytes = generate_docx_from_text(title=resume.name or "Resume", text=raw_text)
         safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', resume.name or "resume").strip('_') or "resume"
-        fallback_filename = f"{safe_name}_generated.docx"
+        fallback_raw = f"{safe_name}_generated.docx"
         return Response(
+
             content=fallback_bytes,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             headers={
-                "Content-Disposition": f'attachment; filename="{fallback_filename}"',
+                "Content-Disposition": format_content_disposition(fallback_raw),
                 "X-Fallback-Generated": "true",
                 "Access-Control-Expose-Headers": "Content-Disposition, X-Fallback-Generated",
             },
@@ -598,29 +614,18 @@ def update_resume(
 
 @app.delete("/api/resumes/{resume_id}")
 def delete_resume(resume_id: str, current_user: User = Depends(get_current_user)):
-    resume = storage.get_resume(resume_id, user_id=current_user.id)
-    if not resume:
-        raise HTTPException(status_code=404, detail="Resume not found.")
+    try:
+        resume_file_manager = get_resume_file_manager()
+        deleted = resume_file_manager.delete_resume(user_id=current_user.id, resume_id=resume_id)
 
-    if resume.attachment_id or resume.file_key:
-        attachment = None
-        if resume.attachment_id:
-            attachment = storage.get_attachment(resume.attachment_id, user_id=current_user.id)
-        elif resume.file_key:
-            attachment = storage.get_attachment_by_key(resume.file_key, user_id=current_user.id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Resume not found.")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-        if attachment:
-            storage.update_attachment_deletion_state(attachment.id, "pending", user_id=current_user.id)
-            deleted = object_storage.delete_file(attachment.object_key, user_id=current_user.id)
-            if not deleted:
-                storage.update_attachment_deletion_state(attachment.id, "failed", user_id=current_user.id)
-                raise HTTPException(status_code=500, detail="Failed to delete associated storage file.")
-            storage.delete_attachment(attachment.id, user_id=current_user.id)
-        elif resume.file_key:
-            object_storage.delete_file(resume.file_key, user_id=current_user.id)
-
-    storage.delete_resume(resume_id, user_id=current_user.id)
-    return {"success": True}
 
 
 class MatchResumesRequest(BaseModel):
@@ -864,7 +869,31 @@ def test_ai(req: SettingsUpdate, current_user: User = Depends(get_current_user))
         }
 
 
+class SPAStaticFiles(StaticFiles):
+    """
+    StaticFiles extension that serves index.html for Single Page Application
+    deep links (e.g. /verify-email, /reset-password) when the requested static
+    path does not exist and is not an API call.
+    """
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except (HTTPException, StarletteHTTPException) as ex:
+            normalized_path = path.replace("\\", "/").lstrip("/")
+            if ex.status_code == 404 and not normalized_path.startswith("api/") and normalized_path != "api":
+                index_path = Path(self.directory) / "index.html"
+                if index_path.is_file():
+                    return FileResponse(str(index_path))
+            raise
+
+
+
+
+
+
 # --- Static frontend files mounting ---
 dist_path = (Path(__file__).resolve().parent.parent / "frontend" / "dist").resolve()
 if dist_path.exists() and dist_path.is_dir():
-    app.mount("/", StaticFiles(directory=str(dist_path), html=True), name="frontend")
+    app.mount("/", SPAStaticFiles(directory=str(dist_path), html=True), name="frontend")
+

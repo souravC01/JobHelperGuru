@@ -77,7 +77,65 @@ class SMTPEmailTransport(EmailTransport):
             server.send_message(msg)
 
 
+class BrevoEmailTransport(EmailTransport):
+    """Brevo (formerly Sendinblue) v3 API email delivery transport."""
+
+    def __init__(
+        self,
+        api_key: str,
+        sender_email: str = "noreply@jobhelper.guru",
+        sender_name: str = "JobHelperGuru",
+        endpoint: str = "https://api.brevo.com/v3/smtp/email",
+        timeout: float = 10.0,
+    ):
+        self.api_key = api_key
+        self.sender_email = sender_email
+        self.sender_name = sender_name
+        self.endpoint = endpoint
+        self.timeout = timeout
+
+    def send(self, recipient: str, subject: str, text_body: str) -> None:
+        import json
+        import urllib.request
+        import urllib.error
+
+        if self.api_key.startswith("xsmtpsib-"):
+            raise ValueError(
+                "Configured BREVO_API_KEY starts with 'xsmtpsib-', which is an SMTP password, not a REST API key. "
+                "The Brevo REST API requires an API key starting with 'xkeysib-'. "
+                "In your Brevo dashboard, go to: Profile (top right) -> SMTP & API -> API Keys tab -> Generate a new API key."
+            )
+
+        payload = {
+            "sender": {"name": self.sender_name, "email": self.sender_email},
+            "to": [{"email": recipient}],
+            "subject": subject,
+            "textContent": text_body,
+        }
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            self.endpoint,
+            data=data,
+            headers={
+                "api-key": self.api_key,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                if resp.status not in (200, 201, 202):
+                    raise RuntimeError(f"Brevo API returned unexpected status {resp.status}")
+        except urllib.error.HTTPError as e:
+            err_msg = e.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Brevo API error ({e.code}): {err_msg}")
+        except Exception as e:
+            raise RuntimeError(f"Failed to deliver email via Brevo: {e}")
+
+
 class EmailService:
+
     """Service for dispatching transactional authentication emails."""
 
     def __init__(self, transport: Optional[EmailTransport] = None):

@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+import threading
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
@@ -8,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 try:
     import psycopg2
@@ -64,7 +65,10 @@ def canonical_posting_url(url: Optional[str]) -> Optional[str]:
         return clean.rstrip("/")
 
 
+
 class StorageService:
+    _resume_quota_lock = threading.Lock()
+
     def __init__(self, db_path: str = "data/tracker.db", force_sqlite: bool = False, database_url: Optional[str] = None):
         if force_sqlite:
             raw_url = None
@@ -158,6 +162,30 @@ class StorageService:
                 with conn:
                     cursor = conn.cursor()
                     yield cursor
+            finally:
+                conn.close()
+
+    @contextmanager
+    def _get_immediate_cursor(self):
+        """Yields a cursor inside an immediate transaction for SQLite or normal cursor for PostgreSQL."""
+        if self.is_postgres:
+            with self._get_cursor() as cursor:
+                yield cursor
+        else:
+            conn = sqlite3.connect(self.db_path, timeout=30.0)
+            conn.row_factory = sqlite3.Row
+            conn.isolation_level = None
+            cursor = conn.cursor()
+            try:
+                cursor.execute("BEGIN IMMEDIATE")
+                yield cursor
+                cursor.execute("COMMIT")
+            except Exception:
+                try:
+                    cursor.execute("ROLLBACK")
+                except Exception:
+                    pass
+                raise
             finally:
                 conn.close()
 
@@ -335,6 +363,17 @@ class StorageService:
                     PRIMARY KEY (bucket, subject)
                 )
             """)
+            # Resource leases table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS resource_leases (
+                    lease_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    expires_at REAL NOT NULL
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_resource_leases_user ON resource_leases(user_id, kind)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_resource_leases_expires ON resource_leases(expires_at)")
 
     # --- Users CRUD ---
     def create_user(
@@ -446,18 +485,24 @@ class StorageService:
         with self._get_cursor() as cursor:
             if clear_password:
                 cursor.execute(
+                    self._format_sql("UPDATE auth_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL"),
+                    (now, user_id),
+                )
+                cursor.execute(
                     self._format_sql(
-                        "UPDATE users SET google_sub = ?, hashed_password = NULL, email_verified = ?, session_version = session_version + 1, updated_at = ? WHERE id = ?"
+                        "UPDATE users SET google_sub = ?, hashed_password = CASE WHEN email_verified = FALSE THEN NULL ELSE hashed_password END, email_verified = ?, session_version = session_version + 1, updated_at = ? WHERE id = ? AND (google_sub IS NULL OR google_sub = ?)"
                     ),
-                    (clean_sub, verify_email, now, user_id),
+                    (clean_sub, verify_email, now, user_id, clean_sub),
                 )
             else:
                 cursor.execute(
                     self._format_sql(
-                        "UPDATE users SET google_sub = ?, email_verified = ?, updated_at = ? WHERE id = ?"
+                        "UPDATE users SET google_sub = ?, email_verified = ?, updated_at = ? WHERE id = ? AND (google_sub IS NULL OR google_sub = ?)"
                     ),
-                    (clean_sub, verify_email, now, user_id),
+                    (clean_sub, verify_email, now, user_id, clean_sub),
                 )
+            if cursor.rowcount != 1:
+                raise ValueError("Google identity changed during sign-in. Please try again.")
 
     def increment_user_session_version(self, user_id: str) -> int:
         now = datetime.now().isoformat()
@@ -521,16 +566,30 @@ class StorageService:
         file_key: Optional[str] = None,
         user_id: Optional[str] = None,
         attachment_id: Optional[str] = None,
+        max_resumes: Optional[int] = None,
     ) -> Resume:
         now = datetime.now().isoformat()
         resume_id = str(uuid.uuid4())
-        with self._get_cursor() as cursor:
-            cursor.execute(
-                self._format_sql(
-                    "INSERT INTO resumes (id, user_id, name, content, file_key, attachment_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-                ),
-                (resume_id, user_id, name, content, file_key, attachment_id, now, now),
-            )
+        with self._resume_quota_lock:
+            with self._get_immediate_cursor() as cursor:
+                if user_id and max_resumes is not None:
+                    if self.is_postgres:
+                        cursor.execute("SELECT id FROM users WHERE id = %s FOR UPDATE", (user_id,))
+                    cursor.execute(
+                        self._format_sql("SELECT COUNT(*) as cnt FROM resumes WHERE user_id = ?"),
+                        (user_id,),
+                    )
+                    row = cursor.fetchone()
+                    count = int(row["cnt"]) if isinstance(row, dict) else int(row[0])
+                    if count >= max_resumes:
+                        raise ValueError(f"Maximum limit of {max_resumes} resumes reached per account.")
+
+                cursor.execute(
+                    self._format_sql(
+                        "INSERT INTO resumes (id, user_id, name, content, file_key, attachment_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                    ),
+                    (resume_id, user_id, name, content, file_key, attachment_id, now, now),
+                )
         return Resume(
             id=resume_id,
             name=name,

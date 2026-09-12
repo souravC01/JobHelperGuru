@@ -56,6 +56,10 @@ class AppConfig:
     smtp_user: Optional[str] = None
     smtp_password: Optional[str] = None
     smtp_from: Optional[str] = None
+    brevo_api_key: Optional[str] = None
+    brevo_sender_email: Optional[str] = None
+    brevo_sender_name: Optional[str] = "JobHelperGuru"
+
 
 
 def _get_or_create_local_secrets(secrets_dir: Optional[str] = None) -> dict:
@@ -117,6 +121,11 @@ def load_config() -> AppConfig:
     smtp_password = os.getenv("SMTP_PASSWORD")
     smtp_from = os.getenv("SMTP_FROM") or os.getenv("SMTP_USER")
 
+    # Brevo configuration
+    brevo_api_key = os.getenv("BREVO_API_KEY")
+    brevo_sender_email = os.getenv("BREVO_SENDER_EMAIL")
+    brevo_sender_name = os.getenv("BREVO_SENDER_NAME") or "JobHelperGuru"
+
     if raw_mode == "production":
         jwt_key = (os.getenv("JWT_SECRET_KEY") or "").strip()
         if not jwt_key:
@@ -149,6 +158,9 @@ def load_config() -> AppConfig:
             smtp_user=smtp_user,
             smtp_password=smtp_password,
             smtp_from=smtp_from,
+            brevo_api_key=brevo_api_key,
+            brevo_sender_email=brevo_sender_email,
+            brevo_sender_name=brevo_sender_name,
         )
 
     elif raw_mode == "local":
@@ -171,6 +183,9 @@ def load_config() -> AppConfig:
             smtp_user=smtp_user,
             smtp_password=smtp_password,
             smtp_from=smtp_from,
+            brevo_api_key=brevo_api_key,
+            brevo_sender_email=brevo_sender_email,
+            brevo_sender_name=brevo_sender_name,
         )
 
     else:  # test mode
@@ -192,5 +207,9 @@ def load_config() -> AppConfig:
             smtp_user=smtp_user,
             smtp_password=smtp_password,
             smtp_from=smtp_from,
+            brevo_api_key=brevo_api_key,
+            brevo_sender_email=brevo_sender_email,
+            brevo_sender_name=brevo_sender_name,
         )
+
 

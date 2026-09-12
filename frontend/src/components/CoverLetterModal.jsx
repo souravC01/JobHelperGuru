@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Mail, Copy, Check, Sparkles, Loader2, MessageSquare, Send, FileText, Download } from 'lucide-react';
 import { generateOutreach, exportCoverLetterDocx } from '../api/client';
+import { renderCoverLetter } from '../utils/printCoverLetter';
 
 export default function CoverLetterModal({
   isOpen,
@@ -95,61 +96,16 @@ export default function CoverLetterModal({
       alert('Please allow popups to download or print your PDF.');
       return;
     }
-    const printCandidateName = candidateName;
-    const company = currentJob?.company || '';
-    const role = currentJob?.title || '';
-    const subject = data?.subject_line || '';
-    const bodyHtml = data.cover_letter_pitch
-      .split('\n\n')
-      .map((p) => `<p style="margin: 0 0 14px 0; line-height: 1.6;">${p.replace(/\n/g, '<br/>')}</p>`)
-      .join('');
-
-    printWindow.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Cover Letter - ${printCandidateName} - ${company}</title>
-  <style>
-    @page { margin: 1in; size: letter; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      color: #1e293b;
-      margin: 0;
-      padding: 24px;
-      font-size: 11pt;
-      line-height: 1.5;
-    }
-    .header { margin-bottom: 20px; }
-    .name { font-size: 16pt; font-weight: bold; color: #0f172a; margin-bottom: 4px; }
-    .date { font-size: 10pt; color: #64748b; margin-bottom: 16px; }
-    .recipient { margin-bottom: 16px; line-height: 1.4; }
-    .subject { font-weight: bold; margin-bottom: 16px; color: #0f172a; }
-    @media print {
-      body { padding: 0; }
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="name">${candidateName}</div>
-    <div class="date">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
-    <div class="recipient">
-      Hiring Team<br/>
-      ${company ? company + '<br/>' : ''}
-    </div>
-    ${subject ? `<div class="subject">Subject: ${subject}</div>` : ''}
-  </div>
-  <div class="content">
-    ${bodyHtml}
-  </div>
-  <script>
-    window.onload = function() {
-      window.print();
-    };
-  </script>
-</body>
-</html>`);
-    printWindow.document.close();
+    printWindow.opener = null;
+    renderCoverLetter(printWindow.document, {
+      candidateName,
+      company: currentJob?.company || '',
+      subject: data.subject_line || '',
+      body: data.cover_letter_pitch,
+      dateLabel: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+    });
+    printWindow.focus();
+    printWindow.print();
   };
 
   return (

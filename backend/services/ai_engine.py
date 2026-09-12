@@ -178,9 +178,13 @@ class AIEngine:
             local_ai_hosts=set(cfg.local_ai_hosts),
             is_ai_request=True,
         )
-        validate_destination_url(self.api_base_url, policy)
+        validate_destination_url(self.api_base_url, policy, resolve_addresses=False)
         try:
-            return OpenAI(base_url=self.api_base_url, api_key=self.api_key, timeout=30.0)
+            import httpx2
+            from backend.services.pinned_transport import PinnedTransport
+            http_client = httpx2.Client(transport=PinnedTransport(policy), follow_redirects=False, trust_env=False)
+            return OpenAI(base_url=self.api_base_url, api_key=self.api_key, timeout=30.0,
+                          max_retries=0, http_client=http_client)
         except Exception as e:
             raise RuntimeError(f"Could not initialize AI Client for {self.model_name}: {str(e)}") from e
 

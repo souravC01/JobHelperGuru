@@ -56,6 +56,12 @@ export default function JobAnalyzer({
     })
   );
 
+  const matchingAppByUrl = Boolean(urlInput.trim()) && (applications || []).find((app) => {
+    const cleanInput = urlInput.trim().replace(/\/+$/, '').toLowerCase();
+    const appUrl = (app.url || '').trim().replace(/\/+$/, '').toLowerCase();
+    return cleanInput && appUrl && cleanInput === appUrl;
+  });
+
   const handleAnalyze = async (e) => {
     e?.preventDefault();
     setError('');
@@ -123,14 +129,24 @@ export default function JobAnalyzer({
             <Link2 size={18} />
           </div>
 
-          <input
-            type="url"
-            placeholder="Paste LinkedIn, Greenhouse, Workday, Dayforce, or Lever job URL..."
-            value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            disabled={loading}
-            className="input-corporate flex-1 text-sm text-[#000000] placeholder:text-[#666666] h-11"
-          />
+          <div className="flex-1 flex flex-col justify-center">
+            <input
+              type="url"
+              placeholder="Paste LinkedIn, Greenhouse, Workday, Dayforce, or Lever job URL..."
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              disabled={loading}
+              className="input-corporate w-full text-sm text-[#000000] placeholder:text-[#666666] h-11"
+            />
+            {matchingAppByUrl && (
+              <div className="text-[11px] text-[#057642] font-medium pt-1 px-1 flex items-center gap-1">
+                <span>Already tracked:</span>
+                <strong>{matchingAppByUrl.company}</strong>
+                <span>({matchingAppByUrl.role})</span>
+                <span className="text-[#666666]">[{matchingAppByUrl.status}]</span>
+              </div>
+            )}
+          </div>
 
           <button
             type="submit"

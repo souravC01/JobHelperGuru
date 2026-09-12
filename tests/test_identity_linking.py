@@ -53,6 +53,59 @@ def test_password_length_bounds(client):
     assert resp.status_code == 200
 
 
+def test_third_party_google_identity_cannot_link_by_email(client, monkeypatch):
+    from backend.routers.auth import get_storage
+    reg = client.post('/api/auth/register', json={
+        'email': 'existing@example.test', 'name': 'Owner', 'password': 'OwnerPassword123!',
+    })
+    storage = get_storage()
+    uid = reg.json()['user']['id']
+    storage.update_user_verification(uid, verified=True)
+    before = storage.get_user_by_email('existing@example.test')
+    monkeypatch.setattr('backend.routers.auth.verify_google_id_token', lambda _: {
+        'email': 'existing@example.test', 'email_verified': True,
+        'sub': 'unlinked-sub', 'aud': 'test-client-id',
+    })
+    response = client.post('/api/auth/google', json={'credential': 'synthetic'})
+    assert response.status_code == 409
+    after = storage.get_user_by_email('existing@example.test')
+    for key in ('hashed_password', 'google_sub', 'email_verified', 'session_version'):
+        assert after[key] == before[key]
+
+
+def test_google_missing_audience_is_rejected(client, monkeypatch):
+    monkeypatch.setattr('backend.routers.auth.verify_google_id_token', lambda _: {
+        'email': 'test@gmail.com', 'email_verified': True, 'sub': 'no-aud',
+    })
+    assert client.post('/api/auth/google', json={'credential': 'synthetic'}).status_code == 401
+
+
+def test_storage_cannot_overwrite_a_concurrently_linked_identity(client):
+    from backend.routers.auth import get_storage
+    storage = get_storage()
+    user = storage.create_user(email='bound@gmail.com', hashed_password=None, name='Bound',
+                               google_sub='first-sub', email_verified=True)
+    with pytest.raises(ValueError):
+        storage.link_google_identity(user.id, 'second-sub', clear_password=True)
+    assert storage.get_user_by_id(user.id).google_sub == 'first-sub'
+
+
+def test_new_third_party_google_requires_mailbox_proof(client, monkeypatch, fake_email_transport):
+    monkeypatch.setattr('backend.routers.auth.verify_google_id_token', lambda _: {
+        'email': 'new@example.test', 'email_verified': True, 'sub': 'new-sub', 'aud': 'test-client-id',
+    })
+    response = client.post('/api/auth/google', json={'credential': 'synthetic'})
+    assert response.status_code == 200
+    assert not response.json().get('token')
+    assert response.json()['requires_verification'] is True
+    token = fake_email_transport.get_last_verification_token('new@example.test')
+    assert token
+    # Repeated sign-in must not grant a session before the application challenge.
+    assert not client.post('/api/auth/google', json={'credential': 'synthetic'}).json().get('token')
+    assert client.post('/api/auth/verify-email/confirm', json={'token': token}).status_code == 200
+    assert client.post('/api/auth/google', json={'credential': 'synthetic'}).json().get('token')
+
+
 def test_pre_account_hijacking_via_unverified_email_prevented(client, monkeypatch):
     # Step 1: Attacker registers unverified account for victim@example.test
     reg_resp = client.post(
@@ -72,6 +125,7 @@ def test_pre_account_hijacking_via_unverified_email_prevented(client, monkeypatc
         "email": "victim@example.test",
         "email_verified": True,
         "sub": "google-victim-sub-9999",
+        "hd": "example.test",
         "name": "Real Victim",
         "aud": "test-client-id",
     }

@@ -20,6 +20,7 @@ import SettingsModal from './components/SettingsModal';
 import OfflineSwitchModal from './components/OfflineSwitchModal';
 import AuthModal from './components/AuthModal';
 import PrivacyModal from './components/PrivacyModal';
+import AuthLinkPage from './components/AuthLinkPage';
 import UserNav from './components/UserNav';
 import ThemeToggle from './components/ThemeToggle';
 import {
@@ -36,6 +37,14 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(getCurrentUser());
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
+  const [currentPath, setCurrentPath] = useState(() => (typeof window !== 'undefined' ? window.location.pathname : '/'));
+
+  useEffect(() => {
+    const onPopState = () => setCurrentPath(window.location.pathname);
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
 
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('jobhelperguru_theme') || 'light';
@@ -219,7 +228,33 @@ export default function App() {
   const offerCount = applications.filter((a) => a.status === 'Offered').length;
   const totalCount = applications.length;
 
+  if (currentPath === '/verify-email' || currentPath === '/reset-password') {
+    return (
+      <>
+        <AuthLinkPage
+          path={currentPath}
+          onGoHome={() => setCurrentPath('/')}
+          onOpenAuth={(mode) => {
+            setCurrentPath('/');
+            setAuthMode(mode || 'login');
+            setIsAuthOpen(true);
+          }}
+        />
+        <AuthModal
+          isOpen={isAuthOpen}
+          onClose={() => setIsAuthOpen(false)}
+          onSuccess={(user) => {
+            setCurrentUser(user);
+            setIsAuthOpen(false);
+          }}
+          initialMode={authMode}
+        />
+      </>
+    );
+  }
+
   return (
+
     <div className="min-h-screen bg-[#f3f6f8] text-[#000000] flex flex-col font-sans selection:bg-[#0a66c2] selection:text-white">
       {/* Top Corporate Navbar */}
       <header className="sticky top-0 z-40 bg-white border-b border-[#e0e0e0]">

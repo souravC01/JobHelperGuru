@@ -197,7 +197,7 @@ def test_scrape_url_blocks_internal_and_cloud_metadata():
         assert any(term in job.raw_text.lower() for term in ["blocked", "disallowed", "invalid", "security"])
 
 
-def test_scrape_indeed_url_with_tls_impersonation(monkeypatch):
+def test_scrape_captured_job_uses_protected_transport(monkeypatch):
     scraper = ScraperService()
     captured_html = """
     <html><head><title>Software Engineering Developer - Example Co</title></head>
@@ -212,8 +212,9 @@ def test_scrape_indeed_url_with_tls_impersonation(monkeypatch):
 
     monkeypatch.setattr("socket.getaddrinfo", lambda *args, **kwargs: [(None, None, None, None, ("93.184.216.34", 0))])
     monkeypatch.setattr("backend.services.scraper.CURL_CFFI_AVAILABLE", True)
-    monkeypatch.setattr("backend.services.scraper.cffi_requests.get", lambda *args, **kwargs: CapturedResponse())
-    monkeypatch.setattr(scraper.session, "get", lambda *args, **kwargs: pytest.fail("standard transport must not be used"))
+    monkeypatch.setattr("backend.services.scraper.cffi_requests.get", lambda *args, **kwargs: pytest.fail("unprotected curl must not be used"))
+    monkeypatch.setattr(scraper.safe_client, "get", lambda *args, **kwargs: CapturedResponse())
+    monkeypatch.setattr(scraper.session, "get", lambda *args, **kwargs: pytest.fail("unprotected requests must not be used"))
     job = scraper.scrape_url("https://ca.indeed.com/viewjob?jk=d721d1b5ad371161&from=shareddesktop_copy")
     assert "Software Engineering" in job.title
     assert "Java" in job.raw_text

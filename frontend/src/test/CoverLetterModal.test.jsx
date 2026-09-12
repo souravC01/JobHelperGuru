@@ -1,5 +1,5 @@
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import CoverLetterModal from '../components/CoverLetterModal'
 import * as apiClient from '../api/client'
 
@@ -12,6 +12,7 @@ describe('CoverLetterModal 3-paragraph format and docx/pdf download', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
+  afterEach(() => vi.restoreAllMocks())
 
   const mockJob = {
     title: 'Senior Software Engineer',
@@ -41,6 +42,33 @@ describe('CoverLetterModal 3-paragraph format and docx/pdf download', () => {
     connection_note:
       'Hi! I noticed the Senior Software Engineer opening at Stripe and would love to connect.',
   }
+
+  it.each(['name', 'company', 'subject', 'body'])('prints %s as literal text without executable markup', async (field) => {
+    const hostile = '<img src=x onerror="window.opener.compromised=true"><script>window.opener.compromised=true</script>'
+    const popup = { document: document.implementation.createHTMLDocument(''), opener: window, print: vi.fn(), focus: vi.fn() }
+    vi.spyOn(window, 'open').mockReturnValue(popup)
+    apiClient.generateOutreach.mockResolvedValue({ ...mockOutreachData,
+      subject_line: field === 'subject' ? hostile : mockOutreachData.subject_line,
+      cover_letter_pitch: field === 'body' ? hostile : mockOutreachData.cover_letter_pitch,
+    })
+    render(<CoverLetterModal isOpen onClose={vi.fn()}
+      currentJob={{ ...mockJob, company: field === 'company' ? hostile : mockJob.company }}
+      selectedResume={mockResume} currentUser={{ ...mockUser, name: field === 'name' ? hostile : mockUser.name }} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Download PDF/i }))
+    expect(popup.document.body.textContent).toContain(hostile)
+    expect(popup.document.querySelector('script,img,[onerror]')).toBeNull()
+    expect(popup.opener).toBeNull()
+    expect(popup.print).toHaveBeenCalledOnce()
+  })
+
+  it('explains when the browser blocks the print popup', async () => {
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    apiClient.generateOutreach.mockResolvedValue(mockOutreachData)
+    render(<CoverLetterModal isOpen onClose={vi.fn()} currentJob={mockJob} selectedResume={mockResume} currentUser={mockUser} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Download PDF/i }))
+    expect(alert).toHaveBeenCalledWith(expect.stringMatching(/allow popups/i))
+  })
 
   it('renders 3-paragraph cover letter, subject line, and linkedin note with docx and pdf download buttons', async () => {
     apiClient.generateOutreach.mockResolvedValue(mockOutreachData)

@@ -1,9 +1,10 @@
 import hashlib
-import json
 import os
 import re
 import secrets
-import urllib.request
+import requests
+from google.auth.transport.requests import Request as GoogleRequest
+from google.oauth2 import id_token
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
@@ -29,7 +30,7 @@ from backend.services.auth_service import (
     hash_password,
     verify_password,
 )
-from backend.services.email_service import EmailService, SMTPEmailTransport
+from backend.services.email_service import EmailService, SMTPEmailTransport, BrevoEmailTransport
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 oauth2_scheme = HTTPBearer(auto_error=False)
@@ -37,6 +38,13 @@ oauth2_scheme = HTTPBearer(auto_error=False)
 
 def _create_email_service() -> EmailService:
     cfg = load_config()
+    if cfg.brevo_api_key:
+        transport = BrevoEmailTransport(
+            api_key=cfg.brevo_api_key,
+            sender_email=cfg.brevo_sender_email or "noreply@jobhelper.guru",
+            sender_name=cfg.brevo_sender_name or "JobHelperGuru",
+        )
+        return EmailService(transport=transport)
     if cfg.smtp_host:
         transport = SMTPEmailTransport(
             host=cfg.smtp_host,
@@ -47,6 +55,7 @@ def _create_email_service() -> EmailService:
         )
         return EmailService(transport=transport)
     return EmailService()
+
 
 
 # Email service instance (mockable in tests)
@@ -133,11 +142,39 @@ class GoogleAuthRequest(BaseModel):
 
 
 def verify_google_id_token(token: str) -> Dict[str, Any]:
-    """Validates Google ID token against tokeninfo endpoint and returns verified claims."""
-    url = f"https://oauth2.googleapis.com/tokeninfo?id_token={token}"
-    req_obj = urllib.request.Request(url, headers={"User-Agent": "JobHelperGuru/1.0"})
-    with urllib.request.urlopen(req_obj, timeout=5) as response:
-        return json.loads(response.read().decode("utf-8"))
+    """Verify signature, issuer, expiry and this application's audience."""
+    audience = load_config().google_client_id
+    if not audience:
+        raise ValueError("Google sign-in is not configured")
+    with requests.Session() as session:
+        session.trust_env = False
+        request = GoogleRequest(session=session)
+        def bounded_request(url, method="GET", body=None, headers=None, **kwargs):
+            return request(url, method=method, body=body, headers=headers, timeout=5)
+        return id_token.verify_oauth2_token(token, bounded_request, audience=audience)
+
+
+def google_is_authoritative(claims: Dict[str, Any]) -> bool:
+    email = str(claims.get("email", "")).lower()
+    return claims.get("email_verified") is True and (
+        email.endswith("@gmail.com") or bool(claims.get("hd"))
+    )
+
+
+def google_verification_pending(user: User, is_new: bool = False) -> AuthResponse:
+    if is_new:
+        token = secrets.token_urlsafe(32)
+        get_storage().create_auth_token(
+            user.id, hashlib.sha256(token.encode()).hexdigest(), "verify_email",
+            (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat(),
+        )
+        try:
+            email_service.send_verification(user.email, token, load_config().app_url)
+        except Exception:
+            # Tokens and transport credentials must never enter logs.
+            print("[WARN] Google account verification email delivery failed")
+    return AuthResponse(user=user, is_new_user=is_new, requires_verification=True,
+                        message="Please verify your email before signing in. You can request a new link.")
 
 
 @router.post("/register", response_model=AuthResponse)
@@ -199,10 +236,12 @@ def register(req: UserRegisterRequest, request: Request):
         expires_at=expires_at,
     )
 
+    print(f"\n[AUTH] Generated verification link for {user.email}:\n{cfg.app_url}/verify-email?token={verify_token}\n")
     try:
         email_service.send_verification(recipient=user.email, token=verify_token, app_url=cfg.app_url)
+        print(f"[AUTH] Successfully dispatched verification email to {user.email}")
     except Exception as e:
-        print(f"[WARN] Failed to send verification email: {e}")
+        print(f"[AUTH ERROR] Failed to send verification email: {e}")
 
     if cfg.require_email_verification:
         return AuthResponse(
@@ -367,10 +406,15 @@ def request_password_reset(req: PasswordResetRequest, request: Request):
         expires_at = (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat()
         storage.invalidate_prior_auth_tokens(raw_user["id"], "reset_password")
         storage.create_auth_token(raw_user["id"], token_hash, "reset_password", expires_at)
+
+        print(f"\n[AUTH] Generated password reset link for {email}:\n{cfg.app_url}/reset-password?token={reset_token}\n")
         try:
             email_service.send_password_reset(recipient=email, token=reset_token, app_url=cfg.app_url)
+            print(f"[AUTH] Successfully dispatched password reset email to {email}")
         except Exception as e:
-            print(f"[WARN] Failed to send password reset email: {e}")
+            print(f"[AUTH ERROR] Failed to send password reset email: {e}")
+    else:
+        print(f"\n[AUTH] Password reset requested for '{email}', but no user account exists with this email address in the database.\n")
 
     # Generic response to prevent account enumeration
     return {"message": "If an account exists with that email, a password reset link has been sent."}
@@ -399,25 +443,32 @@ def confirm_password_reset(req: PasswordResetConfirm):
 
 
 @router.post("/google", response_model=AuthResponse)
-def google_auth(req: GoogleAuthRequest):
+def google_auth(req: GoogleAuthRequest, request: Request):
     token = req.credential.strip()
     if not token:
         raise HTTPException(status_code=400, detail="Google credential token is missing.")
 
+    storage = get_storage()
+    cfg = load_config()
+    client_ip = get_client_ip(request, trust_proxy_headers=getattr(cfg, "trust_proxy_headers", False))
+    limiter = RateLimiter(storage)
+    allowed, _, retry_after = limiter.check("google_login", client_ip, limit=10, window_seconds=60)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many Google login attempts. Please try again later.",
+            headers={"Retry-After": str(int(retry_after))},
+        )
+
     try:
         token_data = verify_google_id_token(token)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Google token verification failed: {e}")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Google token verification failed. Please sign in again.")
 
     cfg = load_config()
-    expected_aud = (
-        cfg.google_client_id
-        or os.getenv("GOOGLE_CLIENT_ID")
-        or os.getenv("VITE_GOOGLE_CLIENT_ID")
-        or "999060759573-45b5m9cn9v7g6birnj9d8j65cqn72mfq.apps.googleusercontent.com"
-    ).strip()
-    token_aud = token_data.get("aud", "").strip()
-    if expected_aud and token_aud and token_aud != expected_aud:
+    expected_aud = (cfg.google_client_id or "").strip()
+    token_aud = token_data.get("aud")
+    if not expected_aud or token_aud != expected_aud:
         raise HTTPException(
             status_code=401,
             detail="Google token audience mismatch. Token was not issued for this application.",
@@ -448,6 +499,8 @@ def google_auth(req: GoogleAuthRequest):
     existing_by_sub = storage.get_user_by_google_sub(sub)
     if existing_by_sub:
         user = storage.get_user_by_id(existing_by_sub["id"])
+        if not user.email_verified:
+            return google_verification_pending(user)
         access_token = create_access_token(user.id, user.email, user.name, session_version=user.session_version)
         return AuthResponse(token=access_token, user=user, is_new_user=False)
 
@@ -462,14 +515,18 @@ def google_auth(req: GoogleAuthRequest):
                 detail="This email address is already bound to a different Google account.",
             )
 
+        if not google_is_authoritative(token_data):
+            raise HTTPException(status_code=409, detail="Use password sign-in or password recovery for this account. Google cannot confirm current ownership of this email address.")
+
         # Pre-account hijacking protection: if existing account was unverified, revoke password and sessions
         was_unverified = not bool(existing_by_email.get("email_verified"))
-        storage.link_google_identity(
-            user_id=existing_by_email["id"],
-            google_sub=sub,
-            clear_password=was_unverified,
-            verify_email=True,
-        )
+        try:
+            storage.link_google_identity(
+                user_id=existing_by_email["id"], google_sub=sub,
+                clear_password=was_unverified, verify_email=True,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
         user = storage.get_user_by_id(existing_by_email["id"])
         access_token = create_access_token(user.id, user.email, user.name, session_version=user.session_version)
         return AuthResponse(token=access_token, user=user, is_new_user=False)
@@ -481,10 +538,12 @@ def google_auth(req: GoogleAuthRequest):
         name=name,
         avatar_url=picture,
         provider="google",
-        email_verified=True,
+        email_verified=google_is_authoritative(token_data),
         session_version=1,
         google_sub=sub,
     )
+    if not user.email_verified:
+        return google_verification_pending(user, is_new=True)
     access_token = create_access_token(user.id, user.email, user.name, session_version=user.session_version)
     return AuthResponse(token=access_token, user=user, is_new_user=True)
 
@@ -497,12 +556,7 @@ def me(current_user: User = Depends(get_current_user)):
 @router.get("/config")
 def get_auth_config():
     cfg = load_config()
-    client_id = (
-        cfg.google_client_id
-        or os.getenv("GOOGLE_CLIENT_ID")
-        or os.getenv("VITE_GOOGLE_CLIENT_ID")
-        or "999060759573-45b5m9cn9v7g6birnj9d8j65cqn72mfq.apps.googleusercontent.com"
-    ).strip()
+    client_id = (cfg.google_client_id or "").strip()
     return {
         "google_client_id": client_id,
         "require_email_verification": cfg.require_email_verification,

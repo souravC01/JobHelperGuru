@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional, Union
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 try:
     import boto3
@@ -48,8 +48,11 @@ class ObjectStorageService:
         self.is_configured = False
         self._upload_dir = Path(upload_dir or "data/uploads").resolve()
 
+        backend_choice = (os.getenv("STORAGE_BACKEND") or "").strip().lower()
+
         if (
-            BOTO3_AVAILABLE
+            backend_choice != "local"
+            and BOTO3_AVAILABLE
             and self.access_key_id
             and self.secret_access_key
             and self.endpoint_url
@@ -203,11 +206,15 @@ class ObjectStorageService:
                 return False
 
         safe_path = self._resolve_safe_path(object_key, user_id=user_id)
-        if safe_path and safe_path.is_file():
-            try:
-                safe_path.unlink()
+        if safe_path:
+            if not safe_path.exists():
                 return True
-            except Exception:
-                return False
+            if safe_path.is_file():
+                try:
+                    safe_path.unlink()
+                    return True
+                except Exception:
+                    return False
 
         return False
+

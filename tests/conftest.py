@@ -70,10 +70,16 @@ class FakeObjectStorage:
 
     def delete_file(self, object_key, user_id=None):
         target = self.root / object_key
+        if not target.exists():
+            return True
         if not target.is_file():
             return False
-        target.unlink()
-        return True
+        try:
+            target.unlink()
+            return True
+        except Exception:
+            return False
+
 
 
 @pytest.fixture(autouse=True)
