@@ -99,6 +99,13 @@ class BrevoEmailTransport(EmailTransport):
         import urllib.request
         import urllib.error
 
+        if self.api_key.startswith("xsmtpsib-"):
+            raise ValueError(
+                "Configured BREVO_API_KEY starts with 'xsmtpsib-', which is an SMTP password, not a REST API key. "
+                "The Brevo REST API requires an API key starting with 'xkeysib-'. "
+                "In your Brevo dashboard, go to: Profile (top right) -> SMTP & API -> API Keys tab -> Generate a new API key."
+            )
+
         payload = {
             "sender": {"name": self.sender_name, "email": self.sender_email},
             "to": [{"email": recipient}],

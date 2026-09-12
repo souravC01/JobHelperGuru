@@ -48,8 +48,11 @@ class ObjectStorageService:
         self.is_configured = False
         self._upload_dir = Path(upload_dir or "data/uploads").resolve()
 
+        backend_choice = (os.getenv("STORAGE_BACKEND") or "").strip().lower()
+
         if (
-            BOTO3_AVAILABLE
+            backend_choice != "local"
+            and BOTO3_AVAILABLE
             and self.access_key_id
             and self.secret_access_key
             and self.endpoint_url

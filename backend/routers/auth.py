@@ -236,10 +236,12 @@ def register(req: UserRegisterRequest, request: Request):
         expires_at=expires_at,
     )
 
+    print(f"\n[AUTH] Generated verification link for {user.email}:\n{cfg.app_url}/verify-email?token={verify_token}\n")
     try:
         email_service.send_verification(recipient=user.email, token=verify_token, app_url=cfg.app_url)
+        print(f"[AUTH] Successfully dispatched verification email to {user.email}")
     except Exception as e:
-        print(f"[WARN] Failed to send verification email: {e}")
+        print(f"[AUTH ERROR] Failed to send verification email: {e}")
 
     if cfg.require_email_verification:
         return AuthResponse(
@@ -404,10 +406,15 @@ def request_password_reset(req: PasswordResetRequest, request: Request):
         expires_at = (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat()
         storage.invalidate_prior_auth_tokens(raw_user["id"], "reset_password")
         storage.create_auth_token(raw_user["id"], token_hash, "reset_password", expires_at)
+
+        print(f"\n[AUTH] Generated password reset link for {email}:\n{cfg.app_url}/reset-password?token={reset_token}\n")
         try:
             email_service.send_password_reset(recipient=email, token=reset_token, app_url=cfg.app_url)
+            print(f"[AUTH] Successfully dispatched password reset email to {email}")
         except Exception as e:
-            print(f"[WARN] Failed to send password reset email: {e}")
+            print(f"[AUTH ERROR] Failed to send password reset email: {e}")
+    else:
+        print(f"\n[AUTH] Password reset requested for '{email}', but no user account exists with this email address in the database.\n")
 
     # Generic response to prevent account enumeration
     return {"message": "If an account exists with that email, a password reset link has been sent."}

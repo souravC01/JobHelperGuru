@@ -450,9 +450,11 @@ def upload_resume_file(
             )
         except ValueError as ve:
             raise HTTPException(status_code=422, detail=str(ve))
-        except RuntimeError:
-            raise HTTPException(status_code=503, detail="Storage service temporarily unavailable.")
+        except RuntimeError as re:
+            print(f"[RESUME UPLOAD ERROR] {re}")
+            raise HTTPException(status_code=503, detail=f"Storage service temporarily unavailable: {str(re)}")
         except Exception as e:
+            print(f"[RESUME UPLOAD ERROR] {e}")
             raise HTTPException(status_code=500, detail=f"Failed to save resume record: {str(e)}")
 
         resume.download_url = f"/api/resumes/{resume.id}/download"
