@@ -27,14 +27,14 @@ export default function KanbanBoard({ applications = [], onUpdateStatus }) {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 overflow-x-auto pb-4">
+    <div className="flex gap-4 overflow-x-auto pb-4 w-full">
       {COLUMNS.map((col) => {
         const columnApps = applications.filter((app) => app.status === col.id);
 
         return (
           <div
             key={col.id}
-            className="flex flex-col bg-[#f3f6f8] rounded-lg border border-[#e0e0e0] p-3 min-w-[260px]"
+            className="flex flex-col bg-[#f3f6f8] rounded-lg border border-[#e0e0e0] p-3 min-w-[260px] max-w-[320px] flex-1 shrink-0"
           >
             {/* Column Header */}
             <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#e0e0e0]">
