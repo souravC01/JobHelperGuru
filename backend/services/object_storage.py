@@ -203,11 +203,15 @@ class ObjectStorageService:
                 return False
 
         safe_path = self._resolve_safe_path(object_key, user_id=user_id)
-        if safe_path and safe_path.is_file():
-            try:
-                safe_path.unlink()
+        if safe_path:
+            if not safe_path.exists():
                 return True
-            except Exception:
-                return False
+            if safe_path.is_file():
+                try:
+                    safe_path.unlink()
+                    return True
+                except Exception:
+                    return False
 
         return False
+

@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+import threading
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
@@ -64,7 +65,10 @@ def canonical_posting_url(url: Optional[str]) -> Optional[str]:
         return clean.rstrip("/")
 
 
+
 class StorageService:
+    _resume_quota_lock = threading.Lock()
+
     def __init__(self, db_path: str = "data/tracker.db", force_sqlite: bool = False, database_url: Optional[str] = None):
         if force_sqlite:
             raw_url = None
@@ -562,16 +566,30 @@ class StorageService:
         file_key: Optional[str] = None,
         user_id: Optional[str] = None,
         attachment_id: Optional[str] = None,
+        max_resumes: Optional[int] = None,
     ) -> Resume:
         now = datetime.now().isoformat()
         resume_id = str(uuid.uuid4())
-        with self._get_cursor() as cursor:
-            cursor.execute(
-                self._format_sql(
-                    "INSERT INTO resumes (id, user_id, name, content, file_key, attachment_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-                ),
-                (resume_id, user_id, name, content, file_key, attachment_id, now, now),
-            )
+        with self._resume_quota_lock:
+            with self._get_immediate_cursor() as cursor:
+                if user_id and max_resumes is not None:
+                    if self.is_postgres:
+                        cursor.execute("SELECT id FROM users WHERE id = %s FOR UPDATE", (user_id,))
+                    cursor.execute(
+                        self._format_sql("SELECT COUNT(*) as cnt FROM resumes WHERE user_id = ?"),
+                        (user_id,),
+                    )
+                    row = cursor.fetchone()
+                    count = int(row["cnt"]) if isinstance(row, dict) else int(row[0])
+                    if count >= max_resumes:
+                        raise ValueError(f"Maximum limit of {max_resumes} resumes reached per account.")
+
+                cursor.execute(
+                    self._format_sql(
+                        "INSERT INTO resumes (id, user_id, name, content, file_key, attachment_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                    ),
+                    (resume_id, user_id, name, content, file_key, attachment_id, now, now),
+                )
         return Resume(
             id=resume_id,
             name=name,
