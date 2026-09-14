@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
+  Wand2,
   Loader2,
   Check,
   FolderGit2,
@@ -26,6 +27,7 @@ export default function ResumeFitRanker({
   onRemoveAdoptedSkill = null,
   onSelectKeywordForOptimization,
   onBestResumeSelected,
+  onOpenBulletOptimizer,
   onAiError,
 }) {
   const [rankedResumes, setRankedResumes] = useState([]);
@@ -105,7 +107,7 @@ export default function ResumeFitRanker({
 
   return (
     <div className="card-corporate p-6 bg-white border border-[#e0e0e0] rounded-lg space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div>
           <h3 className="text-base font-bold text-[#000000] flex items-center gap-2 tracking-tight">
             <Crown className="text-[#0a66c2]" size={18} />
@@ -116,14 +118,31 @@ export default function ResumeFitRanker({
           </p>
         </div>
 
-        <button
-          onClick={runRanking}
-          disabled={loading}
-          className="btn-secondary-corporate text-xs"
-        >
-          {loading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-          <span>Re-evaluate</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            onClick={() => {
+              if (!onOpenBulletOptimizer) return;
+              const job = currentJob.analysis || currentJob;
+              const skills = job.required_skills?.length > 0
+                ? job.required_skills
+                : (job.ats_keywords?.length > 0 ? job.ats_keywords.slice(0, 3) : ['Key Qualification']);
+              onOpenBulletOptimizer(skills);
+            }}
+            className="btn-secondary-corporate text-xs"
+            title="Craft high-impact resume bullets with BulletCraft"
+          >
+            <Wand2 size={13} />
+            <span>BulletCraft</span>
+          </button>
+          <button
+            onClick={runRanking}
+            disabled={loading}
+            className="btn-secondary-corporate text-xs"
+          >
+            {loading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+            <span>Re-evaluate</span>
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -211,9 +230,6 @@ export default function ResumeFitRanker({
                         </div>
                       )}
 
-                      <p className="text-[11px] text-[#666666] line-clamp-1 mt-0.5">
-                        {rank.fit_summary || 'Evaluated against required job skills'}
-                      </p>
                     </div>
                   </div>
 

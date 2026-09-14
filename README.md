@@ -2,14 +2,14 @@
 
 **Understand job requirements, tailor your resume, and keep your applications organized.**
 
-[![Live Demo](https://img.shields.io/badge/Try%20the%20App-JobHelperGuru-0a66c2?style=for-the-badge)](https://jobhelperguru.onrender.com/)
+[![Live Demo](https://img.shields.io/badge/Try%20the%20App-JobHelperGuru-0a66c2?style=for-the-badge)](https://jobhelperguru.vercel.app/)
 [![CI/CD Pipeline](https://github.com/souravC01/JobHelperGuru/actions/workflows/ci.yml/badge.svg)](https://github.com/souravC01/JobHelperGuru/actions/workflows/ci.yml)
 
 JobHelperGuru brings job analysis, resume matching, writing assistance, and application tracking into one workspace. Start with a job link or pasted description, compare your resumes against its requirements, draft tailored bullets and outreach, then track the application through to an outcome.
 
 Use the built-in heuristic engine without an AI key, connect your own compatible AI provider, or run a local model with Ollama.
 
-[Explore the live app](https://jobhelperguru.onrender.com/) · [Run locally](#run-locally) · [Development](#development-and-tests) · [Deployment](#deployment)
+[Explore the live app](https://jobhelperguru.vercel.app/) · [Run locally](#run-locally) · [Development](#development-and-tests) · [Deployment](#deployment)
 
 ![Live analysis of Amazon's Software Development Engineer, Early Career 2026 role, showing categorized requirements and ATS keywords](docs/images/job-analysis.jpg)
 
@@ -28,7 +28,7 @@ Use the built-in heuristic engine without an AI key, connect your own compatible
 | **Excel export** | Download a styled two-sheet workbook with application details, skills, status colors, and supported job hyperlinks. Untrusted cell values are written as text. |
 | **Provider profiles** | Manage your own AI connections using server-side encrypted keys and masked profile metadata. |
 
-The application pipeline covers **Wishlist → Applied → Interviewing → Offered → Rejected → Archived**. Follow-up reminders and dashboard totals stay connected to tracker changes.
+The application pipeline covers **Wishlist → Applied → Interviewing → Offered → Rejected → Archived**. Dashboard totals act as quick filters, and the follow-up filter shows applications with scheduled or overdue follow-ups.
 
 <details>
 <summary><strong>See resume matching in action</strong></summary>
@@ -193,15 +193,14 @@ Inspect the dry-run counts and unowned records, and back up both database and re
 
 ## Deployment
 
-The multi-stage [Dockerfile](Dockerfile) builds the React frontend and serves it with FastAPI/Uvicorn. The [Render blueprint](render.yaml) uses `/api/health` for health checks and disables Render's automatic deployment.
+The public frontend is hosted on Vercel at **[jobhelperguru.vercel.app](https://jobhelperguru.vercel.app/)**. Vercel routes `/api` requests to the FastAPI backend running on Google Cloud Run.
 
-The GitHub Actions workflow can trigger a Render deployment after all required jobs pass on a push to `main`, when the repository secret `RENDER_DEPLOY_HOOK_URL` is configured. Container checks do not publish an image.
+The [GitHub Actions workflow](.github/workflows/ci.yml) runs backend tests, frontend tests and build, and both Docker build checks. When backend files change on `main`, a successful workflow builds and deploys the backend image to the existing Cloud Run service, then verifies the production health endpoint through Vercel. Frontend deployment remains managed by Vercel.
 
 For hosted persistence, configure PostgreSQL and R2 rather than relying on an ephemeral container filesystem. Set production mode, secrets, origins, public URL, and any Google sign-in settings before releasing.
 
-- [Render deployment guide](docs/RENDER_DEPLOYMENT_GUIDE.md)
+- [Cloud Run deployment and recovery guide](docs/cloud-run-cicd.md)
 - [Production environment template](.env.production.example)
-- [Remediation validation record](docs/REMEDIATION_VALIDATION.md)
 
 ## Built with
 
@@ -211,7 +210,7 @@ For hosted persistence, configure PostgreSQL and R2 rather than relying on an ep
 | API and authentication | FastAPI, Pydantic, JWT, bcrypt, Google Identity Services |
 | Storage | PostgreSQL / SQLite, Cloudflare R2 / local files, Fernet encryption |
 | Analysis and documents | OpenAI SDK, heuristic skill matching, Beautiful Soup, Trafilatura, pypdf, python-docx, openpyxl |
-| Testing and delivery | pytest, Vitest, React Testing Library, GitHub Actions, Docker, Render |
+| Testing and delivery | pytest, Vitest, React Testing Library, GitHub Actions, Docker, Vercel, Google Cloud Run |
 
 ## Project layout
 

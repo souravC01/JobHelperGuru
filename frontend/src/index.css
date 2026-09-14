@@ -201,6 +201,14 @@ code, pre, .font-mono, .mono-data {
   outline: none;
 }
 
+.input-corporate.input-with-leading-icon {
+  padding-left: 36px;
+}
+
+.input-corporate.input-with-trailing-icon {
+  padding-right: 40px;
+}
+
 .input-corporate::placeholder {
   color: var(--text-muted);
 }
