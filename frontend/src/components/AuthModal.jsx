@@ -382,7 +382,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="input-corporate w-full pl-9 pr-3 py-2 text-xs"
+                  className="input-corporate input-with-leading-icon w-full pr-3 py-2 text-xs"
                 />
               </div>
             </div>
@@ -474,7 +474,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Jane Doe"
-                      className="input-corporate w-full pl-9 pr-3 py-2 text-xs"
+                      className="input-corporate input-with-leading-icon w-full pr-3 py-2 text-xs"
                     />
                   </div>
                 </div>
@@ -490,7 +490,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="input-corporate w-full pl-9 pr-3 py-2 text-xs"
+                    className="input-corporate input-with-leading-icon w-full pr-3 py-2 text-xs"
                   />
                 </div>
               </div>
@@ -519,8 +519,8 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="8-72 characters"
-                    className="input-corporate w-full pl-9 pr-10 py-2 text-xs"
+                    placeholder="Enter your password"
+                    className="input-corporate input-with-leading-icon input-with-trailing-icon w-full py-2 text-xs"
                   />
                   <button
                     type="button"
@@ -543,7 +543,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess, initialMode = 'l
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Repeat your password"
-                      className="input-corporate w-full pl-9 pr-3 py-2 text-xs"
+                      className="input-corporate input-with-leading-icon w-full pr-3 py-2 text-xs"
                     />
                   </div>
                 </div>

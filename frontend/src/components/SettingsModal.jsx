@@ -270,7 +270,7 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
                 isOfflineActive ? 'bg-[#057642]' : activeKeyId ? 'bg-[#0a66c2]' : 'bg-[#b24020]'
               }`}
             />
-            <span className="text-[#666666] shrink-0 font-medium">Active Engine:</span>
+            <span className="text-[#666666] shrink-0 font-medium">Active API AI Key:</span>
             <span className="font-bold text-[#000000] truncate">
               {isOfflineActive
                 ? 'Built-in Offline Heuristic Engine (Free, Zero API)'
@@ -281,11 +281,6 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
                 : 'None configured (Offline fallback)'}
             </span>
           </div>
-          {!isOfflineActive && (activeKeyId || apiKey.trim()) && (
-            <span className="badge-corporate bg-[#0a66c2]/10 border border-[#0a66c2]/25 text-[#0a66c2] text-[10px] py-0.5 px-2 font-semibold shrink-0">
-              Live Online AI
-            </span>
-          )}
           {isOfflineActive && (
             <span className="badge-corporate bg-[#057642]/10 border border-[#057642]/25 text-[#057642] text-[10px] py-0.5 px-2 font-semibold shrink-0">
               Offline Active
@@ -293,70 +288,58 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
           )}
         </div>
 
-        {/* Onboarding Welcome Banner */}
-        {(isOnboarding || (!isOfflineActive && !apiKey.trim() && savedKeys.length === 0)) && (
-          <div className="p-4 rounded-xl bg-gradient-to-r from-[#0a66c2]/10 via-[#0a66c2]/5 to-[#057642]/10 border border-[#0a66c2]/30 space-y-2.5 animate-fade-in">
-            <div className="flex items-center gap-2 text-[#0a66c2] font-bold text-sm">
-              <Sparkles size={17} />
-              <span>Welcome to JobHelperGuru! Set Up Your AI Engine</span>
-            </div>
-            <p className="text-xs text-[#000000] leading-relaxed">
-              To analyze jobs, match resumes, and optimize bullet points, please configure your preferred AI provider below or click <strong>Use Built-in Offline Engine</strong> to get started immediately for free with zero API keys.
-            </p>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={handleSwitchToOffline}
-                disabled={saving}
-                className="btn-primary-corporate text-xs py-1.5 px-3.5 bg-[#057642] hover:bg-[#046235] flex items-center gap-1.5"
-              >
-                <Zap size={13} />
-                <span>Use Built-in Offline Engine (Free)</span>
-              </button>
-              <span className="text-[11px] text-[#666666]">or paste an API key below</span>
-            </div>
-          </div>
-        )}
-
-        {/* 1. Built-in Offline Heuristic Engine Option */}
+        {/* Welcome and Built-in Offline Heuristic Engine Option */}
         <div
-          className={`p-3.5 rounded-lg border transition-all text-xs flex items-center justify-between gap-3 ${
+          className={`p-3.5 rounded-lg border transition-all text-xs space-y-3 ${
             isOfflineActive
               ? 'bg-[#057642]/10 border-2 border-[#057642]'
               : 'bg-[#f3f6f8] border border-[#e0e0e0] hover:border-[#c1c6d4]'
           }`}
         >
-          <div className="min-w-0 flex-1 space-y-1">
-            <div className="flex items-center gap-2">
-              <Zap size={16} className={isOfflineActive ? 'text-[#057642]' : 'text-[#666666]'} />
-              <span className="font-bold text-[#000000] text-sm">Built-in Offline Heuristic Engine</span>
-              {isOfflineActive && (
-                <span className="badge-corporate bg-[#057642]/10 border border-[#057642]/25 text-[#057642] text-[10px] py-0.2 px-1.5 font-bold flex items-center gap-1">
-                  <Check size={10} className="stroke-[3]" />
-                  <span>Active</span>
-                </span>
-              )}
-            </div>
-            <p className="text-[11px] text-[#666666]">
-              Zero API keys required, zero network dependencies. Runs locally on your machine with high accuracy rule-based ATS matching and BulletCraft templates.
-            </p>
-          </div>
-
-          {!isOfflineActive ? (
-            <button
-              type="button"
-              onClick={handleSwitchToOffline}
-              disabled={saving}
-              className="btn-secondary-corporate text-xs py-1 px-3 shrink-0 flex items-center gap-1.5"
-            >
-              <Zap size={13} />
-              <span>Use Offline</span>
-            </button>
-          ) : (
-            <div className="text-[11px] font-bold text-[#057642] shrink-0">
-              Currently Selected ✓
+          {(isOnboarding || (!isOfflineActive && !apiKey.trim() && savedKeys.length === 0)) && (
+            <div className="space-y-2 pb-3 border-b border-[#e0e0e0]">
+              <div className="flex items-center gap-2 text-[#0a66c2] font-bold text-sm">
+                <Sparkles size={17} className="shrink-0" />
+                <span>Welcome to JobHelperGuru! Set Up Your AI Engine</span>
+              </div>
+              <p className="text-xs text-[#000000] leading-relaxed">
+                Analyze jobs, match resumes, and optimize bullet points with the free offline engine, or configure your preferred AI provider below.
+              </p>
             </div>
           )}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex items-center gap-2">
+                <Zap size={16} className={isOfflineActive ? 'text-[#057642]' : 'text-[#666666]'} />
+                <span className="font-bold text-[#000000] text-sm">Built-in Offline Heuristic Engine</span>
+                {isOfflineActive && (
+                  <span className="badge-corporate bg-[#057642]/10 border border-[#057642]/25 text-[#057642] text-[10px] py-0.2 px-1.5 font-bold flex items-center gap-1">
+                    <Check size={10} className="stroke-[3]" />
+                    <span>Active</span>
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-[#666666]">
+                Zero API keys required, zero network dependencies. Runs locally on your machine with high accuracy rule-based ATS matching and BulletCraft templates.
+              </p>
+            </div>
+
+            {!isOfflineActive ? (
+              <button
+                type="button"
+                onClick={handleSwitchToOffline}
+                disabled={saving}
+                className="btn-secondary-corporate text-xs py-1 px-3 shrink-0 flex items-center gap-1.5"
+              >
+                <Zap size={13} />
+                <span>Use Offline (Free)</span>
+              </button>
+            ) : (
+              <div className="text-[11px] font-bold text-[#057642] shrink-0">
+                Currently Selected ✓
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 2. Saved Keys Section */}
@@ -614,7 +597,7 @@ export default function SettingsModal({ isOpen, onClose, currentUser = null, isO
                   className="btn-primary-corporate text-xs py-1 px-3 bg-[#057642] hover:bg-[#046235] shrink-0 flex items-center gap-1.5"
                 >
                   <Check size={13} />
-                  <span>Set as Active Key Now ✓</span>
+                  <span>Set as Active Key Now</span>
                 </button>
               )}
             </div>

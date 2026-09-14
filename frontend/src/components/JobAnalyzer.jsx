@@ -8,7 +8,6 @@ import {
   Briefcase,
   ExternalLink,
   PlusCircle,
-  Wand2,
   Mail,
   Loader2,
   AlertCircle,
@@ -31,7 +30,6 @@ export default function JobAnalyzer({
   onApplicationSaved,
   onAiError,
 }) {
-  const [mode, setMode] = useState('url'); // 'url' or 'text'
   const [urlInput, setUrlInput] = useState('');
   const [textInput, setTextInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -64,10 +62,11 @@ export default function JobAnalyzer({
 
   const handleAnalyze = async (e) => {
     e?.preventDefault();
+    if (loading) return;
     setError('');
     setSaveSuccess(false);
 
-    const activeMode = showPasteText ? 'text' : mode;
+    const activeMode = showPasteText ? 'text' : 'url';
 
     if (activeMode === 'url' && !urlInput.trim()) {
       setError('Please enter a valid job URL.');
@@ -135,8 +134,8 @@ export default function JobAnalyzer({
               placeholder="Paste LinkedIn, Greenhouse, Workday, Dayforce, or Lever job URL..."
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
-              disabled={loading}
-              className="input-corporate w-full text-sm text-[#000000] placeholder:text-[#666666] h-11"
+              disabled={loading || showPasteText}
+              className="input-corporate w-full text-sm text-[#000000] placeholder:text-[#666666] h-11 disabled:opacity-50 disabled:cursor-not-allowed"
             />
             {matchingAppByUrl && (
               <div className="text-[11px] text-[#057642] font-medium pt-1 px-1 flex items-center gap-1">
@@ -150,10 +149,10 @@ export default function JobAnalyzer({
 
           <button
             type="submit"
-            disabled={loading}
-            className="btn-primary-corporate whitespace-nowrap h-11 px-6 shrink-0"
+            disabled={loading || showPasteText}
+            className="btn-primary-corporate whitespace-nowrap h-11 px-6 shrink-0 disabled:cursor-not-allowed"
           >
-            {loading ? (
+            {loading && !showPasteText ? (
               <>
                 <Loader2 size={14} className="animate-spin" />
                 <span>Analyzing...</span>
@@ -169,8 +168,14 @@ export default function JobAnalyzer({
           <span>Supported: LinkedIn, Greenhouse, Workday, Dayforce, Lever, Indeed</span>
           <button
             type="button"
-            onClick={() => setShowPasteText(!showPasteText)}
-            className="text-[#0a66c2] hover:underline flex items-center gap-1 font-semibold transition-colors"
+            onClick={() => {
+              setShowPasteText(!showPasteText);
+              setError('');
+            }}
+            disabled={loading}
+            aria-expanded={showPasteText}
+            aria-controls="job-text-input"
+            className="text-[#0a66c2] hover:underline flex items-center gap-1 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <FileText size={12} />
             <span>{showPasteText ? 'Hide Text Area' : 'Or Paste Job Text Directly'}</span>
@@ -182,6 +187,7 @@ export default function JobAnalyzer({
         {showPasteText && (
           <div className="card-corporate p-4 mt-3 space-y-3 bg-white border border-[#e0e0e0] rounded-lg animate-fade-in">
             <textarea
+              id="job-text-input"
               placeholder="Paste full job description text here..."
               rows={6}
               value={textInput}
@@ -209,11 +215,10 @@ export default function JobAnalyzer({
               <AlertCircle size={15} className="shrink-0 text-[#b24020]" />
               <span>{error}</span>
             </div>
-            {mode === 'url' && (
+            {!showPasteText && (
               <button
                 type="button"
                 onClick={() => {
-                  setMode('text');
                   setShowPasteText(true);
                   setError('');
                 }}
@@ -318,21 +323,6 @@ export default function JobAnalyzer({
 
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-2 pt-2 lg:pt-0">
-                <button
-                  onClick={() => {
-                    if (!onOpenBulletOptimizer) return;
-                    const skills = currentJob.required_skills?.length > 0
-                      ? currentJob.required_skills
-                      : (currentJob.ats_keywords?.length > 0 ? currentJob.ats_keywords.slice(0, 3) : ['Key Qualification']);
-                    onOpenBulletOptimizer(skills);
-                  }}
-                  className="btn-secondary-corporate text-xs"
-                  title="Craft high-impact resume bullets with BulletCraft"
-                >
-                  <Wand2 size={13} />
-                  <span>BulletCraft</span>
-                </button>
-
                 <button
                   onClick={() => onOpenCoverLetter && onOpenCoverLetter()}
                   className="btn-secondary-corporate text-xs"

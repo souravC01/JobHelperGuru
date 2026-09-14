@@ -269,9 +269,6 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-base tracking-tight text-[#000000]">JobHelperGuru</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#f3f6f8] text-[#0a66c2] border border-[#e0e0e0] tracking-wide uppercase">
-                  Cloud
-                </span>
               </div>
               <p className="text-[11px] text-[#666666] hidden sm:block">
                 AI Job Tailoring, Best-Fit Resumes & Personal Pipeline
@@ -447,7 +444,7 @@ export default function App() {
 
           <div className="text-[11px] text-[#666666] flex items-center gap-1.5">
             <TrendingUp size={12} className="text-[#0a66c2]" />
-            <span>Targeting high-match roles accelerates interview conversion</span>
+            <span>Analyze a role. Tailor your resume. Track your progress.</span>
           </div>
         </div>
       </section>
@@ -489,6 +486,14 @@ export default function App() {
                 refreshKey={rankingRefreshKey}
                 onAdoptSkills={handleAdoptSkills}
                 onRemoveAdoptedSkill={handleRemoveAdoptedSkill}
+                onOpenBulletOptimizer={(skills) => {
+                  if (!currentUser) {
+                    setAuthMode('login');
+                    setIsAuthOpen(true);
+                    return;
+                  }
+                  handleOpenOptimizer(skills, selectedResumeForJob || resumes[0] || null);
+                }}
                 onSelectKeywordForOptimization={(skills, rank, sectionType) => {
                   if (!currentUser) {
                     setAuthMode('login');
