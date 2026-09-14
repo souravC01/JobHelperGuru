@@ -73,3 +73,27 @@ def test_auth_config_returns_client_id():
     assert "google_client_id" in data
     assert len(data["google_client_id"]) > 0
 
+
+def test_tokens_not_printed_to_logs(capsys):
+    test_email = f"logtest_{uuid.uuid4().hex[:8]}@example.com"
+    capsys.readouterr()
+
+    res_reg = client.post(
+        "/api/auth/register",
+        json={"email": test_email, "password": "Password123!", "name": "Log Test User"},
+    )
+    assert res_reg.status_code == 200
+
+    out_reg, err_reg = capsys.readouterr()
+    assert "/verify-email?token=" not in out_reg
+    assert "/verify-email?token=" not in err_reg
+
+    res_reset = client.post(
+        "/api/auth/password-reset/request",
+        json={"email": test_email},
+    )
+    assert res_reset.status_code == 200
+
+    out_reset, err_reset = capsys.readouterr()
+    assert "/reset-password?token=" not in out_reset
+    assert "/reset-password?token=" not in err_reset
