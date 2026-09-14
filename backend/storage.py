@@ -661,7 +661,7 @@ class StorageService:
         with self._get_cursor() as cursor:
             cursor.execute(
                 self._format_sql(
-                    "SELECT COALESCE(SUM(size_bytes), 0) as total_bytes FROM attachments WHERE user_id = ? AND deletion_state = 'active'"
+                    "SELECT COALESCE(SUM(size_bytes), 0) as total_bytes FROM attachments WHERE user_id = ? AND deletion_state IN ('active', 'reserved')"
                 ),
                 (user_id,),
             )
@@ -672,7 +672,96 @@ class StorageService:
                 return int(row.get("total_bytes", 0))
             return int(row[0])
 
+    def reserve_upload_bytes(
+        self,
+        user_id: str,
+        size_bytes: int,
+        max_storage_bytes: int,
+        max_resumes: Optional[int] = None,
+        original_filename: Optional[str] = None,
+        content_type: Optional[str] = None,
+        storage_backend: str = "local",
+    ) -> ResumeAttachment:
+        now = datetime.now().isoformat()
+        att_id = str(uuid.uuid4())
+        placeholder_key = f"reserved_{att_id}"
+
+        with self._resume_quota_lock:
+            with self._get_immediate_cursor() as cursor:
+                if self.is_postgres:
+                    cursor.execute("SELECT id FROM users WHERE id = %s FOR UPDATE", (user_id,))
+
+                if max_resumes is not None:
+                    cursor.execute(
+                        self._format_sql("SELECT COUNT(*) as cnt FROM resumes WHERE user_id = ?"),
+                        (user_id,),
+                    )
+                    row = cursor.fetchone()
+                    count = int(row["cnt"]) if isinstance(row, dict) else int(row[0])
+                    if count >= max_resumes:
+                        raise ValueError(f"Maximum limit of {max_resumes} resumes reached per account.")
+
+                cursor.execute(
+                    self._format_sql(
+                        "SELECT COALESCE(SUM(size_bytes), 0) as total_bytes FROM attachments WHERE user_id = ? AND deletion_state IN ('active', 'reserved')"
+                    ),
+                    (user_id,),
+                )
+                row = cursor.fetchone()
+                current_bytes = int(row["total_bytes"]) if isinstance(row, dict) else int(row[0])
+
+                if current_bytes + size_bytes > max_storage_bytes:
+                    limit_mb = max_storage_bytes // (1024 * 1024)
+                    limit_label = f"{limit_mb}MB" if limit_mb > 0 else f"{max_storage_bytes} bytes"
+                    raise ValueError(f"Maximum total storage limit of {limit_label} reached for resumes.")
+
+                cursor.execute(
+                    self._format_sql(
+                        "INSERT INTO attachments (id, user_id, storage_backend, object_key, original_filename, content_type, size_bytes, deletion_state, created_at, updated_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                    ),
+                    (att_id, user_id, storage_backend, placeholder_key, original_filename, content_type, size_bytes, "reserved", now, now),
+                )
+
+        return ResumeAttachment(
+            id=att_id,
+            user_id=user_id,
+            storage_backend=storage_backend,
+            object_key=placeholder_key,
+            original_filename=original_filename,
+            content_type=content_type,
+            size_bytes=size_bytes,
+            deletion_state="reserved",
+            created_at=now,
+            updated_at=now,
+        )
+
+    def finalize_attachment(
+        self,
+        attachment_id: str,
+        object_key: str,
+        storage_backend: str,
+        user_id: Optional[str] = None,
+    ) -> None:
+        now = datetime.now().isoformat()
+        with self._get_cursor() as cursor:
+            if user_id:
+                cursor.execute(
+                    self._format_sql(
+                        "UPDATE attachments SET object_key = ?, storage_backend = ?, deletion_state = 'active', updated_at = ? WHERE id = ? AND user_id = ?"
+                    ),
+                    (object_key, storage_backend, now, attachment_id, user_id),
+                )
+            else:
+                cursor.execute(
+                    self._format_sql(
+                        "UPDATE attachments SET object_key = ?, storage_backend = ?, deletion_state = 'active', updated_at = ? WHERE id = ?"
+                    ),
+                    (object_key, storage_backend, now, attachment_id),
+                )
+
     # --- Attachments CRUD ---
+
     def create_attachment(
         self,
         user_id: str,

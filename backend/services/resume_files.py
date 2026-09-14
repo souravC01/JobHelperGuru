@@ -31,29 +31,35 @@ class ResumeFileManager:
         max_resumes: int = 10,
         max_storage_bytes: int = 50 * 1024 * 1024,
     ) -> Resume:
-        current_bytes = self.storage.get_user_upload_bytes(user_id)
-        if current_bytes + len(content_bytes) > max_storage_bytes:
-            raise ValueError("Maximum total storage limit of 50MB reached for resumes.")
-
-        file_key = self.object_storage.upload_file(
-            content_bytes=content_bytes,
-            filename=filename,
-            content_type=content_type,
-            user_id=user_id,
-        )
-
         storage_backend = "r2" if self.object_storage.is_configured else "local"
-        attachment = self.storage.create_attachment(
+
+        attachment = self.storage.reserve_upload_bytes(
             user_id=user_id,
-            storage_backend=storage_backend,
-            object_key=file_key,
+            size_bytes=len(content_bytes),
+            max_storage_bytes=max_storage_bytes,
+            max_resumes=max_resumes,
             original_filename=filename,
             content_type=content_type,
-            size_bytes=len(content_bytes),
+            storage_backend=storage_backend,
         )
 
-        final_name = resume_name.strip() if (resume_name and resume_name.strip()) else filename
+        file_key = None
         try:
+            file_key = self.object_storage.upload_file(
+                content_bytes=content_bytes,
+                filename=filename,
+                content_type=content_type,
+                user_id=user_id,
+            )
+
+            self.storage.finalize_attachment(
+                attachment_id=attachment.id,
+                object_key=file_key,
+                storage_backend=storage_backend,
+                user_id=user_id,
+            )
+
+            final_name = resume_name.strip() if (resume_name and resume_name.strip()) else filename
             resume = self.storage.add_resume(
                 name=final_name,
                 content=text_content,
@@ -64,9 +70,14 @@ class ResumeFileManager:
             )
             return resume
         except Exception:
-            self.object_storage.delete_file(file_key, user_id=user_id)
+            if file_key:
+                try:
+                    self.object_storage.delete_file(file_key, user_id=user_id)
+                except Exception:
+                    pass
             self.storage.update_attachment_deletion_state(attachment.id, "failed", user_id=user_id)
             raise
+
 
     def delete_resume(self, user_id: str, resume_id: str) -> bool:
         resume = self.storage.get_resume(resume_id, user_id=user_id)
