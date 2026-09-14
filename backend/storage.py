@@ -542,13 +542,110 @@ class StorageService:
                 return None
             return dict(row)
 
-    def consume_auth_token(self, token_id: str) -> None:
+    def consume_auth_token(self, token_id: str) -> bool:
         now = datetime.now().isoformat()
         with self._get_cursor() as cursor:
             cursor.execute(
-                self._format_sql("UPDATE auth_tokens SET used_at = ? WHERE id = ?"),
+                self._format_sql("UPDATE auth_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL"),
                 (now, token_id),
             )
+            return cursor.rowcount > 0
+
+    def consume_reset_token_and_update_password(self, token_hash: str, new_hashed_password: str) -> Optional[str]:
+        now = datetime.now().isoformat()
+        now_utc_iso = datetime.now(timezone.utc).isoformat()
+        with self._get_immediate_cursor() as cursor:
+            if self.is_postgres:
+                cursor.execute(
+                    "SELECT id, user_id, expires_at, used_at FROM auth_tokens WHERE token_hash = %s AND token_type = 'reset_password' FOR UPDATE",
+                    (token_hash,),
+                )
+            else:
+                cursor.execute(
+                    self._format_sql(
+                        "SELECT id, user_id, expires_at, used_at FROM auth_tokens WHERE token_hash = ? AND token_type = 'reset_password'"
+                    ),
+                    (token_hash,),
+                )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            token_id = row["id"] if isinstance(row, dict) else row[0]
+            user_id = row["user_id"] if isinstance(row, dict) else row[1]
+            expires_at = row["expires_at"] if isinstance(row, dict) else row[2]
+            used_at = row["used_at"] if isinstance(row, dict) else row[3]
+
+            if used_at is not None or expires_at < now_utc_iso:
+                return None
+
+            cursor.execute(
+                self._format_sql("UPDATE auth_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL"),
+                (now, token_id),
+            )
+            if cursor.rowcount != 1:
+                return None
+
+            cursor.execute(
+                self._format_sql(
+                    "UPDATE auth_tokens SET used_at = ? WHERE user_id = ? AND token_type = 'reset_password' AND used_at IS NULL"
+                ),
+                (now, user_id),
+            )
+            cursor.execute(
+                self._format_sql(
+                    "UPDATE users SET hashed_password = ?, session_version = session_version + 1, updated_at = ? WHERE id = ?"
+                ),
+                (new_hashed_password, now, user_id),
+            )
+            return user_id
+
+    def consume_verify_token_and_verify_user(self, token_hash: str) -> Optional[str]:
+        now = datetime.now().isoformat()
+        now_utc_iso = datetime.now(timezone.utc).isoformat()
+        with self._get_immediate_cursor() as cursor:
+            if self.is_postgres:
+                cursor.execute(
+                    "SELECT id, user_id, expires_at, used_at FROM auth_tokens WHERE token_hash = %s AND token_type = 'verify_email' FOR UPDATE",
+                    (token_hash,),
+                )
+            else:
+                cursor.execute(
+                    self._format_sql(
+                        "SELECT id, user_id, expires_at, used_at FROM auth_tokens WHERE token_hash = ? AND token_type = 'verify_email'"
+                    ),
+                    (token_hash,),
+                )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            token_id = row["id"] if isinstance(row, dict) else row[0]
+            user_id = row["user_id"] if isinstance(row, dict) else row[1]
+            expires_at = row["expires_at"] if isinstance(row, dict) else row[2]
+            used_at = row["used_at"] if isinstance(row, dict) else row[3]
+
+            if used_at is not None or expires_at < now_utc_iso:
+                return None
+
+            cursor.execute(
+                self._format_sql("UPDATE auth_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL"),
+                (now, token_id),
+            )
+            if cursor.rowcount != 1:
+                return None
+
+            cursor.execute(
+                self._format_sql(
+                    "UPDATE auth_tokens SET used_at = ? WHERE user_id = ? AND token_type = 'verify_email' AND used_at IS NULL"
+                ),
+                (now, user_id),
+            )
+            cursor.execute(
+                self._format_sql(
+                    "UPDATE users SET email_verified = TRUE, session_version = session_version + 1, updated_at = ? WHERE id = ?"
+                ),
+                (now, user_id),
+            )
+            return user_id
 
     def invalidate_prior_auth_tokens(self, user_id: str, token_type: str) -> None:
         now = datetime.now().isoformat()

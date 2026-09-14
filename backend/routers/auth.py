@@ -355,19 +355,10 @@ def confirm_email_verification(req: EmailVerificationConfirm):
     clean_token = req.token.strip()
     token_hash = hashlib.sha256(clean_token.encode("utf-8")).hexdigest()
     storage = get_storage()
-    record = storage.get_auth_token(token_hash, "verify_email")
+    user_id = storage.consume_verify_token_and_verify_user(token_hash)
 
-    if not record:
+    if not user_id:
         raise HTTPException(status_code=400, detail="Invalid or expired verification link.")
-
-    now_iso = datetime.now(timezone.utc).isoformat()
-    if record["expires_at"] < now_iso:
-        raise HTTPException(status_code=400, detail="Verification link has expired. Please request a new one.")
-
-    storage.consume_auth_token(record["id"])
-    storage.invalidate_prior_auth_tokens(record["user_id"], "verify_email")
-    storage.update_user_verification(record["user_id"], verified=True)
-    storage.increment_user_session_version(record["user_id"])
 
     return {"success": True, "message": "Email verified successfully. You may now log in."}
 
@@ -425,19 +416,11 @@ def confirm_password_reset(req: PasswordResetConfirm):
     clean_token = req.token.strip()
     token_hash = hashlib.sha256(clean_token.encode("utf-8")).hexdigest()
     storage = get_storage()
-    record = storage.get_auth_token(token_hash, "reset_password")
-
-    if not record:
-        raise HTTPException(status_code=400, detail="Invalid or expired password reset link.")
-
-    now_iso = datetime.now(timezone.utc).isoformat()
-    if record["expires_at"] < now_iso:
-        raise HTTPException(status_code=400, detail="Password reset link has expired. Please request a new one.")
-
     hashed = hash_password(req.new_password)
-    storage.consume_auth_token(record["id"])
-    storage.invalidate_prior_auth_tokens(record["user_id"], "reset_password")
-    storage.update_user_password(record["user_id"], hashed, increment_session=True)
+    user_id = storage.consume_reset_token_and_update_password(token_hash, hashed)
+
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid or expired password reset link.")
 
     return {"success": True, "message": "Password updated successfully. Please log in with your new password."}
 

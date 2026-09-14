@@ -91,3 +91,34 @@ def test_concurrent_uploads_cannot_exceed_storage_quota():
     total_bytes = main.storage.get_user_upload_bytes(user.id)
     assert total_bytes == 70
     assert total_bytes <= max_quota
+
+
+def test_concurrent_password_reset_confirm_only_succeeds_once(client):
+    import secrets
+    import hashlib
+    from datetime import datetime, timezone, timedelta
+
+    user = main.storage.create_user("reset_race@example.test", "OldPassword1!", "Reset Race", email_verified=True)
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat()
+    main.storage.create_auth_token(user.id, token_hash, "reset_password", expires_at)
+
+    start = Barrier(2)
+
+    def confirm_task(idx):
+        start.wait()
+        res = client.post(
+            "/api/auth/password-reset/confirm",
+            json={"token": raw_token, "new_password": f"NewPassword{idx}!"},
+        )
+        return res.status_code, res.json()
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        results = list(workers.map(confirm_task, range(2)))
+
+    status_codes = [r[0] for r in results]
+    assert status_codes.count(200) == 1, f"Expected exactly one 200, got {results}"
+    assert status_codes.count(400) == 1, f"Expected exactly one 400, got {results}"
+    error_res = next(r[1] for r in results if r[0] == 400)
+    assert "invalid or expired" in error_res["detail"].lower()
