@@ -123,30 +123,27 @@ def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
 
     # 2. Word (.docx, .doc)
     if ext in [".docx", ".doc"]:
-        if ext == ".doc":
-            # Attempt docx parse in case it was a misnamed OOXML file; otherwise reject binary .doc
-            try:
-                import docx
-                doc = docx.Document(io.BytesIO(file_bytes))
-            except Exception:
+        # Guard against decompression bombs in zip-based docx and doc files
+        try:
+            with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+                total_uncompressed = sum(info.file_size for info in zf.infolist())
+                if total_uncompressed > MAX_DOCX_DECOMPRESSED_BYTES:
+                    raise ValueError(
+                        f"Document exceeds maximum decompressed size limit of 50 MB (got {total_uncompressed // (1024*1024)} MB)."
+                    )
+        except zipfile.BadZipFile:
+            if ext == ".doc":
                 raise ValueError("Legacy .doc binary format is not supported. Please convert and save your resume as .docx or .pdf.")
-        else:
-            # Guard against decompression bombs in zip-based docx files
-            try:
-                with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
-                    total_uncompressed = sum(info.file_size for info in zf.infolist())
-                    if total_uncompressed > MAX_DOCX_DECOMPRESSED_BYTES:
-                        raise ValueError(
-                            f"Document exceeds maximum decompressed size limit of 50 MB (got {total_uncompressed // (1024*1024)} MB)."
-                        )
-            except zipfile.BadZipFile:
-                pass
 
-            try:
-                import docx
-                doc = docx.Document(io.BytesIO(file_bytes))
-            except Exception as e:
-                raise ValueError(f"Failed to read Word document: {str(e)}. Please save as .docx or .pdf.")
+        try:
+            import docx
+            doc = docx.Document(io.BytesIO(file_bytes))
+        except ValueError:
+            raise
+        except Exception as e:
+            if ext == ".doc":
+                raise ValueError("Legacy .doc binary format is not supported. Please convert and save your resume as .docx or .pdf.")
+            raise ValueError(f"Failed to read Word document: {str(e)}. Please save as .docx or .pdf.")
 
         lines = []
         total_chars = 0
