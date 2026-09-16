@@ -40,6 +40,11 @@ def test_spa_fallback_serves_index_for_deep_links(tmp_path):
     assert resp_reset.status_code == 200
     assert "SPA Root" in resp_reset.text
 
+    # Route /app returns index.html
+    resp_app = client.get("/app")
+    assert resp_app.status_code == 200
+    assert "SPA Root" in resp_app.text
+
     # API 404 does not return index.html
     resp_api = client.get("/api/not-found")
     assert resp_api.status_code == 404
