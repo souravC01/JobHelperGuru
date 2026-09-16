@@ -49,13 +49,13 @@ export default function ValuePillars() {
   return (
     <section id="features" className="py-16 sm:py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="text-center max-w-3xl mx-auto mb-14">
-        <span className="text-xs font-bold uppercase tracking-widest text-[#0a66c2] dark:text-[#70b5f9] bg-[#eff6ff] dark:bg-[#0a66c2]/10 px-3 py-1 rounded-full border border-[#bfdbfe] dark:border-[#0a66c2]/30">
+        <span className="text-xs font-bold uppercase tracking-widest text-[#0a66c2] dark:text-[#70b5f9] bg-white dark:bg-[#1a1d24] px-3 py-1 rounded-full border border-[#e0e0e0] dark:border-[#2b313c]">
           Core Capabilities
         </span>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0f172a] dark:text-white mt-3 tracking-tight">
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-[#000000] dark:text-[#f3f6f8] mt-3 tracking-tight">
           Engineered for Modern Technical Applicants
         </h2>
-        <p className="text-sm text-[#64748b] dark:text-[#94a3b8] mt-3 leading-relaxed">
+        <p className="text-sm text-[#666666] dark:text-[#9aa1b2] mt-3 leading-relaxed">
           Everything you need to beat automated ATS filters, tailor resumes at scale, and track your complete application journey without compromising security.
         </p>
       </div>
@@ -66,33 +66,33 @@ export default function ValuePillars() {
           return (
             <div
               key={idx}
-              className="p-7 rounded-2xl border border-[#e0e0e0] dark:border-[#374151] bg-white dark:bg-[#1a2234] shadow-sm hover:shadow-md transition-all hover:border-[#0a66c2]/40 group flex flex-col justify-between"
+              className="card-corporate p-6 sm:p-7 rounded-lg border border-[#e0e0e0] dark:border-[#2b313c] bg-white dark:bg-[#1a1d24] hover:border-[#c1c6d4] dark:hover:border-[#404856] flex flex-col justify-between group"
             >
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-[#f0f7ff] dark:bg-[#0a66c2]/20 border border-[#bfdbfe] dark:border-[#0a66c2]/30 flex items-center justify-center text-[#0a66c2] dark:text-[#70b5f9] group-hover:scale-105 transition-transform">
-                    <Icon size={22} />
+                  <div className="w-10 h-10 rounded-md bg-[#f3f6f8] dark:bg-[#0f1115] border border-[#e0e0e0] dark:border-[#2b313c] flex items-center justify-center text-[#0a66c2] dark:text-[#70b5f9] group-hover:scale-105 transition-transform">
+                    <Icon size={20} />
                   </div>
-                  <span className="text-[11px] font-bold text-[#0a66c2] dark:text-[#70b5f9] bg-[#eff6ff] dark:bg-[#0a66c2]/10 px-2.5 py-0.5 rounded-full">
+                  <span className="text-[11px] font-bold text-[#0a66c2] dark:text-[#70b5f9] bg-[#f3f6f8] dark:bg-[#0f1115] border border-[#e0e0e0] dark:border-[#2b313c] px-2.5 py-0.5 rounded-full">
                     {pillar.tag}
                   </span>
                 </div>
 
-                <h3 className="text-lg font-bold text-[#0f172a] dark:text-white mb-2">
+                <h3 className="text-lg font-bold text-[#000000] dark:text-[#f3f6f8] mb-2">
                   {pillar.title}
                 </h3>
-                <p className="text-xs sm:text-sm text-[#64748b] dark:text-[#94a3b8] leading-relaxed mb-6">
+                <p className="text-xs sm:text-sm text-[#666666] dark:text-[#9aa1b2] leading-relaxed mb-6">
                   {pillar.description}
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-2 pt-4 border-t border-[#f1f5f9] dark:border-[#334155]">
+              <div className="flex flex-wrap gap-2 pt-4 border-t border-[#e0e0e0] dark:border-[#2b313c]">
                 {pillar.badges.map((b, bIdx) => (
                   <span
                     key={bIdx}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#f8fafc] dark:bg-[#111827] text-[#475569] dark:text-[#cbd5e1] border border-[#e2e8f0] dark:border-[#334155]"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#f3f6f8] dark:bg-[#0f1115] text-[#666666] dark:text-[#9aa1b2] border border-[#e0e0e0] dark:border-[#2b313c]"
                   >
-                    <CheckCircle2 size={11} className="text-[#057642] dark:text-[#4ade80]" />
+                    <CheckCircle2 size={11} className="text-[#057642] dark:text-[#45c586]" />
                     <span>{b}</span>
                   </span>
                 ))}

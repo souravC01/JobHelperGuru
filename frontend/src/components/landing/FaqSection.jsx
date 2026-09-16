@@ -26,10 +26,10 @@ export default function FaqSection() {
   return (
     <section id="faq" className="py-16 sm:py-24 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="text-center mb-12">
-        <span className="text-xs font-bold uppercase tracking-widest text-[#0a66c2] dark:text-[#70b5f9] bg-[#eff6ff] dark:bg-[#0a66c2]/10 px-3 py-1 rounded-full border border-[#bfdbfe] dark:border-[#0a66c2]/30">
+        <span className="text-xs font-bold uppercase tracking-widest text-[#0a66c2] dark:text-[#70b5f9] bg-white dark:bg-[#1a1d24] px-3 py-1 rounded-full border border-[#e0e0e0] dark:border-[#2b313c]">
           Frequently Asked Questions
         </span>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0f172a] dark:text-white mt-3 tracking-tight">
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-[#000000] dark:text-[#f3f6f8] mt-3 tracking-tight">
           Got Questions? We Have Answers.
         </h2>
       </div>
@@ -40,26 +40,26 @@ export default function FaqSection() {
           return (
             <div
               key={idx}
-              className="rounded-xl border border-[#e2e8f0] dark:border-[#334155] bg-white dark:bg-[#1a2234] overflow-hidden transition-all shadow-sm"
+              className="card-corporate rounded-lg border border-[#e0e0e0] dark:border-[#2b313c] bg-white dark:bg-[#1a1d24] overflow-hidden transition-all shadow-none"
             >
               <button
                 onClick={() => setOpenIndex(isOpen ? null : idx)}
                 className="w-full px-6 py-4 text-left flex items-center justify-between gap-4 focus:outline-none"
                 aria-expanded={isOpen}
               >
-                <span className="text-sm sm:text-base font-bold text-[#0f172a] dark:text-white">
+                <span className="text-sm sm:text-base font-bold text-[#000000] dark:text-[#f3f6f8]">
                   {faq.q}
                 </span>
                 <ChevronDown
                   size={18}
-                  className={`text-[#64748b] dark:text-[#94a3b8] transition-transform duration-200 shrink-0 ${
+                  className={`text-[#666666] dark:text-[#9aa1b2] transition-transform duration-200 shrink-0 ${
                     isOpen ? 'rotate-180 text-[#0a66c2] dark:text-[#70b5f9]' : ''
                   }`}
                 />
               </button>
 
               {isOpen && (
-                <div className="px-6 pb-5 pt-1 text-xs sm:text-sm text-[#64748b] dark:text-[#94a3b8] leading-relaxed border-t border-[#f1f5f9] dark:border-[#334155]">
+                <div className="px-6 pb-5 pt-1 text-xs sm:text-sm text-[#666666] dark:text-[#9aa1b2] leading-relaxed border-t border-[#e0e0e0] dark:border-[#2b313c]">
                   {faq.a}
                 </div>
               )}

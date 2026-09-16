@@ -26,16 +26,16 @@ export default function HowItWorks() {
   ];
 
   return (
-    <section id="how-it-works" className="py-16 sm:py-24 bg-[#f8fafc] dark:bg-[#111827] border-y border-[#e0e0e0] dark:border-[#374151] transition-colors">
+    <section id="how-it-works" className="py-16 sm:py-24 bg-[#f3f6f8] dark:bg-[#0f1115] border-y border-[#e0e0e0] dark:border-[#2b313c] transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto mb-14">
-          <span className="text-xs font-bold uppercase tracking-widest text-[#0a66c2] dark:text-[#70b5f9] bg-[#eff6ff] dark:bg-[#0a66c2]/10 px-3 py-1 rounded-full border border-[#bfdbfe] dark:border-[#0a66c2]/30">
+          <span className="text-xs font-bold uppercase tracking-widest text-[#0a66c2] dark:text-[#70b5f9] bg-white dark:bg-[#1a1d24] px-3 py-1 rounded-full border border-[#e0e0e0] dark:border-[#2b313c]">
             3-Step Workflow
           </span>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0f172a] dark:text-white mt-3 tracking-tight">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#000000] dark:text-[#f3f6f8] mt-3 tracking-tight">
             How JobHelperGuru Accelerates Your Hunt
           </h2>
-          <p className="text-sm text-[#64748b] dark:text-[#94a3b8] mt-3 leading-relaxed">
+          <p className="text-sm text-[#666666] dark:text-[#9aa1b2] mt-3 leading-relaxed">
             From discovering a posting to negotiating an offer, streamline every phase of your job search in minutes.
           </p>
         </div>
@@ -46,28 +46,28 @@ export default function HowItWorks() {
             return (
               <div
                 key={idx}
-                className="relative p-7 rounded-2xl bg-white dark:bg-[#1a2234] border border-[#e2e8f0] dark:border-[#334155] shadow-sm flex flex-col justify-between"
+                className="card-corporate relative p-6 sm:p-7 rounded-lg bg-white dark:bg-[#1a1d24] border border-[#e0e0e0] dark:border-[#2b313c] flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center justify-between mb-5">
-                    <span className="text-3xl font-black text-[#cbd5e1] dark:text-[#475569] font-mono">
+                    <span className="text-3xl font-black text-[#c1c6d4] dark:text-[#404856] font-mono">
                       {step.number}
                     </span>
-                    <div className="w-11 h-11 rounded-xl bg-[#eff6ff] dark:bg-[#0a66c2]/20 text-[#0a66c2] dark:text-[#70b5f9] flex items-center justify-center">
-                      <Icon size={20} />
+                    <div className="w-10 h-10 rounded-md bg-[#f3f6f8] dark:bg-[#0f1115] border border-[#e0e0e0] dark:border-[#2b313c] text-[#0a66c2] dark:text-[#70b5f9] flex items-center justify-center">
+                      <Icon size={18} />
                     </div>
                   </div>
 
-                  <h3 className="text-base font-bold text-[#0f172a] dark:text-white mb-2">
+                  <h3 className="text-base font-bold text-[#000000] dark:text-[#f3f6f8] mb-2">
                     {step.title}
                   </h3>
-                  <p className="text-xs sm:text-sm text-[#64748b] dark:text-[#94a3b8] leading-relaxed">
+                  <p className="text-xs sm:text-sm text-[#666666] dark:text-[#9aa1b2] leading-relaxed">
                     {step.description}
                   </p>
                 </div>
 
                 {idx < steps.length - 1 && (
-                  <div className="hidden lg:block absolute -right-4 top-1/2 -translate-y-1/2 text-[#cbd5e1] dark:text-[#475569] z-10">
+                  <div className="hidden lg:block absolute -right-4 top-1/2 -translate-y-1/2 text-[#c1c6d4] dark:text-[#404856] z-10">
                     <ArrowRight size={20} />
                   </div>
                 )}
