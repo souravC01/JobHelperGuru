@@ -224,7 +224,7 @@ export default function LandingPage({
             {currentUser ? (
               <button
                 onClick={onGoToDashboard}
-                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full text-sm font-semibold bg-white text-[#0a66c2] hover:bg-[#f3f6f8] shadow-sm transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full text-sm font-semibold !bg-white !text-[#0a66c2] hover:!bg-blue-50 shadow-sm transition-colors"
               >
                 <span>Go to Dashboard</span>
                 <ArrowRight size={16} />
@@ -232,7 +232,7 @@ export default function LandingPage({
             ) : (
               <button
                 onClick={onGetStarted}
-                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full text-sm font-semibold bg-white text-[#0a66c2] hover:bg-[#f3f6f8] shadow-sm transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full text-sm font-semibold !bg-white !text-[#0a66c2] hover:!bg-blue-50 shadow-sm transition-colors"
               >
                 <span>Get Started Free</span>
                 <ArrowRight size={16} />

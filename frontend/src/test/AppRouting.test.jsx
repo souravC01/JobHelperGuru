@@ -43,4 +43,32 @@ describe('App Routing', () => {
       expect(screen.getByText(/Create Account/i)).toBeInTheDocument()
     })
   })
+
+  it('toggles dark and light mode for the whole page from the landing nav', async () => {
+    localStorage.removeItem('jobhelperguru_theme')
+    document.documentElement.classList.remove('dark')
+    document.body.classList.remove('dark')
+
+    render(<App />)
+
+    // Initially light mode
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+    expect(document.body.classList.contains('dark')).toBe(false)
+
+    // Click toggle to switch to dark mode
+    const toggleBtn = screen.getByRole('button', { name: /Switch to dark mode/i })
+    fireEvent.click(toggleBtn)
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    expect(document.body.classList.contains('dark')).toBe(true)
+    expect(localStorage.getItem('jobhelperguru_theme')).toBe('dark')
+
+    // Click toggle to switch back to light mode
+    const switchBackBtn = screen.getByRole('button', { name: /Switch to light mode/i })
+    fireEvent.click(switchBackBtn)
+
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+    expect(document.body.classList.contains('dark')).toBe(false)
+    expect(localStorage.getItem('jobhelperguru_theme')).toBe('light')
+  })
 })
