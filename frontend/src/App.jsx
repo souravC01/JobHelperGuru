@@ -23,6 +23,7 @@ import PrivacyModal from './components/PrivacyModal';
 import AuthLinkPage from './components/AuthLinkPage';
 import UserNav from './components/UserNav';
 import ThemeToggle from './components/ThemeToggle';
+import LandingPage from './components/landing/LandingPage';
 import {
   getResumes,
   getApplications,
@@ -39,10 +40,29 @@ export default function App() {
   const [authMode, setAuthMode] = useState('login');
   const [currentPath, setCurrentPath] = useState(() => (typeof window !== 'undefined' ? window.location.pathname : '/'));
 
+  const navigateTo = (path) => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState(null, '', path);
+    }
+    setCurrentPath(path);
+    if (typeof window !== 'undefined') {
+      window.scrollTo(0, 0);
+    }
+  };
+
   useEffect(() => {
     const onPopState = () => setCurrentPath(window.location.pathname);
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  useEffect(() => {
+    if (getCurrentUser() && window.location.pathname === '/') {
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', '/app');
+      }
+      setCurrentPath('/app');
+    }
   }, []);
 
 
@@ -53,8 +73,10 @@ export default function App() {
   useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
+      document.body.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
+      document.body.classList.remove('dark');
     }
     localStorage.setItem('jobhelperguru_theme', theme);
   }, [theme]);
@@ -235,9 +257,9 @@ export default function App() {
       <>
         <AuthLinkPage
           path={currentPath}
-          onGoHome={() => setCurrentPath('/')}
+          onGoHome={() => navigateTo('/')}
           onOpenAuth={(mode) => {
-            setCurrentPath('/');
+            navigateTo('/');
             setAuthMode(mode || 'login');
             setIsAuthOpen(true);
           }}
@@ -255,6 +277,57 @@ export default function App() {
     );
   }
 
+  if (currentPath !== '/app') {
+    return (
+      <>
+        <LandingPage
+          currentUser={currentUser}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          onSignIn={() => {
+            setAuthMode('login');
+            setIsAuthOpen(true);
+          }}
+          onGetStarted={() => {
+            setAuthMode('register');
+            setIsAuthOpen(true);
+          }}
+          onGoToDashboard={() => navigateTo('/app')}
+          onExploreGuest={() => navigateTo('/app')}
+          onOpenPrivacy={() => setIsPrivacyOpen(true)}
+        />
+        <AuthModal
+          isOpen={isAuthOpen}
+          onClose={() => setIsAuthOpen(false)}
+          initialMode={authMode}
+          onSuccess={async (user, isNewUser = false) => {
+            sessionRef.current += 1;
+            resetAccountState();
+            setCurrentUser(user);
+            await loadInitialData();
+            try {
+              const settings = await getSettings();
+              if (isNewUser || (!settings?.has_api_key && !settings?.use_offline_mode)) {
+                setIsOnboardingSettings(true);
+                setIsSettingsOpen(true);
+              }
+            } catch (e) {
+              if (isNewUser) {
+                setIsOnboardingSettings(true);
+                setIsSettingsOpen(true);
+              }
+            }
+            navigateTo('/app');
+          }}
+        />
+        <PrivacyModal
+          isOpen={isPrivacyOpen}
+          onClose={() => setIsPrivacyOpen(false)}
+        />
+      </>
+    );
+  }
+
   return (
 
     <div className="min-h-screen bg-[#f3f6f8] text-[#000000] flex flex-col font-sans selection:bg-[#0a66c2] selection:text-white">
@@ -262,7 +335,11 @@ export default function App() {
       <header className="sticky top-0 z-40 bg-white border-b border-[#e0e0e0]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
           {/* Brand Logo */}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('analyzer')}>
+          <div
+            data-testid="brand-logo"
+            className="flex items-center gap-3 cursor-pointer"
+            onClick={() => navigateTo('/')}
+          >
             <div className="w-9 h-9 rounded-md bg-[#0a66c2] flex items-center justify-center shadow-sm">
               <Briefcase size={20} className="text-white" />
             </div>

@@ -4,6 +4,9 @@ import { cleanup } from '@testing-library/react'
 
 const rejectNetwork = () => Promise.reject(new Error('Unexpected network request in frontend test'))
 globalThis.fetch = vi.fn(rejectNetwork)
+if (typeof window !== 'undefined') {
+  window.scrollTo = vi.fn()
+}
 
 afterEach(() => {
   cleanup()

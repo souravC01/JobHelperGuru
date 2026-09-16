@@ -11,4 +11,10 @@ describe('ThemeToggle', () => {
     expect(onToggle).toHaveBeenCalledOnce()
     expect(fetch).not.toHaveBeenCalled()
   })
+
+  it('renders sun icon when dark mode is active', () => {
+    const onToggle = vi.fn()
+    render(<ThemeToggle theme="dark" onToggle={onToggle} />)
+    expect(screen.getByRole('button', { name: 'Switch to light mode' })).toBeInTheDocument()
+  })
 })

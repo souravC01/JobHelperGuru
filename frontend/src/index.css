@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --bg-canvas: #f3f6f8;
   --bg-surface: #ffffff;
@@ -339,7 +341,7 @@ code, pre, .font-mono, .mono-data {
 }
 
 .dark .bg-\[\#f3f6f8\] {
-  background-color: #12141a !important;
+  background-color: var(--bg-canvas) !important;
 }
 
 .dark .bg-\[\#f0f7fe\] {
