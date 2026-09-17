@@ -151,6 +151,16 @@ class HeuristicParser:
     def __init__(self, taxonomy: Set[str] = None):
         self.taxonomy = taxonomy or SKILL_TAXONOMY
 
+    def extract_match_requirements(self, text: str):
+        """Build a source-backed rubric without candidate-dependent weighting."""
+        from backend.services.matching.extraction import extract_requirements
+        return extract_requirements(text, mode="offline")
+
+    def extract_match_evidence(self, text: str, requirements, *, as_of):
+        """Return conservative evidence outcomes, including unresolved semantics."""
+        from backend.services.matching.extraction import extract_evidence
+        return extract_evidence(text, requirements, mode="offline", as_of=as_of)
+
     def check_new_grad_eligibility(
         self,
         resume_text: str,

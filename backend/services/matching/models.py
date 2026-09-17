@@ -103,7 +103,9 @@ class Evidence(MatchContract):
         requires_provenance = self.level is not EvidenceLevel.NOT_EVIDENCED
 
         if requires_provenance and not has_complete_span:
-            raise ValueError("credited or contradicted evidence requires resume provenance")
+            raise ValueError(
+                "credited or contradicted evidence requires resume provenance"
+            )
         if has_any_span_value and not has_complete_span:
             raise ValueError("resume provenance must include quote and both offsets")
         if has_complete_span:
@@ -133,6 +135,68 @@ class RequirementResult(MatchContract):
         return self
 
 
+class ExtractionResult(MatchContract):
+    status: EvaluationStatus
+    warnings: list[NonEmptyString] = Field(default_factory=list)
+    source_hash: NonEmptyString
+    extractor_version: NonEmptyString
+    assessed_requirement_ids: list[NonEmptyString] = Field(default_factory=list)
+    unresolved_requirement_ids: list[NonEmptyString] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_coverage(self) -> ExtractionResult:
+        assessed = set(self.assessed_requirement_ids)
+        unresolved = set(self.unresolved_requirement_ids)
+        if (
+            len(assessed) != len(self.assessed_requirement_ids)
+            or len(unresolved) != len(self.unresolved_requirement_ids)
+            or assessed & unresolved
+        ):
+            raise ValueError("coverage IDs must be unique and disjoint")
+        if self.status is EvaluationStatus.COMPLETE and unresolved:
+            raise ValueError(
+                "complete extraction cannot contain unresolved requirements"
+            )
+        if self.status is EvaluationStatus.FAILED and (assessed or self.items):
+            raise ValueError("failed extraction cannot publish partial outcomes")
+        return self
+
+
+class RequirementExtraction(ExtractionResult):
+    items: list[Requirement] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_requirements(self) -> RequirementExtraction:
+        ids = [item.id for item in self.items]
+        if len(ids) != len(set(ids)):
+            raise ValueError("duplicate requirement IDs")
+        if set(ids) != set(
+            self.assessed_requirement_ids + self.unresolved_requirement_ids
+        ):
+            raise ValueError("coverage must describe every extracted requirement")
+        if self.status is EvaluationStatus.COMPLETE and not ids:
+            raise ValueError("complete requirements extraction needs requirements")
+        return self
+
+
+class EvidenceExtraction(ExtractionResult):
+    items: list[Evidence] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_evidence(self) -> EvidenceExtraction:
+        if {item.requirement_id for item in self.items} != set(
+            self.assessed_requirement_ids
+        ):
+            raise ValueError("assessed IDs must have explicit evidence outcomes")
+        seen = {}
+        for item in self.items:
+            key = (item.requirement_id, item.source_start, item.source_end)
+            if key in seen:
+                raise ValueError("duplicate evidence provenance")
+            seen[key] = item
+        return self
+
+
 class EligibilityResult(MatchContract):
     criterion: NonEmptyString
     status: EligibilityStatus
@@ -148,7 +212,9 @@ class Evaluation(MatchContract):
     source_fingerprint: NonEmptyString
     match_score: StrictInt | None = Field(default=None, ge=0, le=100)
     raw_score: RawScore | None = None
-    category_scores: dict[RequirementCategory, CategoryScore] = Field(default_factory=dict)
+    category_scores: dict[RequirementCategory, CategoryScore] = Field(
+        default_factory=dict
+    )
     requirement_results: list[RequirementResult] = Field(default_factory=list)
     eligibility: list[EligibilityResult] = Field(default_factory=list)
     warnings: list[NonEmptyString] = Field(default_factory=list)
@@ -164,11 +230,11 @@ class Evaluation(MatchContract):
             EvaluationStatus.FAILED,
         }
         if incomplete and (
-            self.match_score is not None
-            or self.rank is not None
-            or self.is_top_match
+            self.match_score is not None or self.rank is not None or self.is_top_match
         ):
-            raise ValueError("incomplete evaluations cannot have a score, rank, or top-match flag")
+            raise ValueError(
+                "incomplete evaluations cannot have a score, rank, or top-match flag"
+            )
         if self.status is EvaluationStatus.COMPLETE and self.match_score is None:
             raise ValueError("complete evaluations require a match_score")
 
@@ -177,7 +243,9 @@ class Evaluation(MatchContract):
                 self.raw_score.quantize(Decimal(1), rounding=ROUND_HALF_UP)
             )
             if self.match_score != expected_display_score:
-                raise ValueError("match_score must be the half-up display value of raw_score")
+                raise ValueError(
+                    "match_score must be the half-up display value of raw_score"
+                )
 
         if self.is_top_match and self.rank != 1:
             raise ValueError("top matches must have rank 1")
@@ -186,12 +254,20 @@ class Evaluation(MatchContract):
 
         if self.match_score is not None:
             if not self.requirement_results:
-                raise ValueError("scored evaluations require source-backed requirements")
-            requirement_ids = [result.requirement.id for result in self.requirement_results]
+                raise ValueError(
+                    "scored evaluations require source-backed requirements"
+                )
+            requirement_ids = [
+                result.requirement.id for result in self.requirement_results
+            ]
             if len(requirement_ids) != len(set(requirement_ids)):
-                raise ValueError("scored evaluations cannot contain duplicate requirement IDs")
+                raise ValueError(
+                    "scored evaluations cannot contain duplicate requirement IDs"
+                )
             if any(not result.evidence for result in self.requirement_results):
-                raise ValueError("scored requirements require an explicit evidence outcome")
+                raise ValueError(
+                    "scored requirements require an explicit evidence outcome"
+                )
         return self
 
 
