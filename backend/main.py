@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from pathlib import Path
@@ -356,7 +357,7 @@ def analyze_job(
         lease_service.release(lease_id)
 
 
-from backend.services.document_parser import extract_text_from_file, extract_text_with_warnings
+from backend.services.document_parser import extract_text_with_warnings
 
 # --- Resumes ---
 @app.get("/api/resumes", response_model=List[Resume])
@@ -372,6 +373,18 @@ MAX_RESUMES_PER_USER = 10
 MAX_USER_STORAGE_BYTES = 50 * 1024 * 1024  # 50 MB
 ALLOWED_RESUME_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md", ".rtf"}
 MAX_RESUME_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB per file
+
+
+def parse_extraction_warnings(raw_warnings: Optional[str]) -> list[str]:
+    if not raw_warnings:
+        return []
+    try:
+        warnings = json.loads(raw_warnings)
+    except json.JSONDecodeError as error:
+        raise HTTPException(status_code=422, detail="Extraction warnings must be a JSON list of strings.") from error
+    if not isinstance(warnings, list) or any(not isinstance(warning, str) for warning in warnings):
+        raise HTTPException(status_code=422, detail="Extraction warnings must be a JSON list of strings.")
+    return warnings
 
 
 @app.post("/api/resumes", response_model=Resume)
@@ -400,6 +413,7 @@ def upload_resume_file(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
     content_override: Optional[str] = Form(None),
+    extraction_warnings: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
 ):
     try:
@@ -431,11 +445,14 @@ def upload_resume_file(
                     detail="Resume content exceeds maximum limit of 100,000 characters.",
                 )
             final_content = content_override.strip()
+            final_warnings = parse_extraction_warnings(extraction_warnings)
         else:
-            extracted_text = extract_text_from_file(content_bytes, file.filename)
+            extraction = extract_text_with_warnings(content_bytes, file.filename)
+            extracted_text = extraction.text
             if not extracted_text.strip():
                 raise HTTPException(status_code=400, detail="No readable text could be extracted from this document.")
             final_content = extracted_text.strip()
+            final_warnings = extraction.warnings
 
         resume_name = name.strip() if (name and name.strip()) else Path(file.filename).stem
         try:
@@ -448,6 +465,7 @@ def upload_resume_file(
                 content_bytes=content_bytes,
                 resume_name=resume_name,
                 text_content=final_content,
+                extraction_warnings=final_warnings,
                 max_resumes=MAX_RESUMES_PER_USER,
                 max_storage_bytes=MAX_USER_STORAGE_BYTES,
             )

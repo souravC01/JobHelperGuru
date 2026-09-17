@@ -25,6 +25,13 @@ def _decode_text(file_bytes: bytes, warnings: list[str]) -> str:
         return file_bytes.decode("latin-1")
 
 
+def _validate_extracted_text_length(text: str) -> None:
+    if len(text) > MAX_EXTRACTED_CHARS:
+        raise ValueError(
+            f"Extracted document text exceeds maximum limit of {MAX_EXTRACTED_CHARS:,} characters."
+        )
+
+
 def extract_text_from_rtf(rtf_content: str) -> str:
     """
     Extracts readable text from an RTF document string.
@@ -137,7 +144,9 @@ def extract_text_with_warnings(file_bytes: bytes, filename: str) -> TextExtracti
                     warnings.append(
                         f"PDF page {len(extracted_pages) + len(warnings) + 1} did not contain extractable text."
                     )
-            return TextExtraction(text="\n\n".join(extracted_pages), warnings=warnings)
+            extracted_text = "\n\n".join(extracted_pages)
+            _validate_extracted_text_length(extracted_text)
+            return TextExtraction(text=extracted_text, warnings=warnings)
         except ValueError:
             raise
         except Exception as e:
@@ -188,20 +197,21 @@ def extract_text_with_warnings(file_bytes: bytes, filename: str) -> TextExtracti
                             f"Extracted document text exceeds maximum limit of {MAX_EXTRACTED_CHARS:,} characters."
                         )
                     lines.append(row_text)
-        return TextExtraction(text="\n\n".join(lines), warnings=warnings)
+        extracted_text = "\n\n".join(lines)
+        _validate_extracted_text_length(extracted_text)
+        return TextExtraction(text=extracted_text, warnings=warnings)
 
     # 3. RTF
     if ext == ".rtf":
         rtf_raw = _decode_text(file_bytes, warnings)
-        return TextExtraction(text=extract_text_from_rtf(rtf_raw), warnings=warnings)
+        extracted_text = extract_text_from_rtf(rtf_raw)
+        _validate_extracted_text_length(extracted_text)
+        return TextExtraction(text=extracted_text, warnings=warnings)
 
     # 4. Markdown / Plain Text / Other
     text = _decode_text(file_bytes, warnings)
 
-    if len(text) > MAX_EXTRACTED_CHARS:
-        raise ValueError(
-            f"Extracted document text exceeds maximum limit of {MAX_EXTRACTED_CHARS:,} characters."
-        )
+    _validate_extracted_text_length(text)
     return TextExtraction(text=text, warnings=warnings)
 
 

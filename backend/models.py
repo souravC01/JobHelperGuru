@@ -89,6 +89,7 @@ class Resume(BaseModel):
     file_key: Optional[str] = None
     attachment_id: Optional[str] = None
     download_url: Optional[str] = None
+    extraction_warnings: List[str] = Field(default_factory=list)
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
 

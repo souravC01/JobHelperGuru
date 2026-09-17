@@ -28,6 +28,7 @@ class ResumeFileManager:
         content_bytes: bytes,
         resume_name: Optional[str],
         text_content: str,
+        extraction_warnings: Optional[list[str]] = None,
         max_resumes: int = 10,
         max_storage_bytes: int = 50 * 1024 * 1024,
     ) -> Resume:
@@ -66,6 +67,7 @@ class ResumeFileManager:
                 file_key=file_key,
                 user_id=user_id,
                 attachment_id=attachment.id,
+                extraction_warnings=extraction_warnings,
                 max_resumes=max_resumes,
             )
             return resume

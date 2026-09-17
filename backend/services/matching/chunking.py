@@ -21,7 +21,7 @@ def _preferred_end(text: str, start: int, limit: int) -> int:
         return limit
 
     for delimiter in ("\n\n", "\n"):
-        boundary = text.rfind(delimiter, start + CHUNK_OVERLAP_CHARS, limit + 1)
+        boundary = text.rfind(delimiter, start + CHUNK_OVERLAP_CHARS, limit)
         if boundary != -1:
             return boundary + len(delimiter)
     return limit

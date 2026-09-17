@@ -252,6 +252,7 @@ class StorageService:
                     content TEXT NOT NULL,
                     file_key TEXT,
                     attachment_id TEXT,
+                    extraction_warnings TEXT DEFAULT '[]',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
@@ -291,6 +292,7 @@ class StorageService:
                 cursor.execute("ALTER TABLE resumes ADD COLUMN IF NOT EXISTS file_key TEXT")
                 cursor.execute("ALTER TABLE resumes ADD COLUMN IF NOT EXISTS user_id TEXT")
                 cursor.execute("ALTER TABLE resumes ADD COLUMN IF NOT EXISTS attachment_id TEXT")
+                cursor.execute("ALTER TABLE resumes ADD COLUMN IF NOT EXISTS extraction_warnings TEXT DEFAULT '[]'")
                 cursor.execute("ALTER TABLE applications ADD COLUMN IF NOT EXISTS user_id TEXT")
             else:
                 try:
@@ -315,6 +317,10 @@ class StorageService:
                     pass
                 try:
                     cursor.execute("ALTER TABLE resumes ADD COLUMN attachment_id TEXT")
+                except Exception:
+                    pass
+                try:
+                    cursor.execute("ALTER TABLE resumes ADD COLUMN extraction_warnings TEXT DEFAULT '[]'")
                 except Exception:
                     pass
                 try:
@@ -663,6 +669,7 @@ class StorageService:
         file_key: Optional[str] = None,
         user_id: Optional[str] = None,
         attachment_id: Optional[str] = None,
+        extraction_warnings: Optional[List[str]] = None,
         max_resumes: Optional[int] = None,
     ) -> Resume:
         now = datetime.now().isoformat()
@@ -683,9 +690,19 @@ class StorageService:
 
                 cursor.execute(
                     self._format_sql(
-                        "INSERT INTO resumes (id, user_id, name, content, file_key, attachment_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                        "INSERT INTO resumes (id, user_id, name, content, file_key, attachment_id, extraction_warnings, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
                     ),
-                    (resume_id, user_id, name, content, file_key, attachment_id, now, now),
+                    (
+                        resume_id,
+                        user_id,
+                        name,
+                        content,
+                        file_key,
+                        attachment_id,
+                        json.dumps(extraction_warnings or []),
+                        now,
+                        now,
+                    ),
                 )
         return Resume(
             id=resume_id,
@@ -693,6 +710,7 @@ class StorageService:
             content=content,
             file_key=file_key,
             attachment_id=attachment_id,
+            extraction_warnings=extraction_warnings or [],
             created_at=now,
             updated_at=now,
         )
@@ -711,6 +729,7 @@ class StorageService:
                     content=row["content"],
                     file_key=row.get("file_key") if isinstance(row, dict) else (row["file_key"] if "file_key" in row.keys() else None),
                     attachment_id=row.get("attachment_id") if isinstance(row, dict) else (row["attachment_id"] if "attachment_id" in row.keys() else None),
+                    extraction_warnings=self._resume_extraction_warnings(row),
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
                 )
@@ -732,9 +751,23 @@ class StorageService:
                 content=row["content"],
                 file_key=row.get("file_key") if isinstance(row, dict) else (row["file_key"] if "file_key" in row.keys() else None),
                 attachment_id=row.get("attachment_id") if isinstance(row, dict) else (row["attachment_id"] if "attachment_id" in row.keys() else None),
+                extraction_warnings=self._resume_extraction_warnings(row),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
+
+    @staticmethod
+    def _resume_extraction_warnings(row) -> List[str]:
+        raw = row.get("extraction_warnings") if isinstance(row, dict) else (
+            row["extraction_warnings"] if "extraction_warnings" in row.keys() else None
+        )
+        if not raw:
+            return []
+        try:
+            warnings = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            return []
+        return [warning for warning in warnings if isinstance(warning, str)] if isinstance(warnings, list) else []
 
     def delete_resume(self, resume_id: str, user_id: Optional[str] = None) -> bool:
         with self._get_cursor() as cursor:

@@ -71,8 +71,56 @@ describe('ResumeLibrary text persistence and upload workflows (B2, B3)', () => {
     expect(apiClient.uploadResumeFile).toHaveBeenCalledWith(
       file,
       'Custom Tailored Title',
-      'User edited custom bullet points and skills.'
+      'User edited custom bullet points and skills.',
+      []
     )
+  })
+
+  it('shows parsing warnings while allowing the edited document to be saved', async () => {
+    const warning = 'PDF page 2 did not contain extractable text.'
+    apiClient.parseResumeFile.mockResolvedValue({
+      filename: 'sample.pdf',
+      suggested_title: 'Sample Resume',
+      text: 'Initial extracted text from PDF.',
+      warnings: [warning],
+    })
+    apiClient.uploadResumeFile.mockResolvedValue({ id: 'res-warning' })
+
+    render(<ResumeLibrary />)
+    await waitFor(() => expect(screen.getByText('Paste Text')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Paste Text'))
+
+    const file = new File(['fake-pdf-content'], 'sample.pdf', { type: 'application/pdf' })
+    const fileInputs = document.querySelectorAll('input[type="file"]')
+    await act(async () => {
+      fireEvent.change(fileInputs[fileInputs.length - 1], { target: { files: [file] } })
+    })
+
+    await waitFor(() => expect(screen.getByText(warning)).toBeInTheDocument())
+    await act(async () => {
+      fireEvent.click(screen.getByText('Save to Vault'))
+    })
+
+    expect(apiClient.uploadResumeFile).toHaveBeenCalledWith(
+      file,
+      'Sample Resume',
+      'Initial extracted text from PDF.',
+      [warning]
+    )
+  })
+
+  it('shows persisted document warnings in the resume library', async () => {
+    apiClient.getResumes.mockResolvedValue([{
+      id: 'resume-warning',
+      name: 'Parsed Resume',
+      content: 'Python experience',
+      extraction_warnings: ['PDF page 2 did not contain extractable text.'],
+      created_at: new Date().toISOString(),
+    }])
+
+    render(<ResumeLibrary />)
+
+    expect(await screen.findByText('PDF page 2 did not contain extractable text.')).toBeInTheDocument()
   })
 
   it('renders download button labeled Original uploaded file in Quick View', async () => {

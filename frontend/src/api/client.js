@@ -248,7 +248,7 @@ export async function parseResumeFile(file) {
   return res.json();
 }
 
-export async function uploadResumeFile(file, name = '', content_override = '') {
+export async function uploadResumeFile(file, name = '', content_override = '', extractionWarnings = []) {
   const formData = new FormData();
   formData.append('file', file);
   if (name) {
@@ -256,6 +256,9 @@ export async function uploadResumeFile(file, name = '', content_override = '') {
   }
   if (content_override) {
     formData.append('content_override', content_override);
+  }
+  if (extractionWarnings.length) {
+    formData.append('extraction_warnings', JSON.stringify(extractionWarnings));
   }
   const res = await authFetch(`${API_BASE}/resumes/upload`, {
     method: 'POST',

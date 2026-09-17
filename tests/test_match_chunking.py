@@ -1,6 +1,7 @@
 import io
 from itertools import pairwise
 
+import docx
 import pypdf
 import pytest
 
@@ -31,6 +32,67 @@ def test_chunking_covers_every_character_and_rejects_oversized_input():
     assert all(len(chunk.text) <= 8000 for chunk in chunks)
     with pytest.raises(ValueError, match="100,000"):
         chunk_text("x" * (MAX_DOCUMENT_CHARS + 1))
+
+
+@pytest.mark.parametrize("delimiter", ["\n", "\n\n"])
+def test_chunking_never_extends_past_the_maximum_for_a_boundary_at_the_limit(delimiter):
+    from backend.services.matching.chunking import MAX_CHUNK_CHARS, chunk_text
+
+    chunks = chunk_text("x" * MAX_CHUNK_CHARS + delimiter + "tail")
+
+    assert all(len(chunk.text) <= MAX_CHUNK_CHARS for chunk in chunks)
+
+
+def test_pdf_final_text_limit_counts_page_separators(monkeypatch):
+    from backend.services.document_parser import (
+        MAX_EXTRACTED_CHARS,
+        extract_text_with_warnings,
+    )
+
+    class Page:
+        def __init__(self, text):
+            self.text = text
+
+        def extract_text(self):
+            return self.text
+
+    class Reader:
+        def __init__(self, _stream):
+            self.pages = [Page("x" * 50_000), Page("y" * 49_998)]
+
+    monkeypatch.setattr(pypdf, "PdfReader", Reader)
+    exact = extract_text_with_warnings(b"pdf", "resume.pdf")
+
+    assert len(exact.text) == MAX_EXTRACTED_CHARS
+
+    class OverflowReader:
+        def __init__(self, _stream):
+            self.pages = [Page("x" * 50_000), Page("y" * 49_999)]
+
+    monkeypatch.setattr(pypdf, "PdfReader", OverflowReader)
+    with pytest.raises(ValueError, match="100,000"):
+        extract_text_with_warnings(b"pdf", "resume.pdf")
+
+
+def test_docx_final_text_limit_counts_paragraph_separators():
+    from backend.services.document_parser import (
+        MAX_EXTRACTED_CHARS,
+        extract_text_with_warnings,
+    )
+
+    def document_bytes(second_paragraph):
+        document = docx.Document()
+        document.add_paragraph("x" * 50_000)
+        document.add_paragraph(second_paragraph)
+        stream = io.BytesIO()
+        document.save(stream)
+        return stream.getvalue()
+
+    exact = extract_text_with_warnings(document_bytes("y" * 49_998), "resume.docx")
+
+    assert len(exact.text) == MAX_EXTRACTED_CHARS
+    with pytest.raises(ValueError, match="100,000"):
+        extract_text_with_warnings(document_bytes("y" * 49_999), "resume.docx")
 
 
 def test_document_parser_exposes_pdf_extraction_warnings_and_keeps_string_wrapper():

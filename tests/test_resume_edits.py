@@ -1,4 +1,5 @@
 import io
+import json
 import pytest
 from fastapi.testclient import TestClient
 from backend.main import app, storage
@@ -76,6 +77,46 @@ def test_upload_resume_without_content_override_uses_extracted_text(client):
     )
     assert response.status_code == 200
     assert response.json()["content"] == original_text
+
+
+def test_upload_persists_extraction_warnings_for_direct_and_edited_documents(client):
+    registration = client.post(
+        "/api/auth/register",
+        json={"email": "warnings@example.test", "password": "Password123!", "name": "Warnings"},
+    )
+    headers = {"Authorization": f"Bearer {registration.json()['token']}"}
+    expected_warning = "Document text was decoded as Latin-1 after UTF-8 decoding failed."
+
+    direct_upload = client.post(
+        "/api/resumes/upload",
+        headers=headers,
+        data={"name": "Direct warning"},
+        files={"file": ("direct.txt", io.BytesIO(b"\x96Python"), "text/plain")},
+    )
+
+    assert direct_upload.status_code == 200, direct_upload.text
+    assert direct_upload.json()["extraction_warnings"] == [expected_warning]
+    stored = client.get("/api/resumes", headers=headers).json()
+    assert stored[0]["extraction_warnings"] == [expected_warning]
+
+    parsed = client.post(
+        "/api/resumes/parse-file",
+        headers=headers,
+        files={"file": ("edited.txt", io.BytesIO(b"\x96Python"), "text/plain")},
+    ).json()
+    edited_upload = client.post(
+        "/api/resumes/upload",
+        headers=headers,
+        data={
+            "name": "Edited warning",
+            "content_override": "Edited resume content",
+            "extraction_warnings": json.dumps(parsed["warnings"]),
+        },
+        files={"file": ("edited.txt", io.BytesIO(b"original"), "text/plain")},
+    )
+
+    assert edited_upload.status_code == 200, edited_upload.text
+    assert edited_upload.json()["extraction_warnings"] == [expected_warning]
 
 
 def test_rtf_parsing_extracts_clean_text_without_rtf_control_codes(client):

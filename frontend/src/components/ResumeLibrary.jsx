@@ -31,6 +31,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
   const [newName, setNewName] = useState('');
   const [newContent, setNewContent] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
+  const [extractionWarnings, setExtractionWarnings] = useState([]);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState(false);
@@ -72,6 +73,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
     setNewName('');
     setNewContent('');
     setSelectedFile(null);
+    setExtractionWarnings([]);
     setError('');
   };
 
@@ -86,7 +88,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
     try {
       if (selectedFile) {
         // Upload the actual binary with the user's custom title and edited text content
-        await uploadResumeFile(selectedFile, newName.trim(), newContent.trim());
+        await uploadResumeFile(selectedFile, newName.trim(), newContent.trim(), extractionWarnings);
       } else {
         // Plain text entry
         await addResume({ name: newName.trim(), content: newContent.trim() });
@@ -115,6 +117,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
     const parseId = ++fileParseRequestIdRef.current;
     setUploadingDoc(true);
     setError('');
+    setExtractionWarnings([]);
     const suggestedTitle = file.name.replace(/\.[^/.]+$/, '');
 
     // Only set newName if user hasn't already typed a custom title
@@ -133,6 +136,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
         const parsed = await parseResumeFile(file);
         if (parseId !== fileParseRequestIdRef.current) return;
         setNewContent(parsed.text);
+        setExtractionWarnings(parsed.warnings || []);
         if (!newName.trim()) {
           setNewName(parsed.suggested_title || suggestedTitle);
         }
@@ -373,6 +377,12 @@ export default function ResumeLibrary({ onResumesUpdated }) {
                 <div className="mt-3 bg-[#f3f6f8] p-3 rounded border border-[#e0e0e0] font-mono text-[11px] text-[#000000] h-28 overflow-hidden line-clamp-5 leading-relaxed">
                   {resume.content}
                 </div>
+                {resume.extraction_warnings?.length > 0 && (
+                  <div role="status" className="mt-2 flex items-start gap-1.5 text-[11px] text-[#9a6700]">
+                    <AlertCircle size={13} className="mt-0.5 shrink-0" />
+                    <span>{resume.extraction_warnings.join(' ')}</span>
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 border-t border-[#e0e0e0] flex items-center justify-between text-[11px] text-[#666666]">
@@ -418,6 +428,12 @@ export default function ResumeLibrary({ onResumesUpdated }) {
                 <div className="p-3 bg-[#b24020]/10 border border-[#b24020]/25 rounded-lg text-[#b24020] text-xs flex items-center gap-2">
                   <AlertCircle size={14} className="shrink-0" />
                   <span>{error}</span>
+                </div>
+              )}
+              {extractionWarnings.length > 0 && (
+                <div role="status" className="p-3 bg-[#fff8c5] border border-[#e6d98c] rounded-lg text-[#6b5900] text-xs flex items-start gap-2">
+                  <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                  <span>{extractionWarnings.join(' ')}</span>
                 </div>
               )}
 
