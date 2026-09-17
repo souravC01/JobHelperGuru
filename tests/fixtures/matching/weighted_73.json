@@ -1,0 +1,44 @@
+{
+  "job_text": "Required skills:\nPython\nSQL\nDocker\nAWS\nKubernetes\nResponsibilities:\nBuild APIs\nOperate pipelines\nImprove reliability\nLead reviews\nDocument systems\nRelevant experience:\nTwo years of backend experience\nFour years of distributed systems experience\nPreferred qualifications:\nTerraform\n",
+  "resume_text": "Built Python APIs using SQL, Docker, and AWS.\nOperated pipelines, improved reliability, and led reviews.\nTwo years of backend experience.\nTerraform certification completed.\n",
+  "requirements": [
+    {"id": "required-python", "category": "required_skills", "kind": "skill", "canonical_key": "python", "alternatives": ["python"], "source_quote": "Python", "source_start": 17, "source_end": 23},
+    {"id": "required-sql", "category": "required_skills", "kind": "skill", "canonical_key": "sql", "alternatives": ["sql"], "source_quote": "SQL", "source_start": 24, "source_end": 27},
+    {"id": "required-docker", "category": "required_skills", "kind": "skill", "canonical_key": "docker", "alternatives": ["docker"], "source_quote": "Docker", "source_start": 28, "source_end": 34},
+    {"id": "required-aws", "category": "required_skills", "kind": "skill", "canonical_key": "aws", "alternatives": ["aws"], "source_quote": "AWS", "source_start": 35, "source_end": 38},
+    {"id": "required-kubernetes", "category": "required_skills", "kind": "skill", "canonical_key": "kubernetes", "alternatives": ["kubernetes"], "source_quote": "Kubernetes", "source_start": 39, "source_end": 49},
+    {"id": "responsibility-build-apis", "category": "responsibilities", "kind": "responsibility", "canonical_key": "build_apis", "alternatives": [], "source_quote": "Build APIs", "source_start": 68, "source_end": 78},
+    {"id": "responsibility-operate-pipelines", "category": "responsibilities", "kind": "responsibility", "canonical_key": "operate_pipelines", "alternatives": [], "source_quote": "Operate pipelines", "source_start": 79, "source_end": 96},
+    {"id": "responsibility-improve-reliability", "category": "responsibilities", "kind": "responsibility", "canonical_key": "improve_reliability", "alternatives": [], "source_quote": "Improve reliability", "source_start": 97, "source_end": 116},
+    {"id": "responsibility-lead-reviews", "category": "responsibilities", "kind": "responsibility", "canonical_key": "lead_reviews", "alternatives": [], "source_quote": "Lead reviews", "source_start": 117, "source_end": 129},
+    {"id": "responsibility-document-systems", "category": "responsibilities", "kind": "responsibility", "canonical_key": "document_systems", "alternatives": [], "source_quote": "Document systems", "source_start": 130, "source_end": 146},
+    {"id": "experience-backend-24-months", "category": "relevant_experience", "kind": "tenure", "canonical_key": "backend_experience", "alternatives": [], "source_quote": "Two years of backend experience", "source_start": 168, "source_end": 199, "required_months": 24},
+    {"id": "experience-distributed-48-months", "category": "relevant_experience", "kind": "tenure", "canonical_key": "distributed_systems_experience", "alternatives": [], "source_quote": "Four years of distributed systems experience", "source_start": 200, "source_end": 244, "required_months": 48},
+    {"id": "preferred-terraform", "category": "preferred_qualifications", "kind": "qualification", "canonical_key": "terraform", "alternatives": ["terraform"], "source_quote": "Terraform", "source_start": 271, "source_end": 280}
+  ],
+  "evidence": [
+    {"requirement_id": "required-python", "level": "demonstrated", "source_quote": "Python", "source_start": 6, "source_end": 12, "section": "experience"},
+    {"requirement_id": "required-sql", "level": "demonstrated", "source_quote": "SQL", "source_start": 24, "source_end": 27, "section": "experience"},
+    {"requirement_id": "required-docker", "level": "demonstrated", "source_quote": "Docker", "source_start": 29, "source_end": 35, "section": "experience"},
+    {"requirement_id": "required-aws", "level": "demonstrated", "source_quote": "AWS", "source_start": 41, "source_end": 44, "section": "experience"},
+    {"requirement_id": "required-kubernetes", "level": "not_evidenced"},
+    {"requirement_id": "responsibility-build-apis", "level": "demonstrated", "source_quote": "Built Python APIs", "source_start": 0, "source_end": 17, "section": "experience"},
+    {"requirement_id": "responsibility-operate-pipelines", "level": "demonstrated", "source_quote": "Operated pipelines", "source_start": 46, "source_end": 64, "section": "experience"},
+    {"requirement_id": "responsibility-improve-reliability", "level": "demonstrated", "source_quote": "improved reliability", "source_start": 66, "source_end": 86, "section": "experience"},
+    {"requirement_id": "responsibility-lead-reviews", "level": "not_evidenced"},
+    {"requirement_id": "responsibility-document-systems", "level": "not_evidenced"},
+    {"requirement_id": "experience-backend-24-months", "level": "demonstrated", "source_quote": "Two years of backend experience", "source_start": 105, "source_end": 136, "section": "experience", "relevant_intervals": [{"start": "2024-01-01", "end": "2026-01-01"}]},
+    {"requirement_id": "experience-distributed-48-months", "level": "not_evidenced"},
+    {"requirement_id": "preferred-terraform", "level": "demonstrated", "source_quote": "Terraform certification completed", "source_start": 138, "source_end": 171, "section": "certifications"}
+  ],
+  "expected": {
+    "category_coverage": {
+      "required_skills": 80,
+      "responsibilities": 60,
+      "relevant_experience": 50,
+      "preferred_qualifications": 100
+    },
+    "raw_score": 72.5,
+    "display_score": 73
+  }
+}

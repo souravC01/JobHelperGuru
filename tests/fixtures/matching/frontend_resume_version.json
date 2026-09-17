@@ -1,0 +1,11 @@
+{
+  "resume_id": "resume-frontend-v1",
+  "resume_name": "Frontend-focused resume",
+  "job_text": "Required skills: React and TypeScript.\nResponsibilities: Build accessible interfaces.\n",
+  "resume_text": "Frontend Engineer\nBuilt accessible React interfaces with TypeScript.\n",
+  "expected": {
+    "focus": "frontend",
+    "supported_skills": ["React", "TypeScript"],
+    "supported_responsibility": "Build accessible interfaces"
+  }
+}

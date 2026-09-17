@@ -1,0 +1,11 @@
+{
+  "job_text": "Required skills: Python and AWS.\n",
+  "resume_text": "No experience with Python or AWS.\n",
+  "expected": {
+    "evidence_levels": {
+      "python": "contradicted",
+      "aws": "contradicted"
+    },
+    "credit": 0
+  }
+}

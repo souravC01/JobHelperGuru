@@ -1,0 +1,11 @@
+{
+  "job_text": "Relevant experience: two years of backend engineering.\n",
+  "resume_text": "Backend Engineer | January 2024 to January 2026\nBuilt production APIs.\n",
+  "as_of": "2026-09-17",
+  "expected": {
+    "required_months": 24,
+    "verified_months": 24,
+    "credit": 1,
+    "intervals": [{"start": "2024-01-01", "end": "2026-01-01"}]
+  }
+}

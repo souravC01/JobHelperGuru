@@ -1,0 +1,9 @@
+{
+  "job_text": "Required skills: Python.\n",
+  "resume_text": "",
+  "expected": {
+    "status": "needs_review",
+    "reason": "resume text is missing",
+    "match_score": null
+  }
+}

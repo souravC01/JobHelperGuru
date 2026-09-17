@@ -1,0 +1,10 @@
+{
+  "job_text": "Required skills: Python or Java.\nRequired skills: SQL and Docker.\n",
+  "resume_text": "Built Java services with SQL.\n",
+  "expected": {
+    "requirement_groups": [
+      {"operator": "or", "alternatives": ["Python", "Java"], "credit": 1},
+      {"operator": "and", "requirements": ["SQL", "Docker"], "credit": 0.5}
+    ]
+  }
+}

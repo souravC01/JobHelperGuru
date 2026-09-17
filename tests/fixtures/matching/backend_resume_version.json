@@ -1,0 +1,11 @@
+{
+  "resume_id": "resume-backend-v1",
+  "resume_name": "Backend-focused resume",
+  "job_text": "Required skills: Python and PostgreSQL.\nResponsibilities: Build APIs.\n",
+  "resume_text": "Backend Engineer\nBuilt Python APIs backed by PostgreSQL.\n",
+  "expected": {
+    "focus": "backend",
+    "supported_skills": ["Python", "PostgreSQL"],
+    "supported_responsibility": "Build APIs"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "job_text": "Required skills: Go and Amazon Web Services.\n",
+  "resume_text": "Built Golang services deployed on AWS.\n",
+  "expected": {
+    "alias_pairs": [["Go", "Golang"], ["Amazon Web Services", "AWS"]],
+    "unrelated_pairs": [["Java", "JavaScript"], ["SQL", "NoSQL"]]
+  }
+}
