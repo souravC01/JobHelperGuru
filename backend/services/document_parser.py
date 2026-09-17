@@ -1,11 +1,28 @@
 import io
 import re
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 MAX_PDF_PAGES = 100
 MAX_EXTRACTED_CHARS = 100_000
 MAX_DOCX_DECOMPRESSED_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
+@dataclass(frozen=True)
+class TextExtraction:
+    text: str
+    warnings: list[str]
+
+
+def _decode_text(file_bytes: bytes, warnings: list[str]) -> str:
+    try:
+        return file_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        warnings.append(
+            "Document text was decoded as Latin-1 after UTF-8 decoding failed."
+        )
+        return file_bytes.decode("latin-1")
 
 
 def extract_text_from_rtf(rtf_content: str) -> str:
@@ -90,12 +107,13 @@ def extract_text_from_rtf(rtf_content: str) -> str:
     return cleaned
 
 
-def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
+def extract_text_with_warnings(file_bytes: bytes, filename: str) -> TextExtraction:
     """
     Extracts plain text from PDF, Word (.docx), RTF, Markdown (.md), or plain text files.
     Enforces resource bounds to prevent parsing denial of service.
     """
     ext = Path(filename).suffix.lower()
+    warnings: list[str] = []
 
     # 1. PDF
     if ext == ".pdf":
@@ -115,7 +133,11 @@ def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
                             f"Extracted document text exceeds maximum limit of {MAX_EXTRACTED_CHARS:,} characters."
                         )
                     extracted_pages.append(text.strip())
-            return "\n\n".join(extracted_pages)
+                else:
+                    warnings.append(
+                        f"PDF page {len(extracted_pages) + len(warnings) + 1} did not contain extractable text."
+                    )
+            return TextExtraction(text="\n\n".join(extracted_pages), warnings=warnings)
         except ValueError:
             raise
         except Exception as e:
@@ -166,30 +188,23 @@ def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
                             f"Extracted document text exceeds maximum limit of {MAX_EXTRACTED_CHARS:,} characters."
                         )
                     lines.append(row_text)
-        return "\n\n".join(lines)
+        return TextExtraction(text="\n\n".join(lines), warnings=warnings)
 
     # 3. RTF
     if ext == ".rtf":
-        try:
-            rtf_raw = file_bytes.decode("utf-8")
-        except UnicodeDecodeError:
-            try:
-                rtf_raw = file_bytes.decode("latin-1")
-            except Exception:
-                rtf_raw = file_bytes.decode("utf-8", errors="ignore")
-        return extract_text_from_rtf(rtf_raw)
+        rtf_raw = _decode_text(file_bytes, warnings)
+        return TextExtraction(text=extract_text_from_rtf(rtf_raw), warnings=warnings)
 
     # 4. Markdown / Plain Text / Other
-    try:
-        text = file_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        try:
-            text = file_bytes.decode("latin-1")
-        except Exception:
-            text = file_bytes.decode("utf-8", errors="ignore")
+    text = _decode_text(file_bytes, warnings)
 
     if len(text) > MAX_EXTRACTED_CHARS:
         raise ValueError(
             f"Extracted document text exceeds maximum limit of {MAX_EXTRACTED_CHARS:,} characters."
         )
-    return text
+    return TextExtraction(text=text, warnings=warnings)
+
+
+def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
+    """Extract text using the legacy string-only parser interface."""
+    return extract_text_with_warnings(file_bytes, filename).text

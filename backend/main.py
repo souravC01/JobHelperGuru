@@ -356,7 +356,7 @@ def analyze_job(
         lease_service.release(lease_id)
 
 
-from backend.services.document_parser import extract_text_from_file
+from backend.services.document_parser import extract_text_from_file, extract_text_with_warnings
 
 # --- Resumes ---
 @app.get("/api/resumes", response_model=List[Resume])
@@ -489,7 +489,8 @@ def parse_resume_file(
                 status_code=413,
                 detail="File exceeds maximum allowed size of 10MB.",
             )
-        extracted_text = extract_text_from_file(content_bytes, file.filename)
+        extraction = extract_text_with_warnings(content_bytes, file.filename)
+        extracted_text = extraction.text
         if not extracted_text.strip():
             raise HTTPException(status_code=400, detail="No readable text could be extracted from this document.")
 
@@ -497,6 +498,7 @@ def parse_resume_file(
             "filename": file.filename,
             "suggested_title": Path(file.filename).stem,
             "text": extracted_text,
+            "warnings": extraction.warnings,
         }
     except HTTPException:
         raise
