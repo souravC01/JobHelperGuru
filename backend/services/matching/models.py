@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from enum import Enum
 from typing import Annotated
 
@@ -17,6 +17,8 @@ from pydantic import (
 )
 
 NonEmptyString = Annotated[StrictStr, Field(min_length=1)]
+CategoryScore = Annotated[Decimal, Field(ge=0, le=100)]
+RawScore = Annotated[Decimal, Field(ge=0, le=100)]
 
 
 class RequirementCategory(str, Enum):
@@ -38,6 +40,12 @@ class EvaluationStatus(str, Enum):
     COMPLETE = "complete"
     NEEDS_REVIEW = "needs_review"
     FAILED = "failed"
+
+
+class EligibilityStatus(str, Enum):
+    ELIGIBLE = "eligible"
+    INELIGIBLE = "ineligible"
+    UNKNOWN = "unknown"
 
 
 class MatchContract(BaseModel):
@@ -125,13 +133,24 @@ class RequirementResult(MatchContract):
         return self
 
 
+class EligibilityResult(MatchContract):
+    criterion: NonEmptyString
+    status: EligibilityStatus
+    reason: NonEmptyString | None = None
+
+
 class Evaluation(MatchContract):
     resume_id: NonEmptyString
     status: EvaluationStatus
+    as_of: date
+    job_fingerprint: NonEmptyString
+    resume_fingerprint: NonEmptyString
+    source_fingerprint: NonEmptyString
     match_score: StrictInt | None = Field(default=None, ge=0, le=100)
-    category_scores: dict[RequirementCategory, Decimal] = Field(default_factory=dict)
+    raw_score: RawScore | None = None
+    category_scores: dict[RequirementCategory, CategoryScore] = Field(default_factory=dict)
     requirement_results: list[RequirementResult] = Field(default_factory=list)
-    eligibility: dict[NonEmptyString, NonEmptyString] = Field(default_factory=dict)
+    eligibility: list[EligibilityResult] = Field(default_factory=list)
     warnings: list[NonEmptyString] = Field(default_factory=list)
     rank: StrictInt | None = Field(default=None, ge=1)
     is_top_match: bool = False
@@ -144,10 +163,26 @@ class Evaluation(MatchContract):
             EvaluationStatus.NEEDS_REVIEW,
             EvaluationStatus.FAILED,
         }
-        if incomplete and (self.match_score is not None or self.rank is not None):
-            raise ValueError("incomplete evaluations cannot have a score or rank")
+        if incomplete and (
+            self.match_score is not None
+            or self.rank is not None
+            or self.is_top_match
+        ):
+            raise ValueError("incomplete evaluations cannot have a score, rank, or top-match flag")
         if self.status is EvaluationStatus.COMPLETE and self.match_score is None:
             raise ValueError("complete evaluations require a match_score")
+
+        if self.raw_score is not None:
+            expected_display_score = int(
+                self.raw_score.quantize(Decimal(1), rounding=ROUND_HALF_UP)
+            )
+            if self.match_score != expected_display_score:
+                raise ValueError("match_score must be the half-up display value of raw_score")
+
+        if self.is_top_match and self.rank != 1:
+            raise ValueError("top matches must have rank 1")
+        if self.rank is not None and self.is_top_match != (self.rank == 1):
+            raise ValueError("rank and top-match flag must agree")
 
         if self.match_score is not None:
             if not self.requirement_results:
@@ -155,6 +190,8 @@ class Evaluation(MatchContract):
             requirement_ids = [result.requirement.id for result in self.requirement_results]
             if len(requirement_ids) != len(set(requirement_ids)):
                 raise ValueError("scored evaluations cannot contain duplicate requirement IDs")
+            if any(not result.evidence for result in self.requirement_results):
+                raise ValueError("scored requirements require an explicit evidence outcome")
         return self
 
 

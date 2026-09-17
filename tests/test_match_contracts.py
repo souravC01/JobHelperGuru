@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from backend.services.matching.models import (
+    EligibilityResult,
+    EligibilityStatus,
     Evaluation,
     Evidence,
     EvidenceLevel,
@@ -53,6 +57,10 @@ def complete_evaluation(**overrides):
         "resume_id": "resume-1",
         "status": "complete",
         "match_score": 80,
+        "as_of": date(2026, 9, 17),
+        "job_fingerprint": "job-source-sha256",
+        "resume_fingerprint": "resume-source-sha256",
+        "source_fingerprint": "extraction-input-sha256",
         "requirement_results": [
             RequirementResult(requirement=requirement, evidence=[evidence])
         ],
@@ -117,6 +125,10 @@ def test_scored_evaluation_requires_complete_source_coverage_and_unique_requirem
         complete_evaluation(requirement_results=[])
     with pytest.raises(ValidationError):
         complete_evaluation(
+            requirement_results=[RequirementResult(requirement=requirement, evidence=[])]
+        )
+    with pytest.raises(ValidationError):
+        complete_evaluation(
             requirement_results=[
                 RequirementResult(requirement=requirement, evidence=[no_evidence]),
                 RequirementResult(requirement=requirement, evidence=[no_evidence]),
@@ -131,6 +143,51 @@ def test_scored_evaluation_requires_complete_source_coverage_and_unique_requirem
                 )
             ]
         )
+
+
+def test_category_scores_and_raw_display_scores_stay_within_their_contract():
+    complete_evaluation(
+        category_scores={"required_skills": Decimal(80)},
+        raw_score=Decimal("72.5"),
+        match_score=73,
+    )
+    for invalid_score in (Decimal("-0.01"), Decimal("100.01")):
+        with pytest.raises(ValidationError):
+            complete_evaluation(category_scores={"required_skills": invalid_score})
+    with pytest.raises(ValidationError):
+        complete_evaluation(raw_score=Decimal("72.5"), match_score=72)
+
+
+def test_evaluation_rank_and_top_match_flags_are_consistent():
+    complete_evaluation(rank=1, is_top_match=True)
+    with pytest.raises(ValidationError):
+        complete_evaluation(rank=1, is_top_match=False)
+    with pytest.raises(ValidationError):
+        complete_evaluation(rank=2, is_top_match=True)
+    with pytest.raises(ValidationError):
+        Evaluation(
+            resume_id="r1",
+            status="needs_review",
+            is_top_match=True,
+            as_of=date(2026, 9, 17),
+            job_fingerprint="job-source-sha256",
+            resume_fingerprint="resume-source-sha256",
+            source_fingerprint="extraction-input-sha256",
+        )
+
+
+def test_eligibility_uses_explicit_statuses_and_evaluations_record_auditable_inputs():
+    eligibility = EligibilityResult(
+        criterion="work authorization",
+        status=EligibilityStatus.UNKNOWN,
+    )
+    evaluation = complete_evaluation(eligibility=[eligibility])
+    assert evaluation.as_of == date(2026, 9, 17)
+    assert evaluation.job_fingerprint == "job-source-sha256"
+    assert evaluation.resume_fingerprint == "resume-source-sha256"
+    assert evaluation.source_fingerprint == "extraction-input-sha256"
+    with pytest.raises(ValidationError):
+        EligibilityResult(criterion="work authorization", status="probably eligible")
 
 
 def test_weighted_fixture_has_hand_derived_73_percent_expectation_and_valid_quotes():
@@ -173,3 +230,48 @@ def test_immutable_fixture_set_covers_the_required_matching_regressions():
     offset = late_document["expected"]["late_skill_offset"]
     assert offset > 3000
     assert late_document["resume_text"][offset:offset + len("Kubernetes")] == "Kubernetes"
+
+
+def test_immutable_fixture_contents_capture_each_regression_scenario():
+    fixture_dir = Path(__file__).parent / "fixtures" / "matching"
+    load = lambda name: json.loads((fixture_dir / name).read_text(encoding="utf-8"))
+
+    backend = load("backend_resume_version.json")
+    frontend = load("frontend_resume_version.json")
+    aliases = load("aliases.json")
+    negation = load("negation.json")
+    missing = load("missing_data.json")
+    alternatives = load("or_and_requirements.json")
+    tenure = load("dated_tenure.json")
+    late = load("late_document_skill.json")
+
+    assert backend["expected"]["focus"] == "backend"
+    assert backend["expected"]["supported_skills"] == ["Python", "PostgreSQL"]
+    assert frontend["expected"]["focus"] == "frontend"
+    assert frontend["expected"]["supported_skills"] == ["React", "TypeScript"]
+    assert aliases["expected"]["alias_pairs"] == [
+        ["Go", "Golang"],
+        ["Amazon Web Services", "AWS"],
+    ]
+    assert negation["expected"]["evidence_levels"] == {
+        "python": "contradicted",
+        "aws": "contradicted",
+    }
+    assert missing["resume_text"] == ""
+    assert missing["expected"] == {
+        "status": "needs_review",
+        "reason": "resume text is missing",
+        "match_score": None,
+    }
+    assert alternatives["expected"]["requirement_groups"] == [
+        {"operator": "or", "alternatives": ["Python", "Java"], "credit": 1},
+        {"operator": "and", "requirements": ["SQL", "Docker"], "credit": 0.5},
+    ]
+    assert tenure["expected"] == {
+        "required_months": 24,
+        "verified_months": 24,
+        "credit": 1,
+        "intervals": [{"start": "2024-01-01", "end": "2026-01-01"}],
+    }
+    assert late["expected"]["late_skill_offset"] > late["expected"]["prior_legacy_limit"]
+    assert late["expected"]["skill"] == "Kubernetes"
