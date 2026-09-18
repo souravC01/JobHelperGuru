@@ -34,7 +34,7 @@ from .models import (
 )
 from .normalization import aliases_for_skill, canonicalize_skill
 
-EXTRACTOR_VERSION = "v2.3"
+EXTRACTOR_VERSION = "v2.4"
 _INSTRUCTION = re.compile(
     r"ignore\b.*\b(?:rubric|instructions?)|\bscore\s*\d+|\bsystem\s*prompt",
     re.IGNORECASE,
@@ -185,14 +185,36 @@ def _lines(text):
 def _heading_name(line):
     """Recognize standalone heading-like transitions, including unknown sections."""
     value = line.strip()
-    if _ACTION.match(value) or _LEARNING.match(value) or _NEGATIVE.match(value):
+    if _ACTION.search(value) or _LEARNING.match(value) or _NEGATIVE.match(value):
+        return None
+    # Skill lists and dated statements have stronger lexical evidence than a
+    # following bullet or title casing. They cannot initiate a new section.
+    if _intervals(value, date.max):
+        return None
+    literal_parts = re.split(r"\s+(?:and|or)\s+|[,;]", value, flags=re.IGNORECASE)
+    if len(literal_parts) > 1 and all(_literal_key(part) for part in literal_parts):
+        return None
+    if canonicalize_skill(value) in {
+        canonicalize_skill(skill) for skill in _TECHNOLOGIES
+    }:
         return None
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9 &/'’()-]{0,79}:?", value):
         return None
     if len(value.split()) > 8:
         return None
     if not value.endswith(":") and len(value.split()) < 2:
-        return None
+        nonwork_headings = {
+            "volunteering",
+            "publications",
+            "certifications",
+            "activities",
+            "awards",
+            "interests",
+        }
+        if value.casefold() not in nonwork_headings and not (
+            value.isalpha() and value[0].isupper()
+        ):
+            return None
     return value.rstrip(":").strip().casefold()
 
 
@@ -248,6 +270,10 @@ def _offline_requirements(text):
                 if name.startswith(("preferred", "nice"))
                 else "required_skills"
             )
+        elif section == "non_requirements":
+            # Nested labels cannot promote benefits/company prose into merit.
+            # Only the explicit requirement-heading branch above can do so.
+            continue
         elif _heading_name(line) is not None:
             next_line = lines[index + 1][1] if index + 1 < len(lines) else ""
             if re.match(r"\s*[-*•]\s+", next_line):

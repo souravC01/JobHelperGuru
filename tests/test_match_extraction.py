@@ -904,3 +904,89 @@ def test_action_statement_with_dates_is_not_an_unknown_section_heading():
     result = evidence("Work History:\nBuilt Python services 2020-01 - 2025-01", reqs)
     assert result.status == "complete"
     assert result.items[0].section == "work"
+
+
+def test_plain_skill_line_followed_by_bullet_is_not_a_heading():
+    reqs = requirements("Required skills:\nPython and AWS\n- Rust.")
+    assert {(r.canonical_key, r.kind) for r in reqs.items} == {
+        ("python", "skill"),
+        ("aws", "skill"),
+        ("rust", "skill"),
+    }
+
+
+@pytest.mark.parametrize("section", ["Benefits", "Perks", "Compensation", "About Us"])
+def test_nested_unknown_headings_cannot_leave_excluded_job_sections(section):
+    reqs = requirements(
+        f"Required: Python.\n{section}:\nProfessional development\n- Leadership training"
+    )
+    assert [r.canonical_key for r in reqs.items] == ["python"]
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "Volunteering",
+        "Publications",
+        "Certifications",
+        "Activities",
+        "Awards",
+        "Interests",
+        "Community",
+    ],
+)
+def test_single_word_nonwork_headings_reset_professional_context(heading):
+    reqs = requirements("Required: 2 years of Python experience.")
+    result = evidence(
+        f"Work Experience:\n{heading}\n2020-01 - 2025-01: Built Python services.", reqs
+    )
+    assert result.status == "needs_review"
+    assert not result.items
+
+
+def test_single_literal_skill_line_retains_skills_context():
+    result = evidence("Skills:\nPython", requirements("Required: Python."))
+    assert result.status == "complete"
+    assert result.items[0].level == "listed"
+    assert result.items[0].section == "skills"
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["Jan 2020 - Jan 2025 used Python", "I built Python services 2020-01 - 2025-01"],
+)
+def test_dated_work_statement_does_not_need_to_start_with_an_action(line):
+    result = evidence(
+        f"Work History:\n{line}",
+        requirements("Required: 2 years of Python experience."),
+    )
+    assert result.status == "complete"
+    assert result.items[0].section == "work"
+    assert [(i.start, i.end) for i in result.items[0].relevant_intervals] == [
+        (date(2020, 1, 1), date(2025, 1, 1))
+    ]
+
+
+def test_explicit_requirement_heading_restores_rubric_after_nested_benefits():
+    reqs = requirements(
+        "Benefits:\nProfessional development\n- Leadership training\nBasic Qualifications:\n- Python\nWhat You Bring:\n- Ability to lead engineering teams"
+    )
+    assert len(reqs.items) == 2
+    assert any(r.canonical_key == "python" and r.kind == "skill" for r in reqs.items)
+    assert len(evidence("Skills: Python", reqs).unresolved_requirement_ids) == 1
+
+
+def test_explicit_work_history_restores_tenure_after_single_word_heading():
+    text = "Work Experience:\nVolunteering\n2020-01 - 2022-01: Built Python services.\nWork History:\n2023-01 - 2025-01: Built Python services."
+    result = evidence(text, requirements("Required: 2 years of Python experience."))
+    assert result.status == "complete"
+    assert len(result.items) == 1
+    assert result.items[0].relevant_intervals[0].start == date(2023, 1, 1)
+
+
+def test_unknown_requirement_heading_with_bullets_remains_conservative():
+    reqs = requirements(
+        "Candidate capabilities\n- Ability to lead engineering teams\nRequired skills:\nPython and AWS"
+    )
+    assert len(reqs.items) == 3
+    assert len(evidence("Skills: Python, AWS", reqs).unresolved_requirement_ids) == 1
