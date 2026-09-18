@@ -753,3 +753,154 @@ def test_ai_eligibility_year_fragment_cannot_be_classified_as_a_skill(monkeypatc
 def test_punctuated_eligibility_does_not_become_semantic_merit(criterion):
     reqs = requirements(f"Required: Python and {criterion}.")
     assert [(r.canonical_key, r.kind) for r in reqs.items] == [("python", "skill")]
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "Basic Qualifications:",
+        "What you bring:",
+        "What You Will Do",
+        "Candidate capabilities:",
+    ],
+)
+def test_requirement_heading_variants_preserve_unclassified_bullets(heading):
+    reqs = requirements(
+        f"{heading}\n- Ability to lead engineering teams\nRequired: Python."
+    )
+    assert len(reqs.items) == 2
+    result = evidence("Skills: Python", reqs)
+    assert result.status == "needs_review"
+    assert len(result.unresolved_requirement_ids) == 1
+
+
+@pytest.mark.parametrize("heading", ["About Us:", "Benefits:", "Compensation:"])
+def test_obvious_nonrequirement_sections_do_not_enter_rubric(heading):
+    reqs = requirements(
+        f"Required: Python.\n{heading}\n- We offer leadership training and generous holidays."
+    )
+    assert [r.canonical_key for r in reqs.items] == ["python"]
+
+
+def test_ai_requirement_fragment_cannot_hide_longer_source_technology(monkeypatch):
+    from backend.services.matching.extraction import extract_requirements
+
+    def response(payload):
+        return {
+            "chunk_index": 0,
+            "warnings": [],
+            "items": [
+                {
+                    "id": "r",
+                    "category": "required_skills",
+                    "kind": "skill",
+                    "canonical_key": "react",
+                    "source_quote": "React",
+                    "source_start": 10,
+                    "source_end": 15,
+                },
+            ],
+        }
+
+    result = extract_requirements(
+        "Required: React Native.",
+        mode="ai",
+        engine=provider_engine(monkeypatch, response),
+    )
+    assert result.status == "failed"
+
+
+def test_ai_requirement_explicit_alias_still_validates_in_full_source(monkeypatch):
+    from backend.services.matching.extraction import extract_requirements
+
+    def response(payload):
+        return {
+            "chunk_index": 0,
+            "warnings": [],
+            "items": [
+                {
+                    "id": "r",
+                    "category": "required_skills",
+                    "kind": "skill",
+                    "canonical_key": "aws",
+                    "source_quote": "Amazon Web Services",
+                    "source_start": 10,
+                    "source_end": 29,
+                },
+            ],
+        }
+
+    result = extract_requirements(
+        "Required: Amazon Web Services.",
+        mode="ai",
+        engine=provider_engine(monkeypatch, response),
+    )
+    assert result.status == "complete"
+    assert result.items[0].canonical_key == "aws"
+
+
+@pytest.mark.parametrize(
+    "predicate", ["want to learn", "wants to learn", "wanted to learn"]
+)
+def test_learning_intent_scope_does_not_change_prior_demonstration(predicate):
+    reqs = requirements("Required: Python and AWS.")
+    result = evidence(f"Built Python services and {predicate} AWS.", reqs)
+    by_key = {
+        r.canonical_key: [e.level for e in result.items if e.requirement_id == r.id]
+        for r in reqs.items
+    }
+    assert by_key == {"python": ["demonstrated"], "aws": ["learning"]}
+
+
+@pytest.mark.parametrize(
+    "predicate", ["delivered", "developed", "implemented", "automated", "led"]
+)
+def test_supported_action_predicate_starts_its_own_positive_clause(predicate):
+    reqs = requirements("Required: Python and AWS.")
+    result = evidence(f"No experience with AWS but {predicate} Python services.", reqs)
+    by_key = {
+        r.canonical_key: [e.level for e in result.items if e.requirement_id == r.id]
+        for r in reqs.items
+    }
+    assert by_key == {"python": ["demonstrated"], "aws": ["contradicted"]}
+
+
+@pytest.mark.parametrize(
+    ("heading", "expected_section"),
+    [
+        ("Academic Projects:", "projects"),
+        ("Open-source Projects:", "projects"),
+        ("University Coursework:", "coursework"),
+        ("Other Activities:", "unknown"),
+    ],
+)
+def test_nonwork_heading_resets_inherited_employment_context(heading, expected_section):
+    reqs = requirements("Required: Python and 2 years of Python experience.")
+    text = f"Work Experience:\n2020-01 - 2022-01: Built Java services.\n{heading}\n2023-01 - Present: Built Python services."
+    result = evidence(text, reqs)
+    tenure_id = next(r.id for r in reqs.items if r.kind == "tenure")
+    assert result.unresolved_requirement_ids == [tenure_id]
+    assert all(not e.relevant_intervals for e in result.items)
+    assert result.items[0].section == expected_section
+
+
+def test_work_history_can_resume_after_a_project_section():
+    reqs = requirements("Required: 2 years of Python experience.")
+    text = "Academic Projects:\n2020-01 - 2022-01: Built Python services.\nWork History:\n2023-01 - Present: Built Python services."
+    result = evidence(text, reqs)
+    assert result.status == "complete"
+    assert len(result.items) == 1
+    assert result.items[0].section == "work"
+    assert result.items[0].relevant_intervals[0].start == date(2023, 1, 1)
+
+
+def test_plain_requirement_line_is_not_mistaken_for_an_unknown_heading():
+    reqs = requirements("Required skills:\nPython and AWS\nRequired: Rust.")
+    assert {r.canonical_key for r in reqs.items} == {"python", "aws", "rust"}
+
+
+def test_action_statement_with_dates_is_not_an_unknown_section_heading():
+    reqs = requirements("Required: 2 years of Python experience.")
+    result = evidence("Work History:\nBuilt Python services 2020-01 - 2025-01", reqs)
+    assert result.status == "complete"
+    assert result.items[0].section == "work"

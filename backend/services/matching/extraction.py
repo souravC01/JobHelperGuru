@@ -34,20 +34,21 @@ from .models import (
 )
 from .normalization import aliases_for_skill, canonicalize_skill
 
-EXTRACTOR_VERSION = "v2.2"
+EXTRACTOR_VERSION = "v2.3"
 _INSTRUCTION = re.compile(
     r"ignore\b.*\b(?:rubric|instructions?)|\bscore\s*\d+|\bsystem\s*prompt",
     re.IGNORECASE,
 )
 _NEGATIVE = re.compile(r"\b(?:no|not|never|without|lack(?:ing)?)\b", re.IGNORECASE)
 _LEARNING = re.compile(
-    r"\b(?:learning|studying|coursework|beginner|tutorial|want to learn|plan to learn)\b",
+    r"\b(?:learning|studying|coursework|beginner|tutorial|want(?:s|ed)? to learn|plan to learn)\b",
     re.IGNORECASE,
 )
 _ACTION = re.compile(
     r"\b(?:built|developed|implemented|delivered|deployed|maintained|designed|used|created|automated|led)\b",
     re.IGNORECASE,
 )
+_PREDICATE = f"(?:{_ACTION.pattern}|{_LEARNING.pattern}|{_NEGATIVE.pattern})"
 _TECHNOLOGIES = SKILL_TAXONOMY | {"React Native", "NoSQL"}
 _ELIGIBILITY = re.compile(
     r"\bgraduat(?:ion|ing|ed|es?)\b|\bclass\s+of\b|\bdegree\s+completion\b",
@@ -181,6 +182,20 @@ def _lines(text):
             yield match.start(), match.group()
 
 
+def _heading_name(line):
+    """Recognize standalone heading-like transitions, including unknown sections."""
+    value = line.strip()
+    if _ACTION.match(value) or _LEARNING.match(value) or _NEGATIVE.match(value):
+        return None
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9 &/'’()-]{0,79}:?", value):
+        return None
+    if len(value.split()) > 8:
+        return None
+    if not value.endswith(":") and len(value.split()) < 2:
+        return None
+    return value.rstrip(":").strip().casefold()
+
+
 def _eligibility_spans(text):
     """Identify eligibility clauses without interpreting their date-window rules."""
     for line_start, line in _lines(text):
@@ -212,23 +227,40 @@ def _requirement(
 def _offline_requirements(text):
     items = []
     section = None
-    for start, line in _lines(text):
+    lines = list(_lines(text))
+    for index, (start, line) in enumerate(lines):
         lower = line.lower()
         heading = re.match(
-            r"\s*(required(?: skills| qualifications)?|minimum qualifications|qualifications|skills|requirements|preferred(?: qualifications| skills)?|nice to have|responsibilities)\s*(?::\s*|$)",
+            r"\s*(required(?: skills| qualifications)?|(?:basic|minimum) qualifications|qualifications|skills|requirements|preferred(?: qualifications| skills)?|nice to have|responsibilities|what you bring|what you(?: will|'ll|’ll) do|about us|benefits|compensation|perks|who we are)\s*(?::\s*|$)",
             line,
             re.IGNORECASE,
         )
         if heading:
             name = heading.group(1).lower()
             section = (
-                "responsibilities"
+                "non_requirements"
+                if name
+                in {"about us", "benefits", "compensation", "perks", "who we are"}
+                else "responsibilities"
                 if name == "responsibilities"
+                or (name.startswith("what you") and name.endswith("do"))
                 else "preferred_qualifications"
                 if name.startswith(("preferred", "nice"))
                 else "required_skills"
             )
-        category = section
+        elif _heading_name(line) is not None:
+            next_line = lines[index + 1][1] if index + 1 < len(lines) else ""
+            if re.match(r"\s*[-*•]\s+", next_line):
+                section = "unclassified_requirements"
+                continue
+            if line.rstrip().endswith(":"):
+                section = None
+                continue
+        if section == "non_requirements":
+            continue
+        category = (
+            "required_skills" if section == "unclassified_requirements" else section
+        )
         if not category and re.search(
             r"\b(?:must|required|proficiency|experience with)\b", lower
         ):
@@ -267,7 +299,10 @@ def _offline_requirements(text):
                 )
                 if not group or _ELIGIBILITY.search(group):
                     continue
-                if category == "responsibilities":
+                if (
+                    category == "responsibilities"
+                    or section == "unclassified_requirements"
+                ):
                     items.append(
                         _requirement(
                             group, group_start, category, group.casefold(), "semantic"
@@ -412,7 +447,11 @@ def extract_requirements(
                     source_classifications[source_key] = classification
                     if item.kind == "skill":
                         for key in item.alternatives or [item.canonical_key]:
-                            if not any(_literal_spans(item.source_quote, key)):
+                            if not any(
+                                item.source_start <= span.start()
+                                and span.end() <= item.source_end
+                                for span in _literal_spans(text, key)
+                            ):
                                 raise ValueError(
                                     "literal requirements must occur in their source quote"
                                 )
@@ -508,6 +547,15 @@ def _source_clauses(text):
         "skills": r"(?:technical )?skills",
     }
     for line_start, line in _lines(text):
+        heading_name = _heading_name(line)
+        if heading_name is not None:
+            section = "unknown"
+            if re.search(r"\bprojects?\b|\bopen[- ]source\b", heading_name):
+                section = "projects"
+            elif re.search(r"\bcoursework\b|\bcourses\b|\btraining\b", heading_name):
+                section = "coursework"
+            elif re.search(r"\beducation\b|\bacademic background\b", heading_name):
+                section = "education"
         for name, pattern in headings.items():
             if re.match(rf"^\s*(?:{pattern})\s*(?::|$)", line, re.IGNORECASE):
                 section = name
@@ -520,7 +568,7 @@ def _source_clauses(text):
             start = 0
             # A bare technology conjunction shares its modifier. A new explicit
             # predicate starts a separate clause, so its polarity cannot leak back.
-            boundary = r"\s+(?=without\b)|(?:\s+(?:and|but)\s+|,\s*)(?=(?:(?:currently|actively)\s+)?(?:learning|studying|no|not|never|built|developed|implemented|used|created|deployed|maintained|designed)\b)"
+            boundary = rf"\s+(?=without\b)|(?:\s+(?:and|but)\s+|,\s*)(?=(?:(?:currently|actively)\s+)?{_PREDICATE})"
             for split in re.finditer(boundary, value, re.IGNORECASE):
                 yield (
                     line_start + sentence.start() + start,
