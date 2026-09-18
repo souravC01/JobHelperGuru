@@ -247,10 +247,12 @@ class Evaluation(MatchContract):
                     "match_score must be the half-up display value of raw_score"
                 )
 
-        if self.is_top_match and self.rank != 1:
-            raise ValueError("top matches must have rank 1")
-        if self.rank is not None and self.is_top_match != (self.rank == 1):
-            raise ValueError("rank and top-match flag must agree")
+        if self.is_top_match and (self.rank != 1 or self.match_score == 0):
+            raise ValueError("top matches must have rank 1 and a positive score")
+        if self.rank is not None:
+            expected_top = self.rank == 1 and (self.match_score or 0) > 0
+            if self.is_top_match != expected_top:
+                raise ValueError("rank and top-match flag must agree")
 
         if self.match_score is not None:
             if not self.requirement_results:
@@ -282,3 +284,12 @@ class EvaluationBatch(MatchContract):
         if len(resume_ids) != len(set(resume_ids)):
             raise ValueError("evaluation batches cannot contain duplicate resume IDs")
         return self
+
+
+class ScoreBreakdown(MatchContract):
+    match_score: StrictInt = Field(ge=0, le=100)
+    raw_score: RawScore
+    category_scores: dict[RequirementCategory, CategoryScore] = Field(
+        default_factory=dict
+    )
+    requirement_results: list[RequirementResult] = Field(default_factory=list)
