@@ -91,7 +91,7 @@ def test_relevant_intervals_exclude_unrelated_and_future_work():
     reqs = requirements("Required: 2 years of Python experience.")
     tenure = [r for r in reqs.items if r.required_months]
     assert len(tenure) == 1 and tenure[0].required_months == 24
-    text = "2020-01 - 2022-01: Built Java services.\n2023-02 - Present: Built Python services.\n2027-01 - 2028-01: Built Python services."
+    text = "Work Experience:\n2020-01 - 2022-01: Built Java services.\n2023-02 - Present: Built Python services.\n2027-01 - 2028-01: Built Python services."
     result = evidence(text, reqs)
     item = next(e for e in result.items if e.requirement_id == tenure[0].id)
     assert [(i.start, i.end) for i in item.relevant_intervals] == [
@@ -286,7 +286,9 @@ def test_unrecognized_skill_expression_remains_unresolved():
 
 def test_month_named_intervals_are_supported_conservatively():
     reqs = requirements("Required: 2 years of Python experience.")
-    result = evidence("February 2023 - Present: Built Python services.", reqs)
+    result = evidence(
+        "Work Experience:\nFebruary 2023 - Present: Built Python services.", reqs
+    )
     assert result.status == "complete"
     assert result.items[0].relevant_intervals[0].start == date(2023, 2, 1)
 
@@ -429,3 +431,325 @@ def test_ai_literal_classification_must_occur_in_requirement_quote(monkeypatch):
         "Python", mode="ai", engine=provider_engine(monkeypatch, response)
     )
     assert result.status == "failed"
+
+
+def test_every_and_connected_tenure_requirement_is_preserved():
+    reqs = requirements(
+        "Required: 2 years of Python experience and 3 years of Java experience."
+    )
+    assert {(r.canonical_key, r.required_months) for r in reqs.items} == {
+        ("python", 24),
+        ("java", 36),
+    }
+
+
+def test_unparsed_tenure_remainder_is_preserved_as_unresolved():
+    reqs = requirements(
+        "Required: 2 years of Python experience and ability to lead engineering teams."
+    )
+    assert len(reqs.items) == 2
+    result = evidence(
+        "Work Experience:\n2020-01 - Present: Built Python services.", reqs
+    )
+    assert result.status == "needs_review"
+    assert len(result.unresolved_requirement_ids) == 1
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "Qualifications:",
+        "Minimum Qualifications",
+        "Requirements:",
+        "Preferred:",
+        "Responsibilities",
+    ],
+)
+def test_requirement_bullets_in_all_sections_remain_in_rubric(heading):
+    reqs = requirements(
+        f"{heading}\n- Ability to lead engineering teams\nRequired: Python."
+    )
+    assert len(reqs.items) == 2
+    semantic = next(r for r in reqs.items if "lead engineering" in r.source_quote)
+    assert semantic.kind == "semantic"
+    assert evidence("Skills: Python", reqs).unresolved_requirement_ids == [semantic.id]
+
+
+@pytest.mark.parametrize(
+    ("job_skill", "resume_skill"),
+    [
+        ("React Native", "React"),
+        ("React", "React Native"),
+        ("SQL", "NoSQL"),
+        ("NoSQL", "SQL"),
+    ],
+)
+def test_related_technologies_are_distinct(job_skill, resume_skill):
+    reqs = requirements(f"Required: {job_skill}.")
+    assert reqs.items[0].canonical_key == job_skill.casefold()
+    result = evidence(f"Skills: {resume_skill}", reqs)
+    assert result.items[0].level == "not_evidenced"
+
+
+@pytest.mark.parametrize(
+    ("text", "aws_level"),
+    [
+        ("Built Python services without AWS.", "contradicted"),
+        ("Built Python services and currently learning AWS.", "learning"),
+        ("No experience with AWS but built Python services.", "contradicted"),
+    ],
+)
+def test_modifiers_scope_to_their_own_technology(text, aws_level):
+    reqs = requirements("Required: Python and AWS.")
+    result = evidence(text, reqs)
+    by_key = {
+        r.canonical_key: [e.level for e in result.items if e.requirement_id == r.id]
+        for r in reqs.items
+    }
+    assert by_key == {"python": ["demonstrated"], "aws": [aws_level]}
+
+
+@pytest.mark.parametrize(
+    "section", ["Personal Projects", "Projects", "Coursework", "Education", ""]
+)
+def test_nonemployment_dates_do_not_count_as_professional_tenure(section):
+    reqs = requirements("Required: 2 years of Python experience.")
+    result = evidence(f"{section}\n2020-01 - Present: Built Python services.", reqs)
+    assert result.status == "needs_review"
+    assert not result.items
+
+
+def test_evidence_retains_sections_and_professional_tenure_only():
+    reqs = requirements("Required: Python and 2 years of Python experience.")
+    text = "Work Experience:\n2023-01 - 2024-01: Built Python services.\nPersonal Projects:\n2020-01 - Present: Built Python apps.\nCoursework:\nLearning Python."
+    result = evidence(text, reqs)
+    tenure_id = next(r.id for r in reqs.items if r.kind == "tenure")
+    tenure = [e for e in result.items if e.requirement_id == tenure_id]
+    assert len(tenure) == 1
+    assert tenure[0].section == "work"
+    assert tenure[0].relevant_intervals[0].end == date(2024, 1, 1)
+    assert {e.section for e in result.items if e.requirement_id != tenure_id} == {
+        "work",
+        "projects",
+        "coursework",
+    }
+
+
+@pytest.mark.parametrize(
+    ("text", "quote", "start", "level"),
+    [
+        ("Built Java services.", "Java", 6, "demonstrated"),
+        ("No experience with Python.", "Python", 19, "demonstrated"),
+        ("Currently learning Python.", "Python", 19, "demonstrated"),
+    ],
+)
+def test_ai_literal_evidence_must_respect_full_clause(
+    monkeypatch, text, quote, start, level
+):
+    def response(payload):
+        return wire_evidence(
+            payload,
+            source_quote=quote,
+            source_start=start,
+            source_end=start + len(quote),
+            level=level,
+        )
+
+    result = evidence(
+        text,
+        requirements("Required: Python."),
+        mode="ai",
+        engine=provider_engine(monkeypatch, response),
+    )
+    assert result.status == "failed"
+
+
+def test_ai_accepts_explicit_alias_and_preserves_source_context(monkeypatch):
+    def response(payload):
+        return wire_evidence(
+            payload,
+            source_quote="Amazon Web Services",
+            source_start=8,
+            source_end=27,
+            level="listed",
+        )
+
+    result = evidence(
+        "Skills: Amazon Web Services",
+        requirements("Required: AWS."),
+        mode="ai",
+        engine=provider_engine(monkeypatch, response),
+    )
+    assert result.status == "complete"
+    assert result.items[0].section == "skills"
+
+
+def test_ai_does_not_trust_provider_claim_of_employment_section(monkeypatch):
+    text = "Personal Projects:\n2020-01 - 2025-01: Built Python services."
+
+    def response(payload):
+        return wire_evidence(
+            payload,
+            source_quote=text[19:],
+            source_start=19,
+            source_end=len(text),
+            level="demonstrated",
+            section="work",
+            relevant_intervals=[{"start": "2020-01-01", "end": "2025-01-01"}],
+        )
+
+    result = evidence(
+        text,
+        requirements("Required: 2 years of Python experience."),
+        mode="ai",
+        engine=provider_engine(monkeypatch, response),
+    )
+    assert result.status == "failed"
+
+
+@pytest.mark.parametrize(
+    "criterion",
+    [
+        "Class of 2026",
+        "Graduation between May 2025 and June 2026",
+        "Within 12 months of graduation",
+        "Graduating by June 2026",
+    ],
+)
+def test_graduation_criteria_are_eligibility_only(criterion):
+    from backend.services.matching.extraction import extract_eligibility
+
+    text = f"Required: Python and {criterion}."
+    reqs = requirements(text)
+    assert len(reqs.items) == 1
+    assert reqs.items[0].canonical_key == "python"
+    assert len(extract_eligibility(text, "Graduation: June 2026", as_of=TODAY)) == 1
+
+
+def test_ai_graduation_requirement_cannot_enter_scored_rubric(monkeypatch):
+    from backend.services.matching.extraction import extract_requirements
+
+    text = "Required: Python.\nClass of 2026."
+
+    def response(payload):
+        return {
+            "chunk_index": 0,
+            "warnings": [],
+            "items": [
+                {
+                    "id": "p",
+                    "category": "required_skills",
+                    "kind": "skill",
+                    "canonical_key": "python",
+                    "source_quote": "Python",
+                    "source_start": 10,
+                    "source_end": 16,
+                },
+                {
+                    "id": "g",
+                    "category": "required_skills",
+                    "kind": "semantic",
+                    "canonical_key": "class of 2026",
+                    "source_quote": "Class of 2026.",
+                    "source_start": 18,
+                    "source_end": 32,
+                },
+            ],
+        }
+
+    result = extract_requirements(
+        text, mode="ai", engine=provider_engine(monkeypatch, response)
+    )
+    assert result.status == "complete"
+    assert [r.canonical_key for r in result.items] == ["python"]
+
+
+def test_lowercase_explicit_aliases_remain_literal_requirements():
+    reqs = requirements("Required: c sharp and google cloud platform.")
+    assert {r.canonical_key for r in reqs.items} == {"c#", "gcp"}
+    assert all(r.kind == "skill" for r in reqs.items)
+
+
+def test_ai_cannot_quote_react_fragment_from_react_native(monkeypatch):
+    def response(payload):
+        return wire_evidence(
+            payload, source_quote="React", source_start=8, source_end=13
+        )
+
+    result = evidence(
+        "Skills: React Native",
+        requirements("Required: React."),
+        mode="ai",
+        engine=provider_engine(monkeypatch, response),
+    )
+    assert result.status == "failed"
+
+
+def test_ai_negative_work_context_cannot_supply_professional_months(monkeypatch):
+    text = "Work Experience:\n2020-01 - 2025-01: No experience with Python."
+
+    def response(payload):
+        return wire_evidence(
+            payload,
+            source_quote=text[17:],
+            source_start=17,
+            source_end=len(text),
+            level="contradicted",
+            relevant_intervals=[{"start": "2020-01-01", "end": "2025-01-01"}],
+        )
+
+    result = evidence(
+        text,
+        requirements("Required: 2 years of Python experience."),
+        mode="ai",
+        engine=provider_engine(monkeypatch, response),
+    )
+    assert result.status == "failed"
+
+
+def test_ai_positive_scoped_clause_and_alias_remain_accepted(monkeypatch):
+    def response(payload):
+        return wire_evidence(
+            payload, source_start=6, source_end=12, level="demonstrated"
+        )
+
+    result = evidence(
+        "Built Python services without AWS.",
+        requirements("Required: Python."),
+        mode="ai",
+        engine=provider_engine(monkeypatch, response),
+    )
+    assert result.status == "complete"
+
+
+def test_ai_eligibility_year_fragment_cannot_be_classified_as_a_skill(monkeypatch):
+    from backend.services.matching.extraction import extract_requirements
+
+    def response(payload):
+        return {
+            "chunk_index": 0,
+            "warnings": [],
+            "items": [
+                {
+                    "id": "g",
+                    "category": "required_skills",
+                    "kind": "skill",
+                    "canonical_key": "2026",
+                    "source_quote": "2026",
+                    "source_start": 9,
+                    "source_end": 13,
+                },
+            ],
+        }
+
+    result = extract_requirements(
+        "Class of 2026.", mode="ai", engine=provider_engine(monkeypatch, response)
+    )
+    assert not result.items
+    assert result.status == "needs_review"
+
+
+@pytest.mark.parametrize("criterion", ["Class of 2026/2027", "Graduation (June 2026)"])
+def test_punctuated_eligibility_does_not_become_semantic_merit(criterion):
+    reqs = requirements(f"Required: Python and {criterion}.")
+    assert [(r.canonical_key, r.kind) for r in reqs.items] == [("python", "skill")]
