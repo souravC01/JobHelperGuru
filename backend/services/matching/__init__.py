@@ -25,6 +25,15 @@ from .scoring import (
     rank_evaluations,
 )
 
+
+def __getattr__(name: str):
+    if name == "evaluate_resumes":
+        from .pipeline import evaluate_resumes
+
+        return evaluate_resumes
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
     "CategoryScore",
     "EligibilityResult",
@@ -45,5 +54,6 @@ __all__ = [
     "ScoreBreakdown",
     "calculate_score",
     "calculate_verified_months",
+    "evaluate_resumes",
     "rank_evaluations",
 ]

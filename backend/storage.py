@@ -381,6 +381,23 @@ class StorageService:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_resource_leases_user ON resource_leases(user_id, kind)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_resource_leases_expires ON resource_leases(expires_at)")
 
+            # Matching snapshots table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS matching_snapshots (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    resume_id TEXT NOT NULL,
+                    job_hash TEXT NOT NULL,
+                    source_hash TEXT NOT NULL,
+                    version_key TEXT NOT NULL,
+                    as_of TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_matching_snapshots_lookup ON matching_snapshots(user_id, resume_id, job_hash, version_key, as_of)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_matching_snapshots_resume ON matching_snapshots(user_id, resume_id)")
+
     # --- Users CRUD ---
     def create_user(
         self,
@@ -770,12 +787,101 @@ class StorageService:
         return [warning for warning in warnings if isinstance(warning, str)] if isinstance(warnings, list) else []
 
     def delete_resume(self, resume_id: str, user_id: Optional[str] = None) -> bool:
+        self.delete_matching_snapshots_for_resume(resume_id, user_id=user_id)
         with self._get_cursor() as cursor:
             if user_id:
                 cursor.execute(self._format_sql("DELETE FROM resumes WHERE id = ? AND user_id = ?"), (resume_id, user_id))
             else:
                 cursor.execute(self._format_sql("DELETE FROM resumes WHERE id = ?"), (resume_id,))
             return cursor.rowcount > 0
+
+    # --- Matching Snapshots CRUD ---
+    def save_matching_snapshot(
+        self,
+        *,
+        id: str,
+        user_id: str,
+        resume_id: str,
+        job_hash: str,
+        source_hash: str,
+        version_key: str,
+        as_of: str,
+        payload_json: str,
+    ) -> None:
+        now = datetime.now().isoformat()
+        with self._get_cursor() as cursor:
+            if self.is_postgres:
+                cursor.execute(
+                    """
+                    INSERT INTO matching_snapshots (id, user_id, resume_id, job_hash, source_hash, version_key, as_of, payload_json, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO UPDATE SET
+                        payload_json = EXCLUDED.payload_json,
+                        created_at = EXCLUDED.created_at
+                    """,
+                    (id, user_id, resume_id, job_hash, source_hash, version_key, as_of, payload_json, now),
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO matching_snapshots (id, user_id, resume_id, job_hash, source_hash, version_key, as_of, payload_json, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (id, user_id, resume_id, job_hash, source_hash, version_key, as_of, payload_json, now),
+                )
+
+    def get_matching_snapshot(
+        self,
+        *,
+        user_id: str,
+        resume_id: str,
+        job_hash: str,
+        version_key: str,
+        as_of: str,
+    ) -> Optional[dict]:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                self._format_sql(
+                    """
+                    SELECT id, user_id, resume_id, job_hash, source_hash, version_key, as_of, payload_json, created_at
+                    FROM matching_snapshots
+                    WHERE user_id = ? AND resume_id = ? AND job_hash = ? AND version_key = ? AND as_of = ?
+                    ORDER BY created_at DESC LIMIT 1
+                    """
+                ),
+                (user_id, resume_id, job_hash, version_key, as_of),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            if isinstance(row, dict):
+                return dict(row)
+            return {
+                "id": row[0],
+                "user_id": row[1],
+                "resume_id": row[2],
+                "job_hash": row[3],
+                "source_hash": row[4],
+                "version_key": row[5],
+                "as_of": row[6],
+                "payload_json": row[7],
+                "created_at": row[8],
+            }
+
+    def delete_matching_snapshots_for_resume(self, resume_id: str, user_id: Optional[str] = None) -> int:
+        with self._get_cursor() as cursor:
+            if user_id:
+                cursor.execute(
+                    self._format_sql("DELETE FROM matching_snapshots WHERE resume_id = ? AND user_id = ?"),
+                    (resume_id, user_id),
+                )
+            else:
+                cursor.execute(
+                    self._format_sql("DELETE FROM matching_snapshots WHERE resume_id = ?"),
+                    (resume_id,),
+                )
+            return cursor.rowcount
+
 
     def count_user_resumes(self, user_id: str) -> int:
         with self._get_cursor() as cursor:
