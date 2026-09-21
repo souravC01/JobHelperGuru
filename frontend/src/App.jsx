@@ -577,11 +577,17 @@ export default function App() {
                     setIsAuthOpen(true);
                     return;
                   }
-                  const matchingResume = resumes.find((r) => r.id === rank.resume_id);
+                  const targetId = rank?.resume_id || rank?.id;
+                  const matchingResume = resumes.find((r) => r.id === targetId);
                   handleOpenOptimizer(skills, matchingResume, sectionType);
                 }}
                 onBestResumeSelected={(best) => {
-                  const matchingResume = resumes.find((r) => r.id === best.resume_id);
+                  if (!best) {
+                    setSelectedResumeForJob(null);
+                    return;
+                  }
+                  const targetId = best.resume_id || best.id;
+                  const matchingResume = resumes.find((r) => r.id === targetId) || (best.id ? best : null);
                   if (matchingResume) setSelectedResumeForJob(matchingResume);
                 }}
                 onAiError={handleAiError}
