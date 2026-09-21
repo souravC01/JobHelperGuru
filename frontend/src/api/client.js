@@ -305,6 +305,31 @@ export async function matchResumes(payload) {
   return res.json();
 }
 
+
+export async function evaluateResumes(jobText, resumeIds, { fresh = false, asOf = null, signal = null } = {}) {
+  const payload = {
+    job_text: jobText,
+    resume_ids: resumeIds,
+    fresh: !!fresh,
+  };
+  if (asOf) {
+    payload.as_of = asOf;
+  }
+  const options = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  };
+  if (signal) {
+    options.signal = signal;
+  }
+  const res = await authFetch(`${API_BASE}/resumes/evaluate`, options);
+  if (!res.ok) {
+    throw await parseApiError(res, 'Failed to evaluate resumes');
+  }
+  return res.json();
+}
+
 export async function optimizeBullet({
   target_job_title,
   section_type,

@@ -332,3 +332,10 @@ class CoverLetterDocxRequest(BaseModel):
     candidate_name: Optional[str] = ""
     subject_line: Optional[str] = ""
 
+
+class ResumeEvaluationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    job_text: str
+    resume_ids: List[str]
+    fresh: bool = False
+    as_of: Optional[str] = None

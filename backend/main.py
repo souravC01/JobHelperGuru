@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from datetime import date
 from pathlib import Path
 from typing import Optional, List
 from dotenv import load_dotenv
@@ -39,6 +40,7 @@ from backend.models import (
     OutreachResponse,
     CoverLetterDocxRequest,
     User,
+    ResumeEvaluationRequest,
 )
 from backend.services.document_export import generate_cover_letter_docx, generate_docx_from_text
 from backend.storage import StorageService
@@ -48,6 +50,9 @@ from backend.services.excel_exporter import ExcelExporter
 from backend.services.object_storage import ObjectStorageService
 from backend.services.resume_files import ResumeFileManager, format_content_disposition
 from backend.services.outbound_http import SSRFBlockedError
+from backend.services.matching import evaluate_resumes
+from backend.services.matching.models import EvaluationBatch
+from backend.services.matching.chunking import MAX_DOCUMENT_CHARS
 
 from backend.routers.auth import router as auth_router, get_current_user, get_optional_user, set_storage_service
 
@@ -679,6 +684,74 @@ def match_resumes(req: MatchResumesRequest, current_user: User = Depends(get_cur
                 "can_switch_offline": True,
                 "error_type": "ai_api_error",
                 "model_name": ai.model_name,
+            },
+        )
+
+
+@app.post("/api/resumes/evaluate", response_model=EvaluationBatch)
+def evaluate_resumes_endpoint(
+    req: ResumeEvaluationRequest,
+    current_user: User = Depends(get_current_user),
+):
+    _check_user_ai_rate_limit(current_user.id)
+
+    # 1. Validate job_text
+    clean_job = (req.job_text or "").strip()
+    if not clean_job:
+        raise HTTPException(status_code=400, detail="Job text cannot be empty.")
+    if len(req.job_text) > MAX_DOCUMENT_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Job text exceeds maximum length of {MAX_DOCUMENT_CHARS:,} characters.",
+        )
+
+    # 2. Validate resume_ids
+    if not req.resume_ids:
+        raise HTTPException(status_code=400, detail="At least one resume ID must be provided.")
+    if len(req.resume_ids) != len(set(req.resume_ids)):
+        raise HTTPException(status_code=400, detail="Duplicate resume IDs are not allowed.")
+
+    # 3. Load authoritative resumes and enforce user ownership
+    resumes: List[Resume] = []
+    for r_id in req.resume_ids:
+        resume = storage.get_resume(r_id, user_id=current_user.id)
+        if not resume:
+            raise HTTPException(status_code=404, detail=f"Resume '{r_id}' not found.")
+        resumes.append(resume)
+
+    # 4. Parse as_of
+    if req.as_of:
+        try:
+            target_as_of = date.fromisoformat(req.as_of)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid as_of date format. Use YYYY-MM-DD.")
+    else:
+        target_as_of = date.today()
+
+    # 5. Resolve AI engine and evaluation mode
+    ai = get_ai_engine(user_id=current_user.id)
+    mode = "offline" if (ai.model_name == "offline-heuristic" or not getattr(ai, "api_key", None)) else "ai"
+
+    # 6. Execute evaluation pipeline
+    try:
+        return evaluate_resumes(
+            job_text=req.job_text,
+            resumes=resumes,
+            user_id=current_user.id,
+            as_of=target_as_of,
+            mode=mode,
+            engine=ai,
+            storage=storage,
+            fresh=req.fresh,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": str(e),
+                "can_switch_offline": True,
+                "error_type": "ai_api_error",
+                "model_name": getattr(ai, "model_name", "unknown"),
             },
         )
 
