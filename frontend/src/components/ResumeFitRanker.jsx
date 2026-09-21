@@ -1,22 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Crown,
-  CheckCircle,
   AlertTriangle,
   ChevronDown,
   ChevronUp,
   Sparkles,
   Wand2,
   Loader2,
-  Check,
-  FolderGit2,
-  Briefcase,
-  Plus,
+  AlertCircle,
   GraduationCap,
-  CheckCircle2,
-  X,
 } from 'lucide-react';
-import { matchResumes } from '../api/client';
+import { evaluateResumes, matchResumes } from '../api/client';
+import MatchEvidenceDetails from './MatchEvidenceDetails';
 
 export default function ResumeFitRanker({
   currentJob,
@@ -30,96 +25,210 @@ export default function ResumeFitRanker({
   onOpenBulletOptimizer,
   onAiError,
 }) {
-  const [rankedResumes, setRankedResumes] = useState([]);
+  const [evaluations, setEvaluations] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
-  const [selectedSkillsMap, setSelectedSkillsMap] = useState({});
+  const [needsJobReanalysis, setNeedsJobReanalysis] = useState(false);
 
-  const runRanking = async () => {
+  const requestIdRef = useRef(0);
+  const abortControllerRef = useRef(null);
+
+  const runEvaluation = async (isFresh = false) => {
     if (!currentJob || resumes.length === 0) return;
+
+    const jobText = currentJob?.raw_text || currentJob?.text || (typeof currentJob === 'string' ? currentJob : '');
+
+    // Fall back to legacy matchResumes if no full job text is present but analysis fields exist
+    if (!jobText || !jobText.trim()) {
+      if (currentJob?.analysis || currentJob?.title || currentJob?.required_skills) {
+        return runLegacyMatch();
+      }
+      setNeedsJobReanalysis(true);
+      return;
+    }
+    setNeedsJobReanalysis(false);
+
+    // Cancel prior in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    const currentRequestId = ++requestIdRef.current;
     setLoading(true);
+    setError(null);
+
+    try {
+      const resumeIds = resumes.map((r) => r.id);
+      const batch = await evaluateResumes(jobText, resumeIds, {
+        fresh: isFresh,
+        signal: abortController.signal,
+      });
+
+      // Guard against race conditions and out-of-order responses
+      if (currentRequestId !== requestIdRef.current) return;
+
+      const evals = batch?.evaluations || [];
+      setEvaluations(evals);
+
+      // Downstream best resume selection
+      if (evals.length > 0) {
+        // Select stable first tied top-match
+        const topEval = evals.find((e) => e.rank === 1 && (e.match_score || 0) > 0);
+        if (topEval) {
+          const matching = resumes.find((r) => r.id === topEval.resume_id) || null;
+          if (onBestResumeSelected) onBestResumeSelected(matching);
+        } else {
+          // Zero-scores or unscorable batches clear stale selection
+          if (onBestResumeSelected) onBestResumeSelected(null);
+        }
+        // Expand first resume by default
+        if (evals[0]?.resume_id) {
+          setExpandedId(evals[0].resume_id);
+        }
+      } else {
+        if (onBestResumeSelected) onBestResumeSelected(null);
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      if (currentRequestId !== requestIdRef.current) return;
+      console.error('Failed to evaluate resumes:', err);
+      setError(err.message || 'Evaluation failed.');
+      if (onBestResumeSelected) onBestResumeSelected(null);
+      if (onAiError && (err.canSwitchOffline || err.status === 502)) {
+        onAiError(err, () => runEvaluation(true));
+      }
+    } finally {
+      if (currentRequestId === requestIdRef.current) {
+        setLoading(false);
+      }
+    }
+  };
+
+  const runLegacyMatch = async () => {
+    const currentRequestId = ++requestIdRef.current;
+    setLoading(true);
+    setError(null);
+
     try {
       const jobPayload = currentJob?.analysis || currentJob;
       const results = await matchResumes({ job: jobPayload, resumes });
-      setRankedResumes(results);
-      if (results.length > 0) {
-        setExpandedId(results[0].resume_id);
+      if (currentRequestId !== requestIdRef.current) return;
+
+      // Adapt legacy response to evaluation format
+      const adapted = (results || []).map((r, idx) => ({
+        resume_id: r.resume_id,
+        resume_name: r.resume_name,
+        match_score: r.match_score,
+        rank: idx + 1,
+        is_top_match: !!(r.is_best_fit && r.match_score > 0),
+        status: 'complete',
+        category_scores: {
+          required_skills: {
+            weight: 100,
+            credited_weight: `${r.match_score}.00`,
+            coverage_ratio: `${r.match_score / 100}`,
+          },
+        },
+        requirement_results: (r.matched_keywords || []).map((k) => ({
+          requirement: { id: k, text: k, category: 'required_skills' },
+          evidence: [{ level: 'demonstrated', source_quote: k }],
+        })).concat(
+          (r.missing_keywords || []).map((k) => ({
+            requirement: { id: k, text: k, category: 'required_skills' },
+            evidence: [{ level: 'not_evidenced', source_quote: '' }],
+          }))
+        ),
+        eligibility: {
+          is_new_grad_role: r.is_new_grad_role,
+          eligible: r.new_grad_eligible,
+          status: r.graduation_status,
+          graduation_date: r.graduation_date,
+        },
+        is_legacy: true,
+        fit_summary: r.fit_summary,
+      }));
+
+      setEvaluations(adapted);
+      if (adapted.length > 0) {
+        setExpandedId(adapted[0].resume_id);
         if (onBestResumeSelected) {
-          onBestResumeSelected(results[0]);
+          const matching = resumes.find((res) => res.id === adapted[0].resume_id) || null;
+          onBestResumeSelected(matching);
         }
       }
     } catch (err) {
-      console.error('Failed to rank resumes:', err);
+      if (currentRequestId !== requestIdRef.current) return;
+      console.error('Failed to rank resumes (legacy fallback):', err);
+      setError(err.message || 'Legacy match failed.');
       if (onAiError && (err.canSwitchOffline || err.status === 502)) {
-        onAiError(err, () => runRanking());
+        onAiError(err, () => runLegacyMatch());
       }
     } finally {
-      setLoading(false);
+      if (currentRequestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     if (currentJob && resumes.length > 0) {
-      runRanking();
+      runEvaluation();
     }
-  }, [currentJob, resumes.length, refreshKey]);
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [
+    currentJob?.raw_text,
+    currentJob?.text,
+    currentJob?.id,
+    currentJob?.title,
+    resumes.map((r) => `${r.id}:${r.updated_at || r.content?.length || 0}`).join(','),
+    refreshKey,
+  ]);
 
   if (!currentJob || resumes.length === 0) {
     return null;
   }
 
-  const toggleSkillSelection = (resumeId, skill) => {
-    setSelectedSkillsMap((prev) => {
-      const currentList = prev[resumeId] || [];
-      const isSelected = currentList.includes(skill);
-      const updatedList = isSelected
-        ? currentList.filter((s) => s !== skill)
-        : [...currentList, skill];
-
-      return {
-        ...prev,
-        [resumeId]: updatedList,
-      };
-    });
-  };
-
-  const selectAllSkills = (resumeId, allSkills) => {
-    setSelectedSkillsMap((prev) => ({
-      ...prev,
-      [resumeId]: [...allSkills],
-    }));
-  };
-
-  const clearSkills = (resumeId) => {
-    setSelectedSkillsMap((prev) => ({
-      ...prev,
-      [resumeId]: [],
-    }));
-  };
-
-  const handleIncorporate = (resume, sectionType) => {
-    const selected = selectedSkillsMap[resume.resume_id] || [];
-    if (selected.length === 0) return;
-    if (onSelectKeywordForOptimization) {
-      onSelectKeywordForOptimization(selected, resume, sectionType);
+  // Count rank frequency to display tie badges
+  const rankCounts = {};
+  evaluations.forEach((e) => {
+    if (e.rank != null) {
+      rankCounts[e.rank] = (rankCounts[e.rank] || 0) + 1;
     }
-  };
+  });
+
+  // Sort displayed cards according to evaluations, placing unranked/missing at the end
+  const sortedResumes = [...resumes].sort((a, b) => {
+    const evalA = evaluations.find((e) => e.resume_id === a.id);
+    const evalB = evaluations.find((e) => e.resume_id === b.id);
+    const rankA = evalA?.rank ?? 9999;
+    const rankB = evalB?.rank ?? 9999;
+    if (rankA !== rankB) return rankA - rankB;
+    return a.id.localeCompare(b.id);
+  });
 
   return (
-    <div className="card-corporate p-6 bg-white border border-[#e0e0e0] rounded-lg space-y-5 animate-fade-in">
+    <div className="card-corporate p-6 bg-white dark:bg-[#1a1d24] border border-[#e0e0e0] dark:border-[#2b313c] rounded-lg space-y-5 animate-fade-in" data-testid="resume-fit-ranker">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div>
-          <h3 className="text-base font-bold text-[#000000] flex items-center gap-2 tracking-tight">
+          <h3 className="text-base font-bold text-[#000000] dark:text-[#f3f6f8] flex items-center gap-2 tracking-tight">
             <Crown className="text-[#0a66c2]" size={18} />
-            <span>Resume Best-Fit & ATS Alignment</span>
+            <span>Resume Best-Fit & Evidence-Based Alignment</span>
           </h3>
-          <p className="text-xs text-[#666666] mt-0.5">
-            Evaluates candidate resumes against ATS keywords and required qualifications.
+          <p className="text-xs text-[#666666] dark:text-[#9aa1b2] mt-0.5">
+            Scores candidate resumes deterministically from verified job requirements and candidate evidence.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
+            type="button"
             onClick={() => {
               if (!onOpenBulletOptimizer) return;
               const job = currentJob.analysis || currentJob;
@@ -135,7 +244,8 @@ export default function ResumeFitRanker({
             <span>BulletCraft</span>
           </button>
           <button
-            onClick={runRanking}
+            type="button"
+            onClick={() => runEvaluation(true)}
             disabled={loading}
             className="btn-secondary-corporate text-xs"
           >
@@ -145,124 +255,162 @@ export default function ResumeFitRanker({
         </div>
       </div>
 
+      {needsJobReanalysis && (
+        <div className="p-3.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2">
+          <AlertCircle size={16} className="shrink-0 text-amber-600 dark:text-amber-400" />
+          <span>
+            The current job record has no source text available for requirement evidence matching. Please re-analyze the job description.
+          </span>
+        </div>
+      )}
+
+      {error && (
+        <div className="p-3.5 rounded-lg bg-[#b24020]/10 border border-[#b24020]/30 text-[#b24020] dark:text-[#ff8162] text-xs flex items-center gap-2">
+          <AlertCircle size={16} className="shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
       {loading ? (
-        <div className="py-12 text-center text-xs text-[#666666] flex flex-col items-center justify-center gap-3">
+        <div className="py-12 text-center text-xs text-[#666666] dark:text-[#9aa1b2] flex flex-col items-center justify-center gap-3">
           <Loader2 size={22} className="animate-spin text-[#0a66c2]" />
-          <span className="font-mono">Analyzing resume keywords and scoring ATS alignment...</span>
+          <span className="font-mono">Extracting requirements, matching evidence quotes, and scoring alignment...</span>
         </div>
       ) : (
         <div className="space-y-4">
-          {rankedResumes.map((rank, idx) => {
-            const isBest = rank.is_best_fit;
-            const isExpanded = expandedId === rank.resume_id;
-            const selectedSkills = selectedSkillsMap[rank.resume_id] || [];
-            const adoptedSkills = (adoptedSkillsMap && adoptedSkillsMap[rank.resume_id]) || [];
+          {sortedResumes.map((resume) => {
+            const evaluation = evaluations.find((e) => e.resume_id === resume.id);
+            const isExpanded = expandedId === resume.id;
+            const adoptedSkills = (adoptedSkillsMap && adoptedSkillsMap[resume.id]) || [];
 
-            const nonSkillTerms = ['new grad', 'new graduate', 'entry level', 'recent grad', 'degree'];
-            const displayMissing = (rank.missing_keywords || []).filter(
-              (k) => !nonSkillTerms.some((ns) => k.toLowerCase().includes(ns)) && !adoptedSkills.includes(k)
-            );
-
-            // Dynamically recalculate projected match score with adopted skills
-            const totalKeywords = (rank.matched_keywords.length + (rank.missing_keywords?.length || 0)) || 1;
-            const baseScore = rank.match_score;
-            const hasAdopted = adoptedSkills.length > 0;
-            const projectedScore = hasAdopted
-              ? Math.min(100, Math.max(baseScore, Math.round(((rank.matched_keywords.length + adoptedSkills.length) / totalKeywords) * 100)))
-              : baseScore;
-            const scoreDiff = projectedScore - baseScore;
+            const isUnranked = !evaluation || evaluation.status !== 'complete' || evaluation.match_score == null;
+            const isTie = evaluation?.rank != null && (rankCounts[evaluation.rank] > 1);
+            const isTopMatch = !isUnranked && evaluation.is_top_match && (evaluation.match_score || 0) > 0;
+            const score = evaluation?.match_score;
 
             return (
               <div
-                key={rank.resume_id}
-                className={`card-corporate p-5 transition-all bg-white rounded-lg ${
-                  isBest
+                key={resume.id}
+                className={`card-corporate p-5 transition-all bg-white dark:bg-[#1a1d24] rounded-lg ${
+                  isTopMatch
                     ? 'border-2 border-[#0a66c2] shadow-sm'
-                    : 'border border-[#e0e0e0]'
+                    : 'border border-[#e0e0e0] dark:border-[#2b313c]'
                 }`}
+                data-testid={`resume-card-${resume.id}`}
               >
                 {/* Header Row */}
                 <div
-                  onClick={() => setExpandedId(isExpanded ? null : rank.resume_id)}
+                  onClick={() => setExpandedId(isExpanded ? null : resume.id)}
                   className="flex items-center justify-between gap-4 cursor-pointer select-none"
                 >
                   <div className="flex items-center gap-3.5">
+                    {/* Rank Badge */}
                     <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-mono font-bold ${
-                        isBest
+                      className={`min-w-8 h-8 px-2 rounded-full flex items-center justify-center text-xs font-mono font-bold ${
+                        isTopMatch
                           ? 'bg-[#0a66c2] text-white shadow-sm'
-                          : 'bg-[#f3f6f8] text-[#000000] border border-[#e0e0e0]'
+                          : isUnranked
+                          ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30'
+                          : 'bg-[#f3f6f8] dark:bg-[#12141a] text-[#000000] dark:text-[#f3f6f8] border border-[#e0e0e0] dark:border-[#2b313c]'
                       }`}
                     >
-                      {idx + 1}
+                      {isUnranked
+                        ? 'Unranked'
+                        : isTie
+                        ? `Rank #${evaluation.rank} Tie`
+                        : `#${evaluation.rank}`}
                     </div>
+
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-[#000000]">{rank.resume_name}</span>
-                        {isBest && (
-                          <span className="badge-corporate bg-[#057642]/10 border border-[#057642]/25 text-[#057642] text-[10px] py-0.5 font-bold">
-                            Top Fit
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-[#000000] dark:text-[#f3f6f8]">
+                          {resume.name}
+                        </span>
+                        {isTopMatch && (
+                          <span className="badge-corporate bg-[#057642]/10 dark:bg-[#057642]/20 border border-[#057642]/25 text-[#057642] dark:text-[#45c586] text-[10px] py-0.5 font-bold">
+                            {isTie ? 'Rank #1 Tie - Top Fit' : 'Top Fit'}
+                          </span>
+                        )}
+                        {adoptedSkills.length > 0 && (
+                          <span
+                            className="badge-corporate bg-[#0a66c2]/10 border border-[#0a66c2]/30 text-[#0a66c2] dark:text-[#70b5f9] text-[10px] py-0.5 px-1.5 font-semibold"
+                            title="Adopted in BulletCraft preview. Save resume to update backend score."
+                          >
+                            +{adoptedSkills.length} in preview
                           </span>
                         )}
                       </div>
 
-                      {/* New Grad Eligibility Status Badge */}
-                      {rank.is_new_grad_role && (
+                      {/* Eligibility Summary in Header */}
+                      {evaluation?.eligibility?.is_new_grad_role && (
                         <div className="flex items-center gap-1.5 mt-1">
-                          {rank.new_grad_eligible === true && (
-                            <span className="badge-corporate bg-[#057642]/10 border border-[#057642]/25 text-[#057642] text-[10px] py-0.5 px-2 flex items-center gap-1 font-semibold">
-                              <GraduationCap size={12} className="text-[#057642]" />
-                              <span>New Grad Eligible ({rank.graduation_status})</span>
+                          {evaluation.eligibility.eligible === true && (
+                            <span className="badge-corporate bg-[#057642]/10 border border-[#057642]/25 text-[#057642] dark:text-[#45c586] text-[10px] py-0.5 px-2 flex items-center gap-1 font-semibold">
+                              <GraduationCap size={12} className="text-[#057642] dark:text-[#45c586]" />
+                              <span>New Grad Eligible ({evaluation.eligibility.status})</span>
                             </span>
                           )}
-                          {rank.new_grad_eligible === false && (
-                            <span className="badge-corporate bg-[#b24020]/10 border border-[#b24020]/25 text-[#b24020] text-[10px] py-0.5 px-2 flex items-center gap-1 font-semibold">
-                              <AlertTriangle size={12} className="text-[#b24020]" />
-                              <span>Timeline Ineligible ({rank.graduation_status || 'Outside window'})</span>
+                          {evaluation.eligibility.eligible === false && (
+                            <span className="badge-corporate bg-[#b24020]/10 border border-[#b24020]/25 text-[#b24020] dark:text-[#ff8162] text-[10px] py-0.5 px-2 flex items-center gap-1 font-semibold">
+                              <AlertTriangle size={12} className="text-[#b24020] dark:text-[#ff8162]" />
+                              <span>Timeline Ineligible ({evaluation.eligibility.status || 'Outside window'})</span>
                             </span>
                           )}
-                          {(rank.new_grad_eligible === null || rank.new_grad_eligible === undefined) && (
-                            <span className="badge-corporate bg-[#555555]/10 border border-[#555555]/25 text-[#555555] text-[10px] py-0.5 px-2 flex items-center gap-1 font-semibold">
-                              <GraduationCap size={12} className="text-[#666666]" />
-                              <span>Timeline Unknown ({rank.graduation_status || 'Graduation date not detected'})</span>
+                          {(evaluation.eligibility.eligible === null || evaluation.eligibility.eligible === undefined) && (
+                            <span className="badge-corporate bg-[#555555]/10 border border-[#555555]/25 text-[#555555] dark:text-[#9aa1b2] text-[10px] py-0.5 px-2 flex items-center gap-1 font-semibold">
+                              <GraduationCap size={12} className="text-[#666666] dark:text-[#9aa1b2]" />
+                              <span>Timeline Unknown ({evaluation.eligibility.status || 'Graduation date not detected'})</span>
                             </span>
                           )}
                         </div>
                       )}
-
                     </div>
                   </div>
 
-                  {/* Progress Score Gauge */}
+                  {/* Progress Gauge */}
                   <div className="flex items-center gap-4">
                     <div className="text-right">
                       <div className="flex items-center justify-end gap-1.5 font-mono">
-                        <span className={`text-base font-bold ${
-                          projectedScore >= 80 ? 'text-[#057642]' : projectedScore >= 60 ? 'text-[#0a66c2]' : 'text-[#b24020]'
-                        }`}>
-                          {projectedScore}%
-                        </span>
-                        {hasAdopted && scoreDiff > 0 && (
-                          <span className="badge-corporate bg-[#0a66c2]/10 border border-[#0a66c2]/30 text-[#0a66c2] text-[10px] py-0.2 px-1.5 font-bold">
-                            +{scoreDiff}% Boost
+                        {isUnranked ? (
+                          <span className="text-xs text-amber-700 dark:text-amber-300 font-semibold">
+                            Needs Review
+                          </span>
+                        ) : (
+                          <span
+                            className={`text-base font-bold ${
+                              score >= 80
+                                ? 'text-[#057642] dark:text-[#45c586]'
+                                : score >= 60
+                                ? 'text-[#0a66c2] dark:text-[#70b5f9]'
+                                : 'text-[#b24020] dark:text-[#ff8162]'
+                            }`}
+                          >
+                            {score}%
                           </span>
                         )}
                       </div>
-                      <div className="w-28 bg-[#e0e0e0] rounded-full h-1.5 overflow-hidden mt-1.5 relative flex">
-                        <div
-                          className="h-full bg-[#057642] transition-all duration-500 rounded-full"
-                          style={{ width: `${baseScore}%` }}
-                        />
-                        {hasAdopted && scoreDiff > 0 && (
+
+                      {!isUnranked && (
+                        <div className="w-28 bg-[#e0e0e0] dark:bg-[#2b313c] rounded-full h-1.5 overflow-hidden mt-1.5">
                           <div
-                            className="h-full bg-[#0a66c2] transition-all duration-500 rounded-full"
-                            style={{ width: `${scoreDiff}%` }}
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              score >= 80
+                                ? 'bg-[#057642] dark:bg-[#45c586]'
+                                : score >= 60
+                                ? 'bg-[#0a66c2] dark:bg-[#70b5f9]'
+                                : 'bg-[#b24020] dark:bg-[#ff8162]'
+                            }`}
+                            style={{ width: `${score}%` }}
                           />
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
 
-                    <button className="text-[#666666] hover:text-[#000000] p-1 transition-colors">
+                    <button
+                      type="button"
+                      className="text-[#666666] dark:text-[#9aa1b2] hover:text-[#000000] dark:hover:text-[#f3f6f8] p-1 transition-colors"
+                      aria-label="Toggle details"
+                    >
                       {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
                   </div>
@@ -270,218 +418,33 @@ export default function ResumeFitRanker({
 
                 {/* Expanded Details */}
                 {isExpanded && (
-                  <div className="mt-4 pt-4 border-t border-[#e0e0e0] space-y-4 animate-fade-in text-xs">
-                    {/* Education & Graduation Status */}
-                    {rank.graduation_status && (
-                      <div className="p-3 rounded-lg bg-[#f3f6f8] border border-[#e0e0e0] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                        <div className="flex items-center gap-2">
-                          <GraduationCap
-                            size={15}
-                            className={
-                              rank.new_grad_eligible === true
-                                ? "text-[#057642]"
-                                : rank.new_grad_eligible === false
-                                ? "text-[#b24020]"
-                                : "text-[#666666]"
-                            }
-                          />
-                          <div>
-                            <span className="font-semibold text-[#000000]">Education & Timeline: </span>
-                            <span className="text-[#666666]">{rank.graduation_status}</span>
-                          </div>
+                  <div className="mt-4 pt-4 border-t border-[#e0e0e0] dark:border-[#2b313c]">
+                    {isUnranked ? (
+                      <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs space-y-2 text-amber-900 dark:text-amber-200">
+                        <div className="flex items-center gap-2 font-bold">
+                          <AlertTriangle size={15} className="text-amber-600 dark:text-amber-400" />
+                          <span>Evaluation Incomplete</span>
                         </div>
-                        {rank.is_new_grad_role && (
-                          <span className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 self-start sm:self-auto ${
-                            rank.new_grad_eligible === true
-                              ? 'bg-[#057642]/10 text-[#057642] border border-[#057642]/30'
-                              : rank.new_grad_eligible === false
-                              ? 'bg-[#b24020]/10 text-[#b24020] border border-[#b24020]/30'
-                              : 'bg-[#555555]/10 text-[#555555] border border-[#555555]/30'
-                          }`}>
-                            {rank.new_grad_eligible === true
-                              ? 'Meets Timeline'
-                              : rank.new_grad_eligible === false
-                              ? 'Ineligible'
-                              : 'Timeline Unknown'}
-                          </span>
+                        <p>
+                          This resume could not be scored automatically against the job requirements.
+                        </p>
+                        {evaluation?.warnings?.length > 0 && (
+                          <ul className="list-disc list-inside space-y-1 text-[11px] opacity-90">
+                            {evaluation.warnings.map((w, i) => (
+                              <li key={i}>{w}</li>
+                            ))}
+                          </ul>
                         )}
                       </div>
+                    ) : (
+                      <MatchEvidenceDetails
+                        evaluation={evaluation}
+                        resume={resume}
+                        adoptedSkills={adoptedSkills}
+                        onRemoveAdoptedSkill={onRemoveAdoptedSkill}
+                        onSelectKeywordForOptimization={onSelectKeywordForOptimization}
+                      />
                     )}
-
-                    {/* Fit Explanation */}
-                    {rank.fit_summary && (
-                      <div className="p-3 rounded-lg bg-[#f3f6f8] border border-[#e0e0e0] text-[#000000] leading-relaxed">
-                        <strong className="text-[#0a66c2]">Match Insights: </strong>
-                        {rank.fit_summary}
-                      </div>
-                    )}
-
-                    {/* Matched Keywords */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <h5 className="font-bold text-[#057642] flex items-center gap-1.5 text-xs">
-                          <CheckCircle size={13} />
-                          <span>Matched Technical Skills ({rank.matched_keywords.length + adoptedSkills.length})</span>
-                        </h5>
-                        {adoptedSkills.length > 0 && (
-                          <span className="text-[10px] text-[#0a66c2] font-semibold bg-[#0a66c2]/10 border border-[#0a66c2]/30 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <Sparkles size={10} className="text-[#0a66c2]" />
-                            <span>{adoptedSkills.length} Potentially Added</span>
-                          </span>
-                        )}
-                      </div>
-
-                      {rank.matched_keywords.length === 0 && adoptedSkills.length === 0 ? (
-                        <span className="text-[#666666] italic">No direct matches found.</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {/* Verified matches from original resume text */}
-                          {rank.matched_keywords.map((kw, i) => (
-                            <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#057642]/10 text-[#057642] border border-[#057642]/20 text-[11px] font-mono font-semibold">
-                              {kw} ✓
-                            </span>
-                          ))}
-
-                          {/* Potentially added skills */}
-                          {adoptedSkills.map((kw, i) => (
-                            <span
-                              key={`adopted-${i}`}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#0a66c2]/10 border border-[#0a66c2]/30 text-[#0a66c2] text-[11px] font-mono font-semibold animate-fade-in"
-                              title="Potentially added to resume - re-evaluated and counting towards score!"
-                            >
-                              <Sparkles size={11} className="text-[#0a66c2]" />
-                              <span>{kw}</span>
-                              <span className="text-[9px] uppercase font-bold text-[#0a66c2] bg-[#0a66c2]/15 px-1 py-0.2 rounded">
-                                Added
-                              </span>
-                              {onRemoveAdoptedSkill && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onRemoveAdoptedSkill(kw, rank.resume_id);
-                                  }}
-                                  className="text-[#0a66c2] hover:text-[#b24020] rounded p-0.5 transition-colors ml-0.5"
-                                  title="Remove from added and return to missing"
-                                >
-                                  <X size={10} />
-                                </button>
-                              )}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Missing Skills Multi-Select */}
-                    <div className="space-y-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <h5 className="font-bold text-[#b24020] flex items-center gap-1.5 text-xs">
-                          <AlertTriangle size={13} />
-                          <span>Missing Skills ({displayMissing.length})</span>
-                          <span className="text-[11px] text-[#666666] font-normal">
-                            - Click skills to select for bullet generation
-                          </span>
-                        </h5>
-
-                        {displayMissing.length > 0 && (
-                          <div className="flex items-center gap-2 text-xs">
-                            <button
-                              onClick={() => selectAllSkills(rank.resume_id, displayMissing)}
-                              className="text-[#0a66c2] hover:underline font-semibold"
-                            >
-                              Select All
-                            </button>
-                            <span className="text-[#e0e0e0]">|</span>
-                            <button
-                              onClick={() => clearSkills(rank.resume_id)}
-                              className="text-[#666666] hover:text-[#000000]"
-                            >
-                              Clear
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      {displayMissing.length === 0 ? (
-                        <span className="text-[#057642] font-semibold italic">All key target qualifications covered!</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {displayMissing.map((kw, i) => {
-                            const isSelected = selectedSkills.includes(kw);
-
-                            return (
-                              <button
-                                key={i}
-                                type="button"
-                                onClick={() => toggleSkillSelection(rank.resume_id, kw)}
-                                className={`inline-flex items-center gap-1.5 text-xs py-1 px-3 rounded-full transition-all cursor-pointer font-mono ${
-                                  isSelected
-                                    ? 'bg-[#0a66c2] text-white border border-[#0a66c2] font-bold shadow-sm'
-                                    : 'bg-[#b24020]/10 border border-[#b24020]/25 text-[#b24020] hover:bg-[#b24020]/20 font-semibold'
-                                }`}
-                              >
-                                {isSelected ? (
-                                  <Check size={12} className="text-white stroke-[3]" />
-                                ) : (
-                                  <Plus size={11} className="text-[#b24020]" />
-                                )}
-                                <span>{kw}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {/* Action Bar when 1 or more skills selected */}
-                      {selectedSkills.length > 0 && (
-                        <div className="p-3.5 rounded-lg bg-[#f3f6f8] border border-[#0a66c2]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in shadow-sm">
-                          <div className="flex items-center gap-2">
-                            <Sparkles size={15} className="text-[#0a66c2] shrink-0" />
-                            <div>
-                              <span className="text-xs font-bold text-[#000000]">
-                                {selectedSkills.length} Skill{selectedSkills.length > 1 ? 's' : ''} Selected:{' '}
-                              </span>
-                              <span className="text-xs font-mono text-[#0a66c2] font-semibold">
-                                {selectedSkills.join(', ')}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {onAdoptSkills && (
-                              <button
-                                onClick={() => {
-                                  onAdoptSkills(selectedSkills, rank.resume_id);
-                                  clearSkills(rank.resume_id);
-                                }}
-                                className="btn-secondary-corporate text-xs py-1 px-3"
-                                title="Move selected skills to Matched and re-evaluate score immediately"
-                              >
-                                <CheckCircle2 size={12} className="text-[#0a66c2]" />
-                                <span>Mark Added</span>
-                              </button>
-                            )}
-
-                            <button
-                              onClick={() => handleIncorporate(rank, 'project')}
-                              className="btn-primary-corporate text-xs py-1 px-3"
-                            >
-                              <FolderGit2 size={12} />
-                              <span>Incorporate in Project</span>
-                            </button>
-
-                            <button
-                              onClick={() => handleIncorporate(rank, 'work_history')}
-                              className="btn-secondary-corporate text-xs py-1 px-3"
-                            >
-                              <Briefcase size={12} />
-                              <span>Incorporate in Work</span>
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 )}
               </div>
