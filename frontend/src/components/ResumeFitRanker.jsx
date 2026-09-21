@@ -37,7 +37,11 @@ export default function ResumeFitRanker({
   const runEvaluation = async (isFresh = false) => {
     if (!currentJob || resumes.length === 0) return;
 
-    const jobText = currentJob?.raw_text || currentJob?.text || (typeof currentJob === 'string' ? currentJob : '');
+    const jobText =
+      currentJob?.raw_text ||
+      currentJob?.analysis?.raw_text ||
+      currentJob?.text ||
+      (typeof currentJob === 'string' ? currentJob : '');
 
     // Fall back to legacy matchResumes if no full job text is present but analysis fields exist
     if (!jobText || !jobText.trim()) {
@@ -184,6 +188,7 @@ export default function ResumeFitRanker({
     };
   }, [
     currentJob?.raw_text,
+    currentJob?.analysis?.raw_text,
     currentJob?.text,
     currentJob?.id,
     currentJob?.title,

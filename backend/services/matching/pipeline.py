@@ -104,6 +104,7 @@ def _evaluate_single_resume(
         )
 
     # Extract evidence & eligibility
+    extraction_exc: Exception | None = None
     try:
         evidence_extraction = extract_evidence(
             resume.content,
