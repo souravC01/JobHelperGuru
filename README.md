@@ -3,13 +3,19 @@
 **Understand job requirements, tailor your resume, and keep your applications organized.**
 
 [![Live Demo](https://img.shields.io/badge/Try%20the%20App-JobHelperGuru-0a66c2?style=for-the-badge)](https://jobhelperguru.vercel.app/)
+[![Case Study](https://img.shields.io/badge/Portfolio_Case_Study-2563EB?style=for-the-badge&logo=readme&logoColor=white)](https://souravchandhok.dev/projects/jobhelperguru/)
 [![CI/CD Pipeline](https://github.com/souravC01/JobHelperGuru/actions/workflows/ci.yml/badge.svg)](https://github.com/souravC01/JobHelperGuru/actions/workflows/ci.yml)
+
 
 JobHelperGuru brings job analysis, resume matching, writing assistance, and application tracking into one workspace. Start with a job link or pasted description, compare your resumes against its requirements, draft tailored bullets and outreach, then track the application through to an outcome.
 
 Use the built-in heuristic engine without an AI key, connect your own compatible AI provider, or run a local model with Ollama.
 
-[Explore the live app](https://jobhelperguru.vercel.app/) · [Run locally](#run-locally) · [Development](#development-and-tests) · [Deployment](#deployment)
+[Explore the live app](https://jobhelperguru.vercel.app/) ·
+[Portfolio case study](https://souravchandhok.dev/projects/jobhelperguru/) ·
+[Run locally](#run-locally) ·
+[Development](#development-and-tests) ·
+[Deployment](#deployment)
 
 ![Live analysis of Amazon's Software Development Engineer, Early Career 2026 role, showing categorized requirements and ATS keywords](docs/images/job-analysis.jpg)
 
