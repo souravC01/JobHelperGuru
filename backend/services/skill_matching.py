@@ -1,24 +1,22 @@
 import re
-from typing import List, Tuple, Set, Optional
+
+from backend.services.matching.normalization import (
+    aliases_for_skill,
+    canonicalize_skill,
+)
 
 
-def contains_skill(text: str, skill: str) -> bool:
+def _contains_literal_skill(text: str, skill: str) -> bool:
     """
     Punctuation-aware skill matching.
     Handles exact skill boundaries for languages with punctuation (C++, C#, .NET, Node.js)
     without incorrectly matching substrings (e.g. C in C++, Java in JavaScript, SQL in NoSQL).
     """
-    if not text or not skill:
-        return False
-    clean_skill = skill.strip()
-    if not clean_skill:
-        return False
-
-    escaped = re.escape(clean_skill)
+    escaped = re.escape(skill)
 
     # Prefix boundary:
     # If skill starts with a dot (like .NET), ensure it is not preceded by word, +, #, or dot
-    if clean_skill.startswith("."):
+    if skill.startswith("."):
         prefix = r"(?<![\w+#.])"
     else:
         prefix = r"(?<![\w+#])"
@@ -31,7 +29,17 @@ def contains_skill(text: str, skill: str) -> bool:
     return bool(re.search(pattern, text, re.IGNORECASE))
 
 
-def match_skills(text: str, target_skills: List[str]) -> Tuple[List[str], List[str]]:
+def contains_skill(text: str, skill: str) -> bool:
+    """Match a skill or its explicit aliases with punctuation-aware boundaries."""
+    if not text or not skill:
+        return False
+    clean_skill = skill.strip()
+    if not clean_skill:
+        return False
+    return any(_contains_literal_skill(text, alias) for alias in aliases_for_skill(clean_skill))
+
+
+def match_skills(text: str, target_skills: list[str]) -> tuple[list[str], list[str]]:
     """
     Matches target skills against text using punctuation-aware matching.
     Returns:
@@ -46,8 +54,9 @@ def match_skills(text: str, target_skills: List[str]) -> Tuple[List[str], List[s
     deduped = []
     for s in target_skills:
         clean = s.strip()
-        if clean and clean not in seen:
-            seen.add(clean)
+        canonical = canonicalize_skill(clean)
+        if clean and canonical not in seen:
+            seen.add(canonical)
             deduped.append(clean)
 
     for skill in deduped:

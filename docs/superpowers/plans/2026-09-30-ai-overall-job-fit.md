@@ -168,7 +168,7 @@ Latest recorded source result: 25/25 complete evaluations, 6/10 strict preferred
 
 **Interfaces:** `Requirement`, `Evidence`, `RequirementResult`, `RequirementExtraction`, `EvidenceExtraction`, `ScoreBreakdown`, `Evaluation`, `EvaluationBatch` retain source branch names; add `Requirement.kind` allowed values `skill|semantic|tenure|credential|experience`, category enum, and `Evaluation.rubric_fingerprint: str`, `skill_coverage_score: Decimal|None`, `reason_codes: list[str]`. Initial reason codes are `source_incomplete`, `rubric_limit`, `invalid_provider_response`, `missing_assessment`, `unresolved_evidence`, `deadline_exceeded`, `no_assessable_requirements`; human-readable warnings are separate. `chunk_text(text: str) -> list[TextChunk]`; `canonicalize_skill(value: str) -> str`. `Resume.extraction_warnings: list[str]` defaults empty; storage migration is additive.
 
-- [ ] **Step 1: Add focused failing checks.** `test_incomplete_evaluation_has_no_score_or_rank` asserts null score/rank and false top flag; `test_score_bounds_are_strict` rejects -1, 101 and string scores; `test_aliases_dedupe_without_losing_unknown_skill` checks Postgres/PostgreSQL and an unknown literal; `test_chunks_cover_late_text` proves full coverage beyond 8,000 characters; `test_partial_pdf_persists_warning` verifies one unreadable page blocks complete matching even with readable pages.
+- [x] **Step 1: Add focused failing checks.** `test_incomplete_evaluation_has_no_score_or_rank` asserts null score/rank and false top flag; `test_score_bounds_are_strict` rejects -1, 101 and string scores; `test_aliases_dedupe_without_losing_unknown_skill` checks Postgres/PostgreSQL and an unknown literal; `test_chunks_cover_late_text` proves full coverage beyond 8,000 characters; `test_partial_pdf_persists_warning` verifies one unreadable page blocks complete matching even with readable pages.
 
 ```python
 assert canonicalize_skill("Postgres") == canonicalize_skill("PostgreSQL")
@@ -177,10 +177,10 @@ assert incomplete.match_score is None and incomplete.rank is None
 assert incomplete.is_top_match is False
 assert saved_resume.extraction_warnings
 ```
-- [ ] **Step 2: Run those focused tests.** `./.venv/Scripts/python.exe -m pytest -q tests/test_match_contracts.py tests/test_match_normalization.py tests/test_match_chunking.py tests/test_document_parser.py`. Confirm failures correspond to missing new behavior.
-- [ ] **Step 3: Port minimal contracts/helpers and warning propagation.** Restrict exported names; remove role fields and offline import wiring. Keep source coordinates immutable. Verify both SQLite and PostgreSQL warning migrations; API warning metadata cannot be lost through parse/save.
-- [ ] **Step 4: Rerun the focused tests plus existing skill/parser callers.** Expected PASS, including Java versus JavaScript, C versus C++, SQL versus NoSQL. Audit every caller of modified shared helpers.
-- [ ] **Step 5: Commit the cohesive contract/input change.** Subject: `feat: validate matching inputs and evidence contracts`.
+- [x] **Step 2: Run those focused tests.** `./.venv/Scripts/python.exe -m pytest -q tests/test_match_contracts.py tests/test_match_normalization.py tests/test_match_chunking.py tests/test_document_parser.py`. Confirm failures correspond to missing new behavior.
+- [x] **Step 3: Port minimal contracts/helpers and warning propagation.** Restrict exported names; remove role fields and offline import wiring. Keep source coordinates immutable. Verify both SQLite and PostgreSQL warning migrations; API warning metadata cannot be lost through parse/save.
+- [x] **Step 4: Rerun the focused tests plus existing skill/parser callers.** Expected PASS, including Java versus JavaScript, C versus C++, SQL versus NoSQL. Audit every caller of modified shared helpers.
+- [x] **Step 5: Commit the cohesive contract/input change.** Subject: `feat: validate matching inputs and evidence contracts`.
 
 ## Task 3: Extract and freeze the full overall-fit JD rubric
 

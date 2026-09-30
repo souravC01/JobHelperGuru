@@ -30,6 +30,7 @@ class ResumeFileManager:
         text_content: str,
         max_resumes: int = 10,
         max_storage_bytes: int = 50 * 1024 * 1024,
+        extraction_warnings: Optional[list[str]] = None,
     ) -> Resume:
         storage_backend = "r2" if self.object_storage.is_configured else "local"
 
@@ -66,6 +67,7 @@ class ResumeFileManager:
                 file_key=file_key,
                 user_id=user_id,
                 attachment_id=attachment.id,
+                extraction_warnings=extraction_warnings,
                 max_resumes=max_resumes,
             )
             return resume

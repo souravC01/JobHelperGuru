@@ -79,4 +79,14 @@ Verified in the isolated destination before any application transfer:
 
 ## Subsequent execution
 
-Task 1 is complete. Task 2 and later tasks remain pending per the owner's task-by-task scope. The profile task executes as 4A before Task 4. No push, PR, deployment, or source-branch merge was performed.
+Tasks 1 and 2 are complete. Task 3 and later tasks remain pending per the owner's task-by-task scope. The profile task executes as 4A before Task 4. No push, PR, deployment, or source-branch merge was performed.
+
+## Task 2 transfer and verification
+
+- Borrowed pinned-source normalization, chunking, skill aliases, warning-aware document parser, and selected matching contracts. Adapted contracts to overall job fit; no offline imports, role bonus fields, scorer, pipeline, or provider requests were transferred.
+- Added typed requirement kinds, known reason codes, nullable skill coverage, rubric identity required for complete results, no scores/ranks on incomplete results, shared job/rubric/coverage batch checks, and half-up display consistency. Top status uses positive raw score, not rounded percentage.
+- Kept the legacy string-only parser wrapper for existing callers. Upload reparses the file even when preview text is resubmitted as content_override so unreadable-page warnings cannot disappear.
+- Added additive warning migrations/JSON persistence and hydration through reserve/upload, Resume responses, individual reads and vault list. SQLite legacy schema upgrade was executed; PostgreSQL SQL/JSON/tenant-filter behavior was checked with recording mocks, not a live PostgreSQL instance.
+- RED: 14 initial focused checks failed for missing functionality; a further raw-score-leading edge check failed before its correction.
+- GREEN: 37 focused tests passed; full backend suite 229 passed with the existing Starlette/AnyIO warning. No frontend implementation changes; Task 1 frontend baseline remains the latest frontend test/build run.
+- Original source files rehashed after Task 2: all 40 unchanged. Future evaluator warning gating belongs to Tasks 4A/6, which are not implemented yet.
