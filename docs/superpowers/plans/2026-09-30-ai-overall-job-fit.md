@@ -12,7 +12,7 @@
 
 **Spec:** This plan's “Design baseline” section records the in-chat design and the owner's choice of overall job fit. Earlier evidence-branch specs are reference material, not authority for the new branch. The proposed numeric weights, credits, batching ceilings, and release thresholds below require owner review with this plan before execution.
 
-**Execution status:** The owner authorized implementation task-by-task. Tasks 1–3 are complete on `codex/ai-overall-job-fit`; Task 4A and all later tasks remain pending. Each completion updates this plan and the execution ledger. Live provider requests and release activation remain unauthorized.
+**Execution status:** The owner authorized implementation task-by-task. Tasks 1–4, including prerequisite 4A, are complete on `codex/ai-overall-job-fit`; Task 5 and all later tasks remain pending. Each completion updates this plan and the execution ledger. Live provider requests and release activation remain unauthorized.
 
 **Plan persistence:** The repository ignores `docs/superpowers/`. This file is saved locally but is not automatically tracked. Task 1 must explicitly transfer it to the destination and force-add this one approved plan path when committing planning records; do not change the ignore rule or force-add the entire directory.
 
@@ -23,9 +23,9 @@
 | 1 — isolated branch and transfer records | Complete | Backend 211, frontend 67, production build passed; commit `6a924c5` |
 | 2 — contracts and document completeness | Complete | 37 focused and 229 backend tests passed; commit `17ef20b` |
 | 3 — full-source overall-fit JD rubric | Complete | 41 focused and 253 backend tests passed; no live provider requests |
-| 4A — reusable resume profiles | Pending — next | Must precede Task 4 |
-| 4 — requirement evidence assessment | Pending | |
-| 5 — deterministic scoring and ranking | Pending | |
+| 4A — reusable resume profiles | Complete | Source-validated tenant/provider cache; edits, renames, deletion and simultaneous builds checked |
+| 4 — requirement evidence assessment | Complete | Combined 4A/4 verification: 87 focused and 293 backend tests passed |
+| 5 — deterministic scoring and ranking | Pending — next | |
 | 6 — rubric and assessment caches | Pending | |
 | 7 — authenticated API | Pending | |
 | 8 — truthful UI and request lifecycle | Pending | |
@@ -33,6 +33,11 @@
 | 10 — final regression and handoff | Pending | |
 
 Task 3 accepts validated proposals with stable source/version-based requirement IDs; persisted frozen rubrics belong to Task 6. Its provider schema requires exact chunk acknowledgment and explicit completion. Unknown technologies survive without a taxonomy gate. Server validation rejects ambiguous quotes, split/partial literal OR groups, unsupported tenure minima, non-equivalent category conflicts and explicit document instructions. Semantic interpretation remains the AI's responsibility and is not yet validated by live quality measurements. Over-limit rubrics remain needs_review without trimming.
+
+
+Tasks 4A and 4 were completed and verified together because full-source fallback and shared provenance checks exercise the profile consumer. Profiles contain only job-independent facts, validated source spans, source-verified dates and chunk coverage. They are cached by tenant, resume/source and provider/extractor version; job/scorer identity is excluded. The first complete persisted profile wins concurrent builds. Rename preserves profiles; content edit and deletion remove derived profiles. Current content is checked before publishing cached or newly prepared profiles. A discovered rename/content race was fixed by rereading the authoritative row under the update transaction.
+
+Evidence assessment sends all available activity context without a keyword prefilter, checks literal misses against the original source, and falls back to every original chunk for unsupported profile absences. Missing/duplicate/foreign IDs, invalid quotes, conflicting classifications and late responses cannot become completed assessments. Work tenure is derived from verified dated work, with ongoing intervals capped at the server as_of date; education/projects/future work cannot supply credited intervals. Ambiguous date/section semantics fail closed. Complete evidence artifacts have no scores or ranks; Task 5 calculates those. New API/vault preparation/UI integration remains in Tasks 7–8. No live provider quality measurements were performed.
 
 ## Global Constraints
 
@@ -225,7 +230,7 @@ assert all(jd[r.source_start:r.source_end] == r.source_quote for r in requiremen
 
 **Interfaces:** `extract_evidence_batch(resumes: list[Resume], profiles: dict[str, ResumeProfile], requirements: list[Requirement], *, as_of: date, engine: Any, deadline: float) -> dict[str, EvidenceExtraction]`. Provider task `evidence_batch` includes resume IDs, relevant validated profile records/source contexts and one rubric; supply full source chunks only when the profile cannot conclusively support assessment. Result contains one record per supplied resume ID, explicit assessed/unresolved ID sets, and evidence proposals. Server computes offsets, sections and validated intervals. Pipeline owns batch partitioning; this function validates a supplied batch. Implement Task 4A before this task.
 
-- [ ] **Step 1: Add failing checks.** `test_omitted_resume_is_incomplete_not_fifty`; `test_duplicate_or_foreign_ids_reject_batch`; `test_missing_requirement_not_treated_as_absence`; `test_listed_and_learning_not_demonstrated`; `test_semantic_paraphrase_can_match_with_source_quote`; `test_negation_and_injection_cannot_earn_credit`; `test_verified_tenure_does_not_need_provider_guess`; `test_overlap_dedup_preserves_positive_evidence`. Include a responsibility supported by different wording so a lexical-overlap gate would fail.
+- [x] **Step 1: Add failing checks.** `test_omitted_resume_is_incomplete_not_fifty`; `test_duplicate_or_foreign_ids_reject_batch`; `test_missing_requirement_not_treated_as_absence`; `test_listed_and_learning_not_demonstrated`; `test_semantic_paraphrase_can_match_with_source_quote`; `test_negation_and_injection_cannot_earn_credit`; `test_verified_tenure_does_not_need_provider_guess`; `test_overlap_dedup_preserves_positive_evidence`. Include a responsibility supported by different wording so a lexical-overlap gate would fail.
 
 ```python
 assert omitted.status != EvaluationStatus.COMPLETE
@@ -235,10 +240,10 @@ assert learning_item.level == EvidenceLevel.LEARNING
 assert semantic_item.level == EvidenceLevel.DEMONSTRATED
 assert resume_text[semantic_item.source_start:semantic_item.source_end] == semantic_item.source_quote
 ```
-- [ ] **Step 2: Run extraction/AI tests and confirm intended failures.** No live provider use in these tests.
-- [ ] **Step 3: Implement validation and selected local verification.** Require unique exact resume/requirement coverage. Source quote whitespace normalization may locate a quote, but store the exact saved-source substring. Reject ambiguity instead of using the first match. Use proven local relevant dated-work checks and explicit credential verification where safely conclusive; otherwise AI interprets semantic evidence. Do not require a JD word to occur verbatim for semantic support, but do require the quote to demonstrate the specific requirement. Validate positive items before considering any coverage-metadata reconciliation. Unsupported metadata/claims fail closed; no retry loop.
-- [ ] **Step 4: Rerun focused checks.** Assert omission reason codes, no positive credits from negative/learning text, all chunk observations accounted for, and all response scores/ranks ignored/rejected. Interval sources exclude education, future work and unrelated roles.
-- [ ] **Step 5: Commit.** Subject: `feat: assess resume evidence in validated AI batches`.
+- [x] **Step 2: Run extraction/AI tests and confirm intended failures.** No live provider use in these tests.
+- [x] **Step 3: Implement validation and selected local verification.** Require unique exact resume/requirement coverage. Source quote whitespace normalization may locate a quote, but store the exact saved-source substring. Reject ambiguity instead of using the first match. Use proven local relevant dated-work checks and explicit credential verification where safely conclusive; otherwise AI interprets semantic evidence. Do not require a JD word to occur verbatim for semantic support, but do require the quote to demonstrate the specific requirement. Validate positive items before considering any coverage-metadata reconciliation. Unsupported metadata/claims fail closed; no retry loop.
+- [x] **Step 4: Rerun focused checks.** Assert omission reason codes, no positive credits from negative/learning text, all chunk observations accounted for, and all response scores/ranks ignored/rejected. Interval sources exclude education, future work and unrelated roles.
+- [x] **Step 5: Commit.** Subject: `feat: assess resume evidence in validated AI batches`.
 
 ## Task 4A: Prepare and reuse job-independent resume evidence profiles
 
@@ -248,7 +253,7 @@ assert resume_text[semantic_item.source_start:semantic_item.source_end] == seman
 
 **Interfaces:** `ProfileFact` has `id`, `kind: skill|activity|credential|employment`, `canonical_key`, `level: EvidenceLevel`, `source_quote`, `source_start`, `source_end`, `section`, optional `employment_id` and source-verified start/end dates. `ResumeProfile` has resume/source identity, status, profile extractor version, profile fingerprint, facts, processed source-chunk spans and warnings; no job/scorer fields. `extract_resume_profile(resume: Resume, *, engine: Any, deadline: float) -> ResumeProfile`; `get_or_build_resume_profile(resume: Resume, *, user_id: str, engine: Any, storage: Any, deadline: float) -> ResumeProfile`. Storage: `get_resume_profile(*, user_id: str, resume_id: str, source_hash: str, version_key: str) -> dict|None`, `save_resume_profile(*, user_id: str, resume_id: str, source_hash: str, version_key: str, payload_json: str) -> None`, `delete_resume_profiles(*, user_id: str, resume_id: str) -> int`.
 
-- [ ] **Step 1: Add failing profile checks.** `test_two_jobs_extract_resume_once`; `test_scorer_change_reuses_profile`; `test_content_edit_invalidates_but_rename_does_not`; `test_profile_is_user_and_provider_scoped`; `test_profile_covers_late_activity_and_all_chunks`; `test_failed_profile_keeps_saved_resume`; `test_late_old_content_profile_not_current`; `test_deleted_resume_removes_profiles`; `test_missing_profile_skill_checks_original_source`; `test_semantic_paraphrase_not_lost_by_keyword_prefilter`. Add SQLite/PostgreSQL persistence checks and corrupt-cache rejection.
+- [x] **Step 1: Add failing profile checks.** `test_two_jobs_extract_resume_once`; `test_scorer_change_reuses_profile`; `test_content_edit_invalidates_but_rename_does_not`; `test_profile_is_user_and_provider_scoped`; `test_profile_covers_late_activity_and_all_chunks`; `test_failed_profile_keeps_saved_resume`; `test_late_old_content_profile_not_current`; `test_deleted_resume_removes_profiles`; `test_missing_profile_skill_checks_original_source`; `test_semantic_paraphrase_not_lost_by_keyword_prefilter`. Add SQLite/PostgreSQL persistence checks and corrupt-cache rejection.
 
 ```python
 assert first_job_profile.profile_fingerprint == second_job_profile.profile_fingerprint
@@ -259,10 +264,10 @@ assert edited_profile.source_hash != original_profile.source_hash
 assert storage.get_resume(resume.id, user_id=user_id) is not None  # Analysis failed, save succeeded.
 ```
 
-- [ ] **Step 2: Run `./.venv/Scripts/python.exe -m pytest -q tests/test_match_profiles.py`.** Confirm failures identify absent profile behavior, not unrelated fixtures.
-- [ ] **Step 3: Implement full-source profile extraction and atomic persistence.** Provider task `resume_profile` receives source chunks, schema and untrusted-document instructions, never JD data. Reuse exact-span, section, negation and date helpers. Deduplicate overlapping facts; validate coverage for all chunks. Persist only complete source-validated profiles in `resume_profiles` with unique `(user_id,resume_id,source_hash,version_key)` and profile fingerprint. Read the accepted row after concurrent insert; verify the resume still exists with the same content hash before publishing. Do not duplicate raw resume text in the table beyond quoted evidence.
-- [ ] **Step 4: Verify reuse and safe fallback.** New JD and scorer changes do not call profile extraction. Demonstrated skills/activities retain quote context; unclear job relevance still routes through Task 4, rather than inheriting generic demonstrated credit. Literal misses check the full original source; semantic retrieval considers all activities and escalates inadequate context to source assessment. Failed source coverage stays unresolved. No embeddings or keyword-only ranking.
-- [ ] **Step 5: Commit.** Subject: `perf: reuse resume vault evidence profiles`.
+- [x] **Step 2: Run `./.venv/Scripts/python.exe -m pytest -q tests/test_match_profiles.py`.** Confirm failures identify absent profile behavior, not unrelated fixtures.
+- [x] **Step 3: Implement full-source profile extraction and atomic persistence.** Provider task `resume_profile` receives source chunks, schema and untrusted-document instructions, never JD data. Reuse exact-span, section, negation and date helpers. Deduplicate overlapping facts; validate coverage for all chunks. Persist only complete source-validated profiles in `resume_profiles` with unique `(user_id,resume_id,source_hash,version_key)` and profile fingerprint. Read the accepted row after concurrent insert; verify the resume still exists with the same content hash before publishing. Do not duplicate raw resume text in the table beyond quoted evidence.
+- [x] **Step 4: Verify reuse and safe fallback.** New JD and scorer changes do not call profile extraction. Demonstrated skills/activities retain quote context; unclear job relevance still routes through Task 4, rather than inheriting generic demonstrated credit. Literal misses check the full original source; semantic retrieval considers all activities and escalates inadequate context to source assessment. Failed source coverage stays unresolved. No embeddings or keyword-only ranking.
+- [x] **Step 5: Commit.** Subject: `perf: reuse resume vault evidence profiles`.
 
 ## Task 5: Pure scoring and honest competition ranking
 

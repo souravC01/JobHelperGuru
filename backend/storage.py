@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import sqlite3
@@ -255,6 +256,14 @@ class StorageService:
                     extraction_warnings TEXT DEFAULT '[]',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS resume_profiles (
+                    user_id TEXT NOT NULL, resume_id TEXT NOT NULL, source_hash TEXT NOT NULL,
+                    version_key TEXT NOT NULL, profile_fingerprint TEXT NOT NULL,
+                    payload_json TEXT NOT NULL, created_at TEXT NOT NULL,
+                    PRIMARY KEY (user_id, resume_id, source_hash, version_key)
                 )
             """)
             # Attachments table
@@ -765,7 +774,43 @@ class StorageService:
                 cursor.execute(self._format_sql("DELETE FROM resumes WHERE id = ? AND user_id = ?"), (resume_id, user_id))
             else:
                 cursor.execute(self._format_sql("DELETE FROM resumes WHERE id = ?"), (resume_id,))
-            return cursor.rowcount > 0
+            deleted = cursor.rowcount > 0
+            if deleted:
+                if user_id:
+                    cursor.execute(self._format_sql("DELETE FROM resume_profiles WHERE resume_id = ? AND user_id = ?"), (resume_id, user_id))
+                else:
+                    cursor.execute(self._format_sql("DELETE FROM resume_profiles WHERE resume_id = ?"), (resume_id,))
+            return deleted
+
+    def get_resume_profile(self, *, user_id: str, resume_id: str, source_hash: str, version_key: str):
+        with self._get_cursor() as cursor:
+            cursor.execute(self._format_sql("SELECT payload_json FROM resume_profiles WHERE user_id = ? AND resume_id = ? AND source_hash = ? AND version_key = ?"),
+                           (user_id, resume_id, source_hash, version_key))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def save_resume_profile(self, *, user_id: str, resume_id: str, source_hash: str, version_key: str, payload_json: str) -> None:
+        from backend.services.matching.models import ResumeProfile
+        from backend.services.matching.profiles import validate_profile
+        profile = ResumeProfile.model_validate_json(payload_json)
+        with self._get_immediate_cursor() as cursor:
+            sql = "SELECT * FROM resumes WHERE id = ? AND user_id = ?"
+            if self.is_postgres: sql += " FOR UPDATE"
+            cursor.execute(self._format_sql(sql), (resume_id, user_id))
+            row = cursor.fetchone()
+            if not row or hashlib.sha256(row["content"].encode("utf-8")).hexdigest() != source_hash:
+                raise ValueError("Resume source changed or is unavailable")
+            resume = Resume(id=row["id"], name=row["name"], content=row["content"], extraction_warnings=self._resume_extraction_warnings(row))
+            validate_profile(profile, resume, version_key)
+            cursor.execute(self._format_sql("""INSERT INTO resume_profiles
+                (user_id, resume_id, source_hash, version_key, profile_fingerprint, payload_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (user_id, resume_id, source_hash, version_key) DO NOTHING"""),
+                (user_id, resume_id, source_hash, version_key, profile.profile_fingerprint, payload_json, datetime.now().isoformat()))
+
+    def delete_resume_profiles(self, *, user_id: str, resume_id: str) -> int:
+        with self._get_cursor() as cursor:
+            cursor.execute(self._format_sql("DELETE FROM resume_profiles WHERE user_id = ? AND resume_id = ?"), (user_id, resume_id))
+            return cursor.rowcount
 
     def count_user_resumes(self, user_id: str) -> int:
         with self._get_cursor() as cursor:
@@ -1000,11 +1045,22 @@ class StorageService:
         if not existing:
             return None
 
-        new_name = name.strip() if (name and name.strip()) else existing.name
-        new_content = content if content is not None else existing.content
         now = datetime.now().isoformat()
 
-        with self._get_cursor() as cursor:
+        with self._get_immediate_cursor() as cursor:
+            sql = "SELECT name, content FROM resumes WHERE id = ?"
+            params = (resume_id,)
+            if user_id:
+                sql += " AND user_id = ?"
+                params += (user_id,)
+            if self.is_postgres:
+                sql += " FOR UPDATE"
+            cursor.execute(self._format_sql(sql), params)
+            current = cursor.fetchone()
+            if not current:
+                return None
+            new_name = name.strip() if (name and name.strip()) else current["name"]
+            new_content = content if content is not None else current["content"]
             if user_id:
                 cursor.execute(
                     self._format_sql(
@@ -1019,6 +1075,12 @@ class StorageService:
                     ),
                     (new_name, new_content, now, resume_id),
                 )
+
+            if content is not None and content != current["content"]:
+                if user_id:
+                    cursor.execute(self._format_sql("DELETE FROM resume_profiles WHERE resume_id = ? AND user_id = ?"), (resume_id, user_id))
+                else:
+                    cursor.execute(self._format_sql("DELETE FROM resume_profiles WHERE resume_id = ?"), (resume_id,))
 
         return self.get_resume(resume_id, user_id=user_id)
 

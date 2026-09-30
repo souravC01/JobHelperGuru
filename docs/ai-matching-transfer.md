@@ -79,7 +79,7 @@ Verified in the isolated destination before any application transfer:
 
 ## Subsequent execution
 
-Tasks 1–3 are complete. Task 4A and later tasks remain pending per the owner's task-by-task scope. The profile task executes as 4A before Task 4. No push, PR, deployment, or source-branch merge was performed.
+Tasks 1–4, including 4A, are complete. Task 5 and later tasks remain pending per the owner's task-by-task scope. The profile task executes as 4A before Task 4. No push, PR, deployment, or source-branch merge was performed.
 
 ## Task 2 transfer and verification
 
@@ -100,3 +100,15 @@ Tasks 1–3 are complete. Task 4A and later tasks remain pending per the owner's
 - RED: 18 initial failures, then 3 section/group/non-fit failures and 1 partial-OR failure were observed before corresponding corrections. GREEN: 41 focused tests and 253 full backend tests pass, with the existing Starlette/AnyIO deprecation warning.
 - Guarded request tests verify full payload, schema, temperature 0 and remaining timeout through the existing configured-provider transport. No live provider calls, frontend changes or deployment occurred. Actual semantic extraction quality still requires Task 9's authorized measurements; persisted rubric freezing belongs to Task 6.
 - All 40 pinned source hashes remain unchanged and the source checkout remains clean. Task 4A is the next task; later plan checkboxes remain unchecked.
+
+## Tasks 4A and 4 transfer and verification
+
+- Built lean reusable profile contracts/extractor/storage and batched evidence assessment. Reused the existing guarded provider client, chunking and canonicalization; moved the validated quote helper into shared provenance and adapted pinned-source month/date and source-level learning rules. No offline pipeline, taxonomy selection gate, embeddings, role bonus or scoring code imported.
+- Complete profiles retain job-independent skills, activities, credentials, dated employment, exact saved-source spans and all processed chunks. Complete profiles only are saved; tenant/source/provider/version identity excludes secrets, jobs and scorers. Cache loads revalidate source coverage, facts and fingerprint; concurrent inserts read the first accepted winner. SQLite CRUD/concurrency and PostgreSQL schema/locking/parameter/JSON behavior were verified (PostgreSQL recording mocks, no live server).
+- Profile preparation failures preserve saved resumes. Rename reuses profile; content edits and deletion remove derived rows in the same transaction. Preparation/cache read checks current source before publishing. Fixed an existing concurrent rename race that could restore stale content by reading authoritative name/content under the update transaction/row lock.
+- Assessment carries one rubric and explicit per-resume requirement/chunk IDs. All source-backed positive proposals validate before coverage reconciliation. Omitted observations remain unresolved, not zero or fabricated 50. Duplicate/foreign IDs, unsupported quotes, response scores, and conflicts fail closed. Semantic paraphrases need no JD keyword overlap.
+- Skills-list/bare mentions are listed; learning and negation cannot earn demonstrated credit. Relevant tenure uses verified work dates; education/projects/future work and cross-section quotes cannot supply intervals. Ongoing work remains job-independent in the profile and is capped at assessment as_of.
+- All profile activities remain available for semantic matching. Literal misses inspect original text; unsupported profile absences escalate to full source chunks. Overlap positives survive absence in another chunk; conflicting classification of the same span is rejected. Five prepared semantic resumes were assessed in one mock call; this is functional call-count evidence, not measured live latency/quality.
+- RED: missing profile/evidence APIs, stale cached-read/rename races, bare-list/cross-section overcredit and conflicting overlap classifications were reproduced before correction. One overlap fixture was corrected from 7,984 to 8,684 chars, then its defect was re-observed against original aggregation before restoring the fix.
+- GREEN: 87 focused tests and 293 full backend tests passed, with the existing Starlette/AnyIO deprecation warning. Source hashes unchanged. No live AI requests, frontend changes, push or deployment occurred.
+- Combined 4A/4 commit keeps the consumer fallback and shared provenance fixes together. Task 5 is next; endpoint/vault preparation/UI activation and authorized provider quality/performance gates remain later tasks.

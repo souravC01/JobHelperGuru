@@ -321,3 +321,70 @@ class ScoreBreakdown(MatchContract):
         if self.match_score != int(self.raw_score.quantize(Decimal(1), rounding=ROUND_HALF_UP)):
             raise ValueError("match_score must be the half-up display value of raw_score")
         return self
+
+
+class SourceSpan(MatchContract):
+    start: StrictInt = Field(ge=0)
+    end: StrictInt = Field(gt=0)
+
+    @model_validator(mode="after")
+    def ordered(self):
+        if self.end <= self.start:
+            raise ValueError("Invalid source chunk")
+        return self
+
+
+class ProfileFact(MatchContract):
+    id: NonEmptyString
+    kind: Literal["skill", "activity", "credential", "employment"]
+    canonical_key: NonEmptyString
+    level: EvidenceLevel
+    source_quote: NonEmptyString
+    source_start: StrictInt = Field(ge=0)
+    source_end: StrictInt = Field(gt=0)
+    section: NonEmptyString
+    employment_id: NonEmptyString | None = None
+    start: date | None = None
+    end: date | None = None
+
+    @model_validator(mode="after")
+    def provenance(self):
+        Evidence(requirement_id=self.id, level=self.level, source_quote=self.source_quote,
+                 source_start=self.source_start, source_end=self.source_end)
+        if self.kind != "employment" and (self.start is not None or self.end is not None):
+            raise ValueError("Only employment has dates")
+        if self.kind == "employment" and self.start is None:
+            raise ValueError("Employment needs a verified start date")
+        if self.start and self.end and self.end < self.start:
+            raise ValueError("Invalid employment dates")
+        return self
+
+
+class ResumeProfile(MatchContract):
+    resume_id: NonEmptyString
+    source_hash: NonEmptyString
+    status: EvaluationStatus
+    extractor_version: NonEmptyString
+    version_key: NonEmptyString
+    profile_fingerprint: NonEmptyString | None = None
+    facts: list[ProfileFact] = Field(default_factory=list)
+    processed_source_chunks: list[SourceSpan] = Field(default_factory=list)
+    warnings: list[NonEmptyString] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def completeness(self):
+        ids = [f.id for f in self.facts]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Duplicate profile facts")
+        provenance = [(f.kind, f.canonical_key, f.source_start, f.source_end) for f in self.facts]
+        if len(provenance) != len(set(provenance)):
+            raise ValueError("Duplicate or conflicting profile provenance")
+        employment = {f.id for f in self.facts if f.kind == "employment"}
+        if any(f.employment_id and f.employment_id not in employment for f in self.facts):
+            raise ValueError("Unknown employment fact")
+        if self.status == EvaluationStatus.COMPLETE:
+            if not self.profile_fingerprint or not self.processed_source_chunks or self.warnings:
+                raise ValueError("Complete profile needs coverage and identity, no unresolved warnings")
+        elif self.profile_fingerprint:
+            raise ValueError("Incomplete profile cannot publish a fingerprint")
+        return self
