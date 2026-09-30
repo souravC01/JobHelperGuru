@@ -349,6 +349,7 @@ def run_lifecycle(case, *, engine, as_of):
             profiles_ready=[profiles.get_or_build_resume_profile(r,user_id='benchmark',engine=engine,storage=storage,deadline=time.monotonic()+300).status=='complete' for r in resumes]
             runs.append(dict(case_id=case['id'],phase='profile_preparation',repeat=0,elapsed_seconds=time.monotonic()-started,
                 comparison_complete=all(profiles_ready),evaluations=[],metrics=engine.since(mark)))
+            if not all(profiles_ready): return runs
             def measure(phase,job=None):
                 sources={r.id:r.content for r in resumes}
                 return _measure(case,phase,0,engine,lambda:pipeline.evaluate_resumes(job or case['job_text'],resumes,user_id='benchmark',as_of=as_of,engine=engine,storage=storage),aliases,sources)
@@ -421,7 +422,8 @@ def run_quality(cases, *, engine, as_of):
                                 full_journey_seconds=cold['elapsed_seconds']+analysis_seconds if analysis_seconds is not None else None)
                     runs.append(cold)
                     if repeat==0:
-                        for index in range(3):
+                        # Evidence repeats require already prepared profiles; failed preparation is a cold-run failure.
+                        for index in range(3) if all(e.get('profile_fingerprint') for e in cold['evaluations']) else []:
                             if engine.exhausted: break
                             runs.append(_measure(case,'fixed_rubric',index,engine,lambda:evaluate(True),aliases,sources))
                         if not engine.exhausted:

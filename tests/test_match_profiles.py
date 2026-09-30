@@ -241,3 +241,23 @@ def test_overlapping_profile_classification_conflicts_fail_closed():
     r=Resume(id="r",name="R",content="Projects:\nBuilt Python services.")
     engine=ProfileProvider([fact("Built Python services.","Python",level="demonstrated"),fact("Built Python services.","Python",level="listed")])
     assert extract_resume_profile(r,engine=engine,deadline=time.monotonic()+30).status!="complete"
+
+
+def test_real_combined_headings_keep_skill_lists_and_education_out_of_work():
+    from backend.services.matching.profiles import extract_resume_profile
+    from backend.services.matching.provenance import section_at,work_span
+    text="Education & Certificates\nBachelor of Science\nTechnical Skills and Tools\nLanguages: Java, Python\nWork History\nDeveloper May 2023 - Aug 2024\nBuilt Java APIs."
+    r=Resume(id="r",name="R",content=text)
+    profile=extract_resume_profile(r,engine=ProfileProvider([fact("Languages: Java, Python","Java")]),deadline=time.monotonic()+30)
+    assert profile.status=="complete" and profile.facts[0].section=="skills"
+    assert profile.facts[0].level=="listed"
+    assert section_at(text,text.index("Bachelor"))=="education"
+    crossing="Work History\nDeveloper May 2023 - Aug 2024\nBuilt Java APIs.\nEducation & Certificates\nBachelor of Science"
+    assert not work_span(crossing,crossing.index("Developer"),len(crossing))
+
+
+def test_multiline_literal_skill_fact_keeps_exact_original_quote():
+    from backend.services.matching.profiles import extract_resume_profile
+    text="Work History\nBuilt REST \nAPIs with Java."
+    profile=extract_resume_profile(Resume(id="r",name="R",content=text),engine=ProfileProvider([fact("Built REST \nAPIs with Java.","REST APIs")]),deadline=time.monotonic()+30)
+    assert profile.status=="complete" and profile.facts[0].source_quote==text.split("\n",1)[1]

@@ -20,8 +20,8 @@ from .provenance import _quote_span
 from .models import MatchContract, NonEmptyString, Requirement, RequirementCategory, RequirementExtraction, ResumeProfile, EvidenceExtraction, has_evidence_conflict
 from .normalization import aliases_for_skill, canonicalize_skill
 
-EXTRACTOR_VERSION = "overall-jd-v1"
-ASSESSMENT_VERSION = "overall-assessment-v1"
+EXTRACTOR_VERSION = "overall-jd-v2"
+ASSESSMENT_VERSION = "overall-assessment-v2"
 MAX_REQUIREMENTS = 64
 _INSTRUCTION = re.compile(r"ignore\b.*\b(?:rubric|instructions?)|\bscore\s*\d+|\bsystem\s*prompt", re.I)
 _ELIGIBILITY = re.compile(r"\b(?:work authorization|legally authorized|sponsorship|graduation window|class of 20\d{2})\b", re.I)

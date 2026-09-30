@@ -4,6 +4,7 @@ DNS results are checked at the dial boundary. TLS still sees the original host.
 The pool adapter is version-pinned and covered by transport integration tests.
 """
 import ipaddress
+import math
 import socket
 import time
 import zlib
@@ -103,7 +104,12 @@ class PinnedTransport(httpx2.HTTPTransport):
         )
 
     def handle_request(self, request):
-        deadline = request.extensions.get('jhg_deadline', time.monotonic() + 30)
+        read_timeout = request.extensions.get('timeout', {}).get('read')
+        budget = 30
+        if self.policy.is_ai_request and isinstance(read_timeout, (int, float)):
+            if math.isfinite(read_timeout) and read_timeout > 0:
+                budget = min(read_timeout, 90)
+        deadline = request.extensions.get('jhg_deadline', time.monotonic() + budget)
         remaining(deadline)
         validate_destination_url(str(request.url), self.policy, resolve_addresses=False)
         request.headers['accept-encoding'] = 'identity'

@@ -270,3 +270,22 @@ def test_development_requires_preferred_pairs_in_cold_runs_too():
     report=m.build_report([c],runs,execution='live',review_verified=True)
     assert not report['development_gate_passed']
     assert report['cold_strict_pairs']['reversed']==1
+
+
+def test_failed_preparation_does_not_repeat_profiles_as_fixed_evidence_or_lifecycle():
+    m=benchmark()
+    class FailedProfiles(Provider):
+        def extract_match_chunk(self,payload,*,timeout=None):
+            if payload['task']=='resume_profile':
+                self.calls.append(payload)
+                return {'invalid':True}
+            return super().extract_match_chunk(payload,timeout=timeout)
+    engine=m.CountingEngine(FailedProfiles(),max_calls=80)
+    runs=m.run_quality([case()],engine=engine,as_of=date(2026,9,30))
+    assert len([r for r in runs if r['phase']=='cold'])==3
+    assert not [r for r in runs if r['phase']=='fixed_rubric']
+    assert engine.engine.counts()['resume_profile']==6
+    engine=m.CountingEngine(FailedProfiles(),max_calls=80)
+    lifecycle=m.run_lifecycle(case(),engine=engine,as_of=date(2026,9,30))
+    assert [r['phase'] for r in lifecycle]==['profile_preparation']
+    assert engine.engine.counts()['resume_profile']==2

@@ -16,7 +16,7 @@ def _quote_span(quote: str, chunk: TextChunk) -> tuple[str, int, int]:
 
 
 INSTRUCTION = re.compile(r"ignore\b.*\b(?:rubric|instructions?)|\bscore\s*\d+|\bsystem\s*prompt", re.I)
-HEADINGS = re.compile(r"^\s*(skills(?: and tools)?|technical skills|work experience|professional experience|employment history|employment|work history|experience|projects?|personal projects?|education|academic background|coursework|courses|training|certifications?)\s*:?\s*$", re.I | re.M)
+HEADINGS = re.compile(r"^\s*(skills(?: and tools)?|technical skills(?: and tools)?|work experience|professional experience|employment history|employment|work history|experience|projects?|personal projects?|education(?: & certificates)?|academic background|coursework|courses|training|certifications?)\s*:?\s*$", re.I | re.M)
 
 
 def fingerprint(value):
@@ -34,7 +34,7 @@ def section_at(text, start):
     name = headings[-1][1].lower()
     if "skill" in name: return "skills"
     if "project" in name: return "projects"
-    if name in {"education", "academic background"}: return "education"
+    if name.startswith("education") or name == "academic background": return "education"
     if name in {"coursework", "courses", "training"}: return "coursework"
     if "certif" in name: return "credentials"
     return "work"

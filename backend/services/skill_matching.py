@@ -12,7 +12,7 @@ def _contains_literal_skill(text: str, skill: str) -> bool:
     Handles exact skill boundaries for languages with punctuation (C++, C#, .NET, Node.js)
     without incorrectly matching substrings (e.g. C in C++, Java in JavaScript, SQL in NoSQL).
     """
-    escaped = re.escape(skill)
+    escaped = r"\s+".join(re.escape(word) for word in skill.split())
 
     # Prefix boundary:
     # If skill starts with a dot (like .NET), ensure it is not preceded by word, +, #, or dot

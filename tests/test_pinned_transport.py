@@ -124,3 +124,20 @@ def test_ports_and_shared_address_space_blocked_before_send(monkeypatch, url):
         with pytest.raises(SSRFBlockedError):
             transport.handle_request(httpx2.Request('GET', url))
     send.assert_not_called()
+
+
+@pytest.mark.parametrize("ai,read,explicit,expected",[(True,90,None,90),(True,9000,None,90),(False,90,None,30),(True,None,None,30),(True,float("inf"),None,30),(True,90,5,5)])
+def test_ai_explicit_sdk_budget_is_bounded_and_existing_deadline_preserved(monkeypatch,ai,read,explicit,expected):
+    from backend.services.pinned_transport import PinnedTransport,_deadline
+    observed=[]
+    monkeypatch.setattr(time,"monotonic",lambda:0)
+    def send(self,request):
+        observed.append(_deadline.get())
+        return httpx2.Response(200,stream=httpx2.ByteStream(b"ok"))
+    monkeypatch.setattr(httpx2.HTTPTransport,"handle_request",send)
+    extensions={"timeout":{"read":read}}
+    if explicit is not None:extensions["jhg_deadline"]=explicit
+    policy=OutboundPolicy(is_ai_request=ai,allowed_provider_hosts={"example.test"})
+    with PinnedTransport(policy) as transport:
+        assert transport.handle_request(httpx2.Request("POST","https://example.test",extensions=extensions)).content==b"ok"
+    assert observed==[expected]

@@ -1,10 +1,10 @@
 # AI overall job-fit evaluation
 
-Task 9 is **in progress** on `feat/ai-overall-job-fit`. The benchmark is implemented; live development is blocked by an unreadable saved provider credential, and untouched holdout/exact-size performance evidence are pending. The matching feature remains default-off. Synthetic tests establish report/cache behavior, not ranking quality, live speed or readiness for release.
+Task 9 is **in progress** on `feat/ai-overall-job-fit`. The initial live development benchmark failed completeness and quality gates. Measured fixes are implemented and undergoing verification; untouched holdout/exact-size performance evidence remain pending. The matching feature remains default-off. Synthetic tests establish report/cache behavior, not ranking quality, live speed or readiness for release.
 
 ## What is measured
 
-`scripts/evaluate_matching.py` runs the actual matching services with temporary isolated SQLite databases. It uses no production vault and changes no rollout flags. Pinned main is `9fa7b26a4ca78c38dd977d1eff0df1f30c11b5c5`; an archived backend runs in a separate process, using the same explicitly selected provider/model and allowed documents. Candidate measurements require committed, clean code. Reports record both commits, source/profile/rubric/evaluation fingerprints, the date, provider host/model and endpoint fingerprint.
+`scripts/evaluate_matching.py` runs the actual matching services with temporary isolated SQLite databases. It uses no production vault and changes no rollout flags. Pinned main is `9fa7b26a4ca78c38dd977d1eff0df1f30c11b5c5`; an archived backend runs in a separate process, using the same explicitly selected provider/model and allowed documents. Formal candidate comparisons require committed, clean code; targeted diagnostics are recorded separately. Reports record both commits, source/profile/rubric/evaluation fingerprints, the date, provider host/model and endpoint fingerprint.
 
 Each job receives three cold evaluations, each with a fresh vault/rubric/profile cache. For the first cold interpretation, three fresh evidence assessments reuse its frozen rubric and prepared profiles. Report cold rubric drift separately from fixed-rubric evidence/ranking drift. The full-source diagnostic assesses the same original documents against that frozen rubric, without a profile prefilter; compare completeness, raw scores and pair ordering for profile omissions.
 
@@ -30,7 +30,7 @@ The owner authorized documents in `D:/Grind/Resume stuff/No named resumes` and t
 
 Local inputs in `tests/fixtures/matching/private-dev.json` remove contact headers and consistently replace personal employer, institution and project names. They remain Git-ignored, along with their review record. Proposed preferences and the lifecycle edit are available locally in `scratch/task9-development-review.md`. The owner reviewed and accepted the four proposed preferences. The owner confirmed same-person ownership, all four proposed strict preferences, and a cap of 100 provider requests total for the initial main/candidate development benchmark. This does not authorize further reruns or holdout requests.
 
-Current anonymized resumes contain 3,215–4,502 characters and the two development JDs contain 5,168 and 5,594 characters. They do not satisfy the exact-size performance workload. That evidence, a separately reviewed holdout, and any additional request budget remain outstanding. No live provider call or semantic quality result has been recorded. The authorized launch stopped before AI requests because the named saved credential could not be decrypted using either the source dotenv encryption key or source local encryption secret. No credential was changed or printed; zero of the approved 100 requests were consumed. The owner has been asked to supply the selected provider key privately through the local `MATCHING_BENCHMARK_API_KEY` setting. Live development remains blocked until that key is readable.
+Current anonymized resumes contain 3,215–4,502 characters and the two development JDs contain 5,168 and 5,594 characters. They do not satisfy the exact-size performance workload. That evidence and a separately reviewed holdout remain outstanding. The encrypted saved-profile key could not be decrypted locally, but the owner confirmed an explicit `MATCHING_BENCHMARK_API_KEY` already existed in the source project dotenv. The resumed run used that explicit key with the approved saved-profile endpoint/model; no key was printed or changed.
 
 ## Running an authorized measurement
 
@@ -50,4 +50,34 @@ The example is one command, wrapped here for readability. Holdout additionally r
 
 ## Local verification
 
-The dedicated benchmark suite currently passes 28 checks covering denominator/tie behavior, raw-score comparison, incomplete results, unavailable usage, source/secret projection, actual SDK call limits, real service cache lifecycle, frozen-rubric repeats, full-source diagnostics, input/review validation, and refusal to open holdout before development passes. The fresh full backend suite passed all 439 tests; only the existing Starlette/AnyIO deprecation warning remains. Existing frontend behavior is unchanged by this benchmark.
+The initial dedicated benchmark suite passed 28 checks covering denominator/tie behavior, raw-score comparison, incomplete results, unavailable usage, source/secret projection, actual SDK call limits, real service cache lifecycle, frozen-rubric repeats, full-source diagnostics, input/review validation, and refusal to open holdout before development passes. The fresh full backend suite passed all 439 tests; only the existing Starlette/AnyIO deprecation warning remains. Existing frontend behavior is unchanged by this benchmark.
+
+
+## Initial live development results — 2026-09-30
+
+Provider: approved `gpt-6-luna` on the saved Experiential endpoint. Main commit: `9fa7b26a4ca78c38dd977d1eff0df1f30c11b5c5`. Candidate commit: `841dafe92d641a18af88ba356ae59a5091fb9946`. Two reviewed jobs, five versions of one person's resume, four strict preferences, three cold and three fresh-evidence observations per job. The untouched holdout was not opened.
+
+| Measurement | Pinned main | Initial candidate |
+|---|---:|---:|
+| Complete cold comparisons | 6/6 | 0/6 |
+| Strict preference observations correct | 9/12 (75%) | 0/12; all 12 unscored |
+| Cold matching duration | 13.78–16.67 seconds | 30.01–165.71 seconds; incomplete |
+| Main full journey including analysis | 18.82–24.55 seconds | Reported per run; incomplete |
+| Provider requests | 12 | 61 |
+| Total token usage | 43,521 | Unavailable because some requests failed |
+
+Main reversed the reviewed FS-over-Python preference for the Java/full-stack job in all three repetitions. This is measured legacy keyword alignment, not a calibrated overall-fit percentage. The candidate produced no usable rankings, so it cannot claim improved ordering or speed. The benchmark suite took 1,656.23 seconds; this is not individual comparison latency. No cache/performance gate passed.
+
+The candidate recorded 23 SDK failures, repeatedly around 30 seconds, despite the matching caller requesting up to 90 seconds. Its successful QA profile responses were also rejected by source validation. The report contains 90 `invalid_provider_response` evaluation observations and five `benchmark_operation_failed` observations from a full-source diagnostic without a frozen rubric; these are repeated measurements, not unique people/resumes.
+
+A separate one-request diagnostic on the shortest reviewed resume returned usable JSON but fourteen unsupported skill facts. Some keys expanded acronyms or turned work activities into skill names absent from the quote. A valid REST APIs phrase also crossed a PDF line break and failed the literal matcher. After that diagnostic, recorded usage is **74/100 authorized requests**, leaving 26 for targeted checks. Aggregate token usage remains unavailable; the diagnostic itself reported 4,693 tokens. Raw responses and documents stay only in ignored private fixture files; the machine report is local at `scratch/matching/development-report.json`.
+
+### Fixes traced to these measurements
+
+- The guarded AI transport honors the SDK's finite positive read budget, capped at 90 seconds; explicit earlier deadlines and all DNS, port, redirect and response-size rules remain enforced. Ordinary outbound requests retain their 30-second default.
+- Shared literal matching accepts whitespace between phrase words, including PDF line breaks, while retaining punctuation/token boundaries and exact original source spans.
+- Source section checks recognize `Technical Skills and Tools` and `Education & Certificates`, prevent demonstrated-work credit for skills lists, and prevent dated work spans crossing into the combined education section.
+- JD/profile prompts require literal skill names/acronyms from their quotes and classify described work activities separately. Unsupported expansions remain rejected. JD, profile and assessment versions are bumped to invalidate earlier derived artifacts.
+- Fixed-rubric evidence repeats require prepared profiles. Failed upload preparation stops the lifecycle measurement instead of repeatedly rebuilding failed profiles under warm/scorer labels. Missing phases cannot pass any gate.
+
+These changes passed 153 focused checks. Fresh full regression and bounded live smoke outcomes will be added after verification; no passing development/holdout claim is made.
