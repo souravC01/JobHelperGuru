@@ -234,6 +234,8 @@ class Evaluation(MatchContract):
     is_top_match: bool = False
     evaluation_id: NonEmptyString | None = None
     scorer_version: NonEmptyString = "v2"
+    profile_fingerprint: NonEmptyString | None = None
+    assessment_version: NonEmptyString | None = None
 
     @model_validator(mode="after")
     def validate_score_state_and_requirement_coverage(self) -> Evaluation:

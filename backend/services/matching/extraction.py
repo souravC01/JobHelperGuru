@@ -21,6 +21,7 @@ from .models import MatchContract, NonEmptyString, Requirement, RequirementCateg
 from .normalization import aliases_for_skill, canonicalize_skill
 
 EXTRACTOR_VERSION = "overall-jd-v1"
+ASSESSMENT_VERSION = "overall-assessment-v1"
 MAX_REQUIREMENTS = 64
 _INSTRUCTION = re.compile(r"ignore\b.*\b(?:rubric|instructions?)|\bscore\s*\d+|\bsystem\s*prompt", re.I)
 _ELIGIBILITY = re.compile(r"\b(?:work authorization|legally authorized|sponsorship|graduation window|class of 20\d{2})\b", re.I)
@@ -318,7 +319,7 @@ def extract_evidence_batch(resumes: list[Resume], profiles: dict[str, ResumeProf
     fallback = {}
     def result(resume, status, reason=None, items=None, pending=None):
         items = items or []
-        return EvidenceExtraction(status=status, source_hash=source_hash(resume.content), extractor_version="overall-assessment-v1",
+        return EvidenceExtraction(status=status, source_hash=source_hash(resume.content), extractor_version=ASSESSMENT_VERSION,
                                   warnings=[reason] if reason else sorted(warnings[resume.id]), items=items,
                                   assessed_requirement_ids=sorted({i.requirement_id for i in items}),
                                   unresolved_requirement_ids=sorted(pending or []))

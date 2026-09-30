@@ -266,6 +266,31 @@ class StorageService:
                     PRIMARY KEY (user_id, resume_id, source_hash, version_key)
                 )
             """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS matching_rubrics (
+                    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, job_hash TEXT NOT NULL,
+                    version_key TEXT NOT NULL, rubric_fingerprint TEXT NOT NULL,
+                    payload_json TEXT NOT NULL, created_at TEXT NOT NULL,
+                    UNIQUE (user_id, job_hash, version_key)
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS matching_snapshots (
+                    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, resume_id TEXT NOT NULL,
+                    job_hash TEXT NOT NULL, source_hash TEXT NOT NULL, version_key TEXT NOT NULL,
+                    as_of TEXT NOT NULL, rubric_fingerprint TEXT NOT NULL,
+                    payload_json TEXT NOT NULL, created_at TEXT NOT NULL,
+                    UNIQUE (user_id, resume_id, job_hash, version_key, as_of)
+                )
+            """)
+            if self.is_postgres:
+                cursor.execute("ALTER TABLE matching_snapshots ADD COLUMN IF NOT EXISTS rubric_fingerprint TEXT NOT NULL DEFAULT ''")
+            else:
+                cursor.execute("PRAGMA table_info(matching_snapshots)")
+                if "rubric_fingerprint" not in {row["name"] for row in cursor.fetchall()}:
+                    cursor.execute("ALTER TABLE matching_snapshots ADD COLUMN rubric_fingerprint TEXT NOT NULL DEFAULT ''")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_matching_snapshots_resume ON matching_snapshots(user_id, resume_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_matching_snapshots_rubric ON matching_snapshots(user_id, rubric_fingerprint)")
             # Attachments table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS attachments (
@@ -778,8 +803,10 @@ class StorageService:
             if deleted:
                 if user_id:
                     cursor.execute(self._format_sql("DELETE FROM resume_profiles WHERE resume_id = ? AND user_id = ?"), (resume_id, user_id))
+                    cursor.execute(self._format_sql("DELETE FROM matching_snapshots WHERE resume_id = ? AND user_id = ?"), (resume_id, user_id))
                 else:
                     cursor.execute(self._format_sql("DELETE FROM resume_profiles WHERE resume_id = ?"), (resume_id,))
+                    cursor.execute(self._format_sql("DELETE FROM matching_snapshots WHERE resume_id = ?"), (resume_id,))
             return deleted
 
     def get_resume_profile(self, *, user_id: str, resume_id: str, source_hash: str, version_key: str):
@@ -810,6 +837,81 @@ class StorageService:
     def delete_resume_profiles(self, *, user_id: str, resume_id: str) -> int:
         with self._get_cursor() as cursor:
             cursor.execute(self._format_sql("DELETE FROM resume_profiles WHERE user_id = ? AND resume_id = ?"), (user_id, resume_id))
+            return cursor.rowcount
+
+    def save_matching_rubric(self, *, id: str, user_id: str, job_hash: str, version_key: str, payload_json: str) -> None:
+        from backend.services.matching.models import RequirementExtraction
+        from backend.services.matching.provenance import fingerprint
+        rubric = RequirementExtraction.model_validate_json(payload_json)
+        if rubric.status != "complete" or rubric.warnings or rubric.source_hash != job_hash:
+            raise ValueError("Only complete rubrics can be cached")
+        with self._get_immediate_cursor() as cursor:
+            cursor.execute(self._format_sql("""INSERT INTO matching_rubrics
+                (id, user_id, job_hash, version_key, rubric_fingerprint, payload_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (user_id, job_hash, version_key) DO NOTHING"""),
+                (id, user_id, job_hash, version_key, fingerprint(rubric.model_dump(mode="json")), payload_json, datetime.now().isoformat()))
+
+    def get_matching_rubric(self, *, user_id: str, job_hash: str, version_key: str):
+        with self._get_cursor() as cursor:
+            cursor.execute(self._format_sql("SELECT * FROM matching_rubrics WHERE user_id = ? AND job_hash = ? AND version_key = ?"),
+                           (user_id, job_hash, version_key))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def delete_matching_rubric(self, *, user_id: str, job_hash: str, version_key: str, payload_json: str) -> None:
+        """Remove a corrupt rubric only if it is still the row the caller inspected."""
+        with self._get_immediate_cursor() as cursor:
+            sql = "SELECT rubric_fingerprint, payload_json FROM matching_rubrics WHERE user_id = ? AND job_hash = ? AND version_key = ?"
+            if self.is_postgres: sql += " FOR UPDATE"
+            cursor.execute(self._format_sql(sql), (user_id, job_hash, version_key))
+            row = cursor.fetchone()
+            if not row or row["payload_json"] != payload_json: return
+            cursor.execute(self._format_sql("DELETE FROM matching_snapshots WHERE user_id = ? AND rubric_fingerprint = ?"),
+                           (user_id, row["rubric_fingerprint"]))
+            cursor.execute(self._format_sql("DELETE FROM matching_rubrics WHERE user_id = ? AND job_hash = ? AND version_key = ?"),
+                           (user_id, job_hash, version_key))
+
+    def save_matching_snapshot(self, *, id: str, user_id: str, resume_id: str, job_hash: str,
+                               source_hash: str, version_key: str, as_of: str, payload_json: str) -> None:
+        from backend.services.matching.models import Evaluation
+        evaluation = Evaluation.model_validate_json(payload_json)
+        if (evaluation.status != "complete" or evaluation.resume_id != resume_id or
+            evaluation.evaluation_id != id or evaluation.job_fingerprint != job_hash or
+            evaluation.source_fingerprint != source_hash or evaluation.resume_fingerprint != source_hash or
+            evaluation.as_of.isoformat() != as_of or not evaluation.profile_fingerprint or not evaluation.assessment_version):
+            raise ValueError("Only complete current evaluations can be cached")
+        with self._get_immediate_cursor() as cursor:
+            sql = "SELECT content, extraction_warnings FROM resumes WHERE id = ? AND user_id = ?"
+            if self.is_postgres: sql += " FOR UPDATE"
+            cursor.execute(self._format_sql(sql), (resume_id, user_id))
+            row = cursor.fetchone()
+            if not row or hashlib.sha256(row["content"].encode("utf-8")).hexdigest() != source_hash or self._resume_extraction_warnings(row):
+                raise ValueError("Resume source changed or is unavailable")
+            sql = "SELECT id FROM matching_rubrics WHERE user_id = ? AND job_hash = ? AND rubric_fingerprint = ?"
+            if self.is_postgres: sql += " FOR UPDATE"
+            cursor.execute(self._format_sql(sql), (user_id, job_hash, evaluation.rubric_fingerprint))
+            if not cursor.fetchone(): raise ValueError("Frozen rubric is no longer current")
+            cursor.execute(self._format_sql("SELECT resume_id FROM resume_profiles WHERE user_id = ? AND resume_id = ? AND source_hash = ? AND profile_fingerprint = ?"),
+                           (user_id, resume_id, source_hash, evaluation.profile_fingerprint))
+            if not cursor.fetchone(): raise ValueError("Profile is no longer current")
+            cursor.execute(self._format_sql("""INSERT INTO matching_snapshots
+                (id, user_id, resume_id, job_hash, source_hash, version_key, as_of, rubric_fingerprint, payload_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET
+                payload_json = excluded.payload_json, created_at = excluded.created_at"""),
+                (id, user_id, resume_id, job_hash, source_hash, version_key, as_of, evaluation.rubric_fingerprint, payload_json, datetime.now().isoformat()))
+
+    def get_matching_snapshot(self, *, user_id: str, resume_id: str, job_hash: str, version_key: str, as_of: str):
+        with self._get_cursor() as cursor:
+            cursor.execute(self._format_sql("SELECT * FROM matching_snapshots WHERE user_id = ? AND resume_id = ? AND job_hash = ? AND version_key = ? AND as_of = ?"),
+                           (user_id, resume_id, job_hash, version_key, as_of))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def delete_matching_snapshots_for_resume(self, resume_id: str, user_id: Optional[str] = None) -> int:
+        with self._get_cursor() as cursor:
+            sql, params = "DELETE FROM matching_snapshots WHERE resume_id = ?", (resume_id,)
+            if user_id: sql, params = sql + " AND user_id = ?", params + (user_id,)
+            cursor.execute(self._format_sql(sql), params)
             return cursor.rowcount
 
     def count_user_resumes(self, user_id: str) -> int:
@@ -1079,8 +1181,10 @@ class StorageService:
             if content is not None and content != current["content"]:
                 if user_id:
                     cursor.execute(self._format_sql("DELETE FROM resume_profiles WHERE resume_id = ? AND user_id = ?"), (resume_id, user_id))
+                    cursor.execute(self._format_sql("DELETE FROM matching_snapshots WHERE resume_id = ? AND user_id = ?"), (resume_id, user_id))
                 else:
                     cursor.execute(self._format_sql("DELETE FROM resume_profiles WHERE resume_id = ?"), (resume_id,))
+                    cursor.execute(self._format_sql("DELETE FROM matching_snapshots WHERE resume_id = ?"), (resume_id,))
 
         return self.get_resume(resume_id, user_id=user_id)
 
