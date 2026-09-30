@@ -11,3 +11,6 @@ dist/
 scratch/
 docs/superpowers/
 gha-creds-*.json
+
+# Local, authorized benchmark documents and review records
+tests/fixtures/matching/private-*.json

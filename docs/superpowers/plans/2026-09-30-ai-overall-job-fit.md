@@ -12,7 +12,7 @@
 
 **Spec:** This plan's “Design baseline” section records the in-chat design and the owner's choice of overall job fit. Earlier evidence-branch specs are reference material, not authority for the new branch. The proposed numeric weights, credits, batching ceilings, and release thresholds below require owner review with this plan before execution.
 
-**Execution status:** The owner authorized implementation task-by-task. Tasks 1–8, including prerequisite 4A, are complete on `codex/ai-overall-job-fit`; Task 9 and all later tasks remain pending. Each completion updates this plan and the execution ledger. Live provider requests and release activation remain unauthorized.
+**Execution status:** The owner authorized implementation task-by-task. Tasks 1–8, including prerequisite 4A, are complete on `feat/ai-overall-job-fit`; Task 9 is in progress and Task 10 remains pending. The owner authorized the supplied document folder and saved `exp/gpt6 luna` provider. The owner reviewed the same-person development preferences and approved up to 100 requests total for main/candidate; release activation remains unauthorized. Each completion updates this plan and the execution ledger.
 
 **Plan persistence:** The repository ignores `docs/superpowers/`. This file is saved locally but is not automatically tracked. Task 1 must explicitly transfer it to the destination and force-add this one approved plan path when committing planning records; do not change the ignore rule or force-add the entire directory.
 
@@ -29,7 +29,7 @@
 | 6 — rubric and assessment caches | Complete | 40 cache tests and 368 backend tests passed; warm zero-call comparisons, mixed hits, concurrent rubric freezing and migrations checked |
 | 7 — authenticated API | Complete | 59 focused, 411 backend and 71 frontend tests passed; production build passed |
 | 8 — truthful UI and request lifecycle | Complete | 89 frontend and 43 authenticated API tests passed; production build passed (1,593 modules); no live provider calls |
-| 9 — provider quality and performance gates | Pending — next | |
+| 9 — quality/stability/speed evidence | In progress | Benchmark implemented; 28 focused / 439 backend checks passed; live measurements next; reviewed inputs and 100-request cap approved |
 | 10 — final regression and handoff | Pending | |
 
 Task 3 accepts validated proposals with stable source/version-based requirement IDs; persisted frozen rubrics belong to Task 6. Its provider schema requires exact chunk acknowledgment and explicit completion. Unknown technologies survive without a taxonomy gate. Server validation rejects ambiguous quotes, split/partial literal OR groups, unsupported tenure minima, non-equivalent category conflicts and explicit document instructions. Semantic interpretation remains the AI's responsibility and is not yet validated by live quality measurements. Over-limit rubrics remain needs_review without trimming.
@@ -393,7 +393,7 @@ expect(screen.getByText('Overall job fit')).toBeInTheDocument();
 
 **Profile measurement extension:** Report profile extraction, rubric extraction and semantic assessment calls/tokens separately. Measure (a) first upload/profile preparation, (b) first job with prepared profiles, (c) a second different job against the same vault, (d) a warm identical comparison, (e) one edited resume, and (f) a scorer-only version bump. Second-job comparison must make zero profile-extraction calls; scorer-only change must make zero profile-extraction/assessment calls. Count original-source fallback frequency and compare ranking quality against full-source assessment to detect profile omissions. A speed gain that hides evidence or worsens completeness does not pass.
 
-- [ ] **Step 1: Add failing report checks.** `test_tied_and_unscored_pairs_stay_in_denominator`; `test_report_separates_per_job_latency_from_suite_total`; `test_missing_usage_is_unavailable`; `test_same_person_gate_rejects_cross_person_fixture`; `test_stability_reports_repeated_order_changes`.
+- [x] **Step 1: Add failing report checks.** `test_tied_and_unscored_pairs_stay_in_denominator`; `test_report_separates_per_job_latency_from_suite_total`; `test_missing_usage_is_unavailable`; `test_same_person_gate_rejects_cross_person_fixture`; `test_stability_reports_repeated_order_changes`.
 
 ```python
 assert report["strict_pairs"]["total"] == 3  # One correct, one tied, one unscored.
@@ -402,12 +402,14 @@ assert report["token_usage"] is None  # Provider omitted usage metadata.
 assert cross_person_report["release_gate_passed"] is False
 assert changing_order_report["stability"]["reversed_pairs"] == 1
 ```
-- [ ] **Step 2: Run `./.venv/Scripts/python.exe -m pytest -q tests/test_match_benchmark.py`.** Confirm intentional missing report behavior fails.
+- [x] **Step 2: Run `./.venv/Scripts/python.exe -m pytest -q tests/test_match_benchmark.py`.** Confirm intentional missing report behavior fails.
 - [ ] **Step 3: Implement lean measurement/reporting.** Establish main and new-branch baselines with the same approved provider and same allowed development inputs. Use temporary isolated storage for true cold runs; test repeated evidence against a fixed rubric separately from repeated cold rubric extraction. Report rubric drift separately from evidence/ranking drift. No test-only score overrides or desired-winner bonuses.
 - [ ] **Step 4: Perform authorized development measurements.** At least three runs on each approved development comparison. Require complete evaluations and no preferred-pair reversal across those repeats before freezing a fresh holdout. If it fails, trace category/evidence contributions and fix the measured cause; do not add weight knobs or consume holdout prematurely.
 - [ ] **Step 5: Run untouched reviewed holdout and performance gates only after development passes.** Proposed gate: at least 10 real same-person jobs and 20 strict reviewed pairs; >=90% strict ordering agreement, 100% evaluation completeness, no invalid quote credits. Ties/unscored strict preferences are failures; explicitly reviewed ties are measured separately. Repeat holdout evaluation three times against the frozen rubric; all runs must satisfy the gate. These requirements are new proposed gates, not historical achievements.
 - [ ] **Step 6: Measure individual cold/warm comparisons.** Five 8,000-character resumes plus one 8,000-character JD: complete each cold comparison within 120 seconds, report actual per-job latency and calls/tokens; warm repeats preserve IDs/scores with zero calls. Compare to main cold baseline, and report any latency/token regression honestly. A five-job total cannot establish the single-job target. Include analysis-call latency when reporting the full user journey.
 - [ ] **Step 7: Publish the gate report and commit.** Subject: `test: measure AI ranking quality and cache performance`. Leave flag off if any required gate fails; list exact failures and next diagnosis.
+
+**Execution note (2026-09-30):** Reporting and the isolated runner are implemented, with 28 focused and 439 backend checks passing. All 40 pinned source hashes/head/status remain unchanged. Step 3 remains open until live main/candidate baselines exist. The owner supplied real document paths and the saved gpt-6-luna profile; the owner confirmed same-person ownership, all four proposed preferences and a 100-request total development cap. Holdout is unopened. Supplied documents are shorter than the exact-size performance workload, so Steps 4–7 are not complete. Private documents/review records remain ignored; see `docs/ai-matching-evaluation.md` for the measurement contract and outstanding evidence.
 
 ## Task 10: Final regression, selective cleanup, and release handoff
 
