@@ -288,13 +288,14 @@ export async function deleteResume(id) {
 }
 
 
-export async function matchResumes(payload) {
+export async function matchResumes(payload, { signal = null } = {}) {
   const job = payload?.job || (payload?.title || payload?.required_skills ? payload : null);
   const resumes = payload?.resumes;
   const res = await authFetch(`${API_BASE}/resumes/match`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ job, resumes }),
+    signal,
   });
   if (!res.ok) {
     throw await parseApiError(res, 'Failed to rank resumes');

@@ -12,7 +12,7 @@
 
 **Spec:** This plan's “Design baseline” section records the in-chat design and the owner's choice of overall job fit. Earlier evidence-branch specs are reference material, not authority for the new branch. The proposed numeric weights, credits, batching ceilings, and release thresholds below require owner review with this plan before execution.
 
-**Execution status:** The owner authorized implementation task-by-task. Tasks 1–7, including prerequisite 4A, are complete on `codex/ai-overall-job-fit`; Task 8 and all later tasks remain pending. Each completion updates this plan and the execution ledger. Live provider requests and release activation remain unauthorized.
+**Execution status:** The owner authorized implementation task-by-task. Tasks 1–8, including prerequisite 4A, are complete on `codex/ai-overall-job-fit`; Task 9 and all later tasks remain pending. Each completion updates this plan and the execution ledger. Live provider requests and release activation remain unauthorized.
 
 **Plan persistence:** The repository ignores `docs/superpowers/`. This file is saved locally but is not automatically tracked. Task 1 must explicitly transfer it to the destination and force-add this one approved plan path when committing planning records; do not change the ignore rule or force-add the entire directory.
 
@@ -28,8 +28,8 @@
 | 5 — deterministic scoring and ranking | Complete | 68 focused and 328 backend tests passed; exact weighted arithmetic and raw-score ties checked |
 | 6 — rubric and assessment caches | Complete | 40 cache tests and 368 backend tests passed; warm zero-call comparisons, mixed hits, concurrent rubric freezing and migrations checked |
 | 7 — authenticated API | Complete | 59 focused, 411 backend and 71 frontend tests passed; production build passed |
-| 8 — truthful UI and request lifecycle | Pending — next | |
-| 9 — provider quality and performance gates | Pending | |
+| 8 — truthful UI and request lifecycle | Complete | 89 frontend and 43 authenticated API tests passed; production build passed (1,593 modules); no live provider calls |
+| 9 — provider quality and performance gates | Pending — next | |
 | 10 — final regression and handoff | Pending | |
 
 Task 3 accepts validated proposals with stable source/version-based requirement IDs; persisted frozen rubrics belong to Task 6. Its provider schema requires exact chunk acknowledgment and explicit completion. Unknown technologies survive without a taxonomy gate. Server validation rejects ambiguous quotes, split/partial literal OR groups, unsupported tenure minima, non-equivalent category conflicts and explicit document instructions. Semantic interpretation remains the AI's responsibility and is not yet validated by live quality measurements. Over-limit rubrics remain needs_review without trimming.
@@ -61,6 +61,14 @@ Both new operations use existing provider selection/transport. Offline or unconf
 Client helpers reuse authenticated fetching/error handling, forward raw text, selected IDs, fresh and AbortSignal, and never retry or switch to offline implicitly. Existing matching/analysis/provider endpoints retain their behavior. The authenticated journey checks analysis -> saved resume -> evaluation -> zero-call warm repeat -> edit/save -> changed assessment -> different job -> provider switch -> flag rollback. Source-less legacy job metadata cannot substitute for raw JD on the new endpoint. UI labels, obsolete-request guards, and profile preparation after vault saves remain Task 8.
 
 Task 7 verification: 59 focused API/provider checks, 411 full backend tests, 71 frontend tests and production build (1,593 modules) passed; only the existing Starlette warning remains. Tests use temporary storage and synthetic provider responses; no live AI requests or rollout activation occurred. All 40 original source hashes remain unchanged.
+
+Task 8 displays backend overall/raw/category scores and separate skill coverage, with no local Boost calculation in the new path. Only a unique positive leader in a complete comparison is auto-selected; tied/incomplete/zero-score results clear selection, with explicit accessible resume choices. Stored Resume/null callbacks resolve both id and resume_id safely, and BulletCraft/cover-letter actions cannot silently choose the first resume after new-mode selection clears.
+
+Shared feature/provider metadata selects the mode. Pending discovery, discovery failure, offline/unconfigured providers and evaluation failures cannot yield a fallback overall percentage. Full raw JD is forwarded unchanged; source-less jobs request the full description and offer explicitly labeled legacy keyword alignment. Abort signals plus monotonic request identity reject obsolete job/content/provider responses, including stale finally blocks; unchanged resume count no longer hides content edits.
+
+Vault saves publish the saved resume before independent profile preparation. Upload/manual save/content edits prepare only when the feature and AI provider are ready; rename reuses existing profiles, older entries prepare lazily without bulk calls. Existing Quick View gains a native saved-text editor. Preparing/ready/review/failure-with-retry states preserve uploaded data and extraction warnings; provider changes, edits, deletion and unmount invalidate obsolete preparation responses. Repeated preparation remains an ID-only API call; the real synthetic-provider API check confirms zero extraction calls on repeat.
+
+Task 8 verification: 89 frontend tests and 43 authenticated API tests passed, including all named UI regressions and repeat-profile cache checks. Production build passed (1,593 modules); existing Starlette/AnyIO warning only. All 40 pinned source hashes and the original branch/status remain unchanged. No dependencies, live AI calls, deployment or flag activation were added. Tasks 9–10 remain pending; synthetic checks do not establish ranking quality or live latency.
 
 ## Global Constraints
 
@@ -363,7 +371,7 @@ assert isinstance(legacy_response.json(), list)
 
 **Interfaces:** Existing `onBestResumeSelected` accepts a stored Resume or null at the App boundary. New batch results use `resume_id`; resolve against current stored resumes. With a unique completed leader select its Resume; for tied/incomplete results clear automatic selection and allow explicit selection. Keep `id`/`resume_id` compatibility guards from source callback fixes.
 
-- [ ] **Step 1: Add failing UI checks.** `reranks_after_same_count_content_edit`; `ignores_previous_job_response`; `ignores_previous_profile_response`; `ties_show_equal_rank_without_auto_choice`; `incomplete_batch_has_no_top_badge`; `adopted_keyword_does_not_raise_backend_score`; `missing_raw_text_requests_full_jd`; `nullable_best_resume_callback_is_safe`.
+- [x] **Step 1: Add failing UI checks.** `reranks_after_same_count_content_edit`; `ignores_previous_job_response`; `ignores_previous_profile_response`; `ties_show_equal_rank_without_auto_choice`; `incomplete_batch_has_no_top_badge`; `adopted_keyword_does_not_raise_backend_score`; `missing_raw_text_requests_full_jd`; `nullable_best_resume_callback_is_safe`.
 
 ```javascript
 expect(onBestResumeSelected).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'tied-a' }));
@@ -371,11 +379,11 @@ expect(screen.queryByText('Top Fit')).not.toBeInTheDocument(); // Incomplete bat
 expect(screen.queryByText(/Boost/)).not.toBeInTheDocument(); // Overall-fit mode.
 expect(screen.getByText('Overall job fit')).toBeInTheDocument();
 ```
-- [ ] **Step 2: Run `npm run test:run -- src/test/ResumeFitRanker.test.jsx` in frontend.** Confirm failures target these behaviors.
-- [ ] **Step 3: Adapt only useful routing/state pieces.** Abort obsolete requests and use a monotonically increasing request token to reject late results even when cancellation is ineffective. Dependencies include source/content revisions and provider/profile refresh identity, not resume count alone. Clear old results when source changes or request fails. Prevent older requests' finally blocks from clearing a newer request's loading state.
-- [ ] **Step 3A: Prepare profiles after vault saves without failing the save.** In `ResumeLibrary.jsx` and the API helper, request profile preparation after successful upload/content edit only when AI feature/provider is enabled. Show preparing/ready/failed-with-retry status; do not expose fact schemas or cache keys. Name-only edits reuse profiles. Existing vault entries remain usable and prepare lazily on comparison. Add `profile_analysis_failure_preserves_uploaded_resume`, `repeat_profile_preparation_reuses_saved_analysis`, and `old_resume_profiles_lazily_without_bulk_calls` checks.
-- [ ] **Step 4: Show backend-authoritative overall/raw/category and separate skill-coverage summaries.** Label `Overall job fit`; explain percentage as source-backed fit, never hiring probability. Show tied leaders and actionable review/error states with accessible controls. Remove projected-score/Boost arithmetic on the new path; adopted suggestions trigger a real reevaluation only after saved resume text changes. No new full evidence component. Verify tests and frontend build.
-- [ ] **Step 5: Commit.** Subject: `fix: display current evidence backed fit rankings`.
+- [x] **Step 2: Run `npm run test:run -- src/test/ResumeFitRanker.test.jsx` in frontend.** Confirm failures target these behaviors.
+- [x] **Step 3: Adapt only useful routing/state pieces.** Abort obsolete requests and use a monotonically increasing request token to reject late results even when cancellation is ineffective. Dependencies include source/content revisions and provider/profile refresh identity, not resume count alone. Clear old results when source changes or request fails. Prevent older requests' finally blocks from clearing a newer request's loading state.
+- [x] **Step 3A: Prepare profiles after vault saves without failing the save.** In `ResumeLibrary.jsx` and the API helper, request profile preparation after successful upload/content edit only when AI feature/provider is enabled. Show preparing/ready/failed-with-retry status; do not expose fact schemas or cache keys. Name-only edits reuse profiles. Existing vault entries remain usable and prepare lazily on comparison. Add `profile_analysis_failure_preserves_uploaded_resume`, `repeat_profile_preparation_reuses_saved_analysis`, and `old_resume_profiles_lazily_without_bulk_calls` checks.
+- [x] **Step 4: Show backend-authoritative overall/raw/category and separate skill-coverage summaries.** Label `Overall job fit`; explain percentage as source-backed fit, never hiring probability. Show tied leaders and actionable review/error states with accessible controls. Remove projected-score/Boost arithmetic on the new path; adopted suggestions trigger a real reevaluation only after saved resume text changes. No new full evidence component. Verify tests and frontend build.
+- [x] **Step 5: Commit.** Subject: `fix: display current evidence backed fit rankings`.
 
 ## Task 9: Quality, stability, speed, and release evidence
 

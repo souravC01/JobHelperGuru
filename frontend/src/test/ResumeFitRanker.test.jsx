@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import ResumeFitRanker from '../components/ResumeFitRanker'
 import * as apiClient from '../api/client'
 
 vi.mock('../api/client', () => ({
   matchResumes: vi.fn(),
+  evaluateResumes: vi.fn(),
 }))
 
 describe('ResumeFitRanker 3-state graduation timeline UI (B14)', () => {
@@ -86,4 +87,118 @@ describe('ResumeFitRanker 3-state graduation timeline UI (B14)', () => {
     // State 3: Unknown
     expect(screen.getByText(/Timeline Unknown \(Graduation date not detected\)/i)).toBeInTheDocument()
   })
+})
+
+const stored = [{ id: 'a', name: 'Resume A', content: 'Built Python services' }, { id: 'b', name: 'Resume B', content: 'SQL reporting' }]
+const fullJob = { id: 'job-a', raw_text: 'Build Python services and SQL reporting' }
+const result = (id, score = 80, rank = 1) => ({ resume_id: id, status: 'complete', match_score: score, raw_score: String(score), rank, is_top_match: rank === 1 && score > 0, category_scores: { required_skills: '75.50' }, skill_coverage_score: '50.00', warnings: [] })
+const batch = (evaluations = [result('a'), result('b', 50, 2)], comparison_complete = true) => ({ comparison_complete, evaluations })
+const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no }); return { promise, resolve, reject } }
+const props = { currentJob: fullJob, resumes: stored, matchingEnabled: true, aiProviderReady: true }
+
+describe('Overall job fit UI and lifecycle', () => {
+  beforeEach(() => { vi.resetAllMocks(); apiClient.evaluateResumes.mockResolvedValue(batch()) })
+
+  it('reranks_after_same_count_content_edit', async () => {
+    const { rerender } = render(<ResumeFitRanker {...props} />)
+    await screen.findByText('80%')
+    rerender(<ResumeFitRanker {...props} resumes={[{ ...stored[0], content: 'Edited experience' }, stored[1]]} />)
+    await waitFor(() => expect(apiClient.evaluateResumes).toHaveBeenCalledTimes(2))
+    expect(apiClient.evaluateResumes).toHaveBeenLastCalledWith(fullJob.raw_text, ['a', 'b'], expect.objectContaining({ fresh: false, signal: expect.any(AbortSignal) }))
+  })
+
+  for (const change of ['job', 'profile']) {
+    it(`ignores_previous_${change}_response`, async () => {
+      const previous = deferred(), current = deferred()
+      const selected = vi.fn()
+      apiClient.evaluateResumes.mockReturnValueOnce(previous.promise).mockReturnValueOnce(current.promise)
+      const { rerender } = render(<ResumeFitRanker {...props} onBestResumeSelected={selected} />)
+      const oldSignal = apiClient.evaluateResumes.mock.calls[0][2].signal
+      rerender(<ResumeFitRanker {...props} currentJob={change === 'job' ? { raw_text: 'New job' } : fullJob} refreshKey={change === 'profile' ? 1 : 0} onBestResumeSelected={selected} />)
+      expect(oldSignal.aborted).toBe(true)
+      await act(async () => previous.resolve(batch([result('a', 99)])))
+      expect(screen.queryByText('99%')).not.toBeInTheDocument()
+      expect(screen.getByRole('status')).toHaveTextContent('Evaluating')
+      await act(async () => current.resolve(batch([result('b', 65)])))
+      expect(screen.getByText('65%')).toBeInTheDocument()
+      expect(selected).toHaveBeenLastCalledWith(stored[1])
+    })
+  }
+
+  it('ties_show_equal_rank_without_auto_choice', async () => {
+    apiClient.evaluateResumes.mockResolvedValue(batch([result('a'), result('b')]))
+    const selected = vi.fn()
+    render(<ResumeFitRanker {...props} onBestResumeSelected={selected} />)
+    await screen.findByText(/Tied leaders/)
+    expect(screen.getAllByText('Rank 1')).toHaveLength(2)
+    expect(selected).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }))
+    expect(selected).toHaveBeenLastCalledWith(null)
+    fireEvent.click(screen.getByRole('button', { name: 'Use Resume B' }))
+    expect(selected).toHaveBeenLastCalledWith(stored[1])
+  })
+
+  it('incomplete_batch_has_no_top_badge', async () => {
+    apiClient.evaluateResumes.mockResolvedValue(batch([result('a'), { resume_id: 'b', status: 'needs_review', reason_codes: ['source_incomplete'], warnings: ['Resume text is incomplete.'] }], false))
+    const selected = vi.fn()
+    render(<ResumeFitRanker {...props} onBestResumeSelected={selected} />)
+    await screen.findByText(/Comparison incomplete/)
+    expect(screen.queryByText('Top Fit')).not.toBeInTheDocument()
+    expect(screen.queryByText('Rank 1')).not.toBeInTheDocument()
+    expect(screen.getByText(/Resume text is incomplete/)).toBeInTheDocument()
+    expect(screen.getByText('Needs review')).toBeInTheDocument()
+    expect(selected).toHaveBeenLastCalledWith(null)
+  })
+
+  it('adopted_keyword_does_not_raise_backend_score', async () => {
+    const { rerender } = render(<ResumeFitRanker {...props} />)
+    await screen.findByText('80%')
+    rerender(<ResumeFitRanker {...props} adoptedSkillsMap={{ a: ['SQL'] }} />)
+    expect(screen.getByText('80%')).toBeInTheDocument()
+    expect(screen.getByText('Raw score: 80 / 100')).toBeInTheDocument()
+    expect(screen.getAllByText('Required qualifications: 75.50%')).toHaveLength(2)
+    expect(screen.getAllByText('Skill coverage: 50.00%')).toHaveLength(2)
+    expect(screen.queryByText(/Boost/)).not.toBeInTheDocument()
+    expect(apiClient.evaluateResumes).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Overall job fit')).toBeInTheDocument()
+  })
+
+  it('missing_raw_text_requests_full_jd', async () => {
+    render(<ResumeFitRanker {...props} currentJob={{ analysis: { title: 'Old job', required_skills: ['Python'] } }} />)
+    expect(screen.getByText(/Paste the full job description/)).toBeInTheDocument()
+    expect(apiClient.evaluateResumes).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Full job description'), { target: { value: 'Original full job description' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Evaluate full description' }))
+    await screen.findByText('80%')
+    expect(apiClient.evaluateResumes.mock.calls[0][0]).toBe('Original full job description')
+  })
+
+  it('failed_provider_clears_scores_and_never_switches_offline', async () => {
+    const onAiError = vi.fn()
+    render(<ResumeFitRanker {...props} onAiError={onAiError} />)
+    await screen.findByText('80%')
+    apiClient.evaluateResumes.mockRejectedValue(Object.assign(new Error('Check AI settings and retry.'), { status: 502 }))
+    fireEvent.click(screen.getByRole('button', { name: 'Re-evaluate' }))
+    await screen.findByRole('alert')
+    expect(screen.queryByText('80%')).not.toBeInTheDocument()
+    expect(onAiError).not.toHaveBeenCalled()
+    expect(apiClient.matchResumes).not.toHaveBeenCalled()
+    expect(apiClient.evaluateResumes.mock.calls[1][2].fresh).toBe(true)
+  })
+
+  it('offline_provider_and_pending_features_never_enter_overall_evaluation', () => {
+    const { rerender } = render(<ResumeFitRanker {...props} aiProviderReady={false} />)
+    expect(screen.getByText(/Configure an AI provider/)).toBeInTheDocument()
+    rerender(<ResumeFitRanker {...props} matchingEnabled={null} />)
+    expect(apiClient.evaluateResumes).not.toHaveBeenCalled()
+    expect(apiClient.matchResumes).not.toHaveBeenCalled()
+  })
+})
+
+it('source_less_job_can_explicitly_use_labeled_legacy_alignment', async () => {
+  apiClient.matchResumes.mockResolvedValue([{ resume_id: 'a', resume_name: 'Resume A', match_score: 30, matched_keywords: [], missing_keywords: ['Python'] }])
+  render(<ResumeFitRanker {...props} currentJob={{ analysis: { required_skills: ['Python'] } }} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Use legacy keyword alignment' }))
+  await screen.findByText('Legacy keyword alignment')
+  expect(apiClient.evaluateResumes).not.toHaveBeenCalled()
+  expect(apiClient.matchResumes).toHaveBeenCalledTimes(1)
 })

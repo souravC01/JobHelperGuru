@@ -22,9 +22,10 @@ import {
   parseResumeFile,
   updateResume,
   downloadResumeFile,
+  prepareResumeProfile,
 } from '../api/client';
 
-export default function ResumeLibrary({ onResumesUpdated }) {
+export default function ResumeLibrary({ onResumesUpdated, profilePreparationEnabled = false, refreshKey = 0 }) {
   const [resumes, setResumes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -44,26 +45,86 @@ export default function ResumeLibrary({ onResumesUpdated }) {
   // Quick View modal state
   const [viewingResume, setViewingResume] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [textDraft, setTextDraft] = useState(null);
+  const [savingText, setSavingText] = useState(false);
+  const [textError, setTextError] = useState('');
+  const [profileStates, setProfileStates] = useState({});
+  const preparationRef = useRef({});
+  const preparationEnabledRef = useRef(profilePreparationEnabled);
+  preparationEnabledRef.current = profilePreparationEnabled;
+  const generationRef = useRef(0);
+
+  useEffect(() => {
+    setProfileStates({});
+    return () => {
+      Object.values(preparationRef.current).forEach(controller => controller.abort());
+      preparationRef.current = {};
+    };
+  }, [profilePreparationEnabled, refreshKey]);
+
+  const prepareProfile = async (resume) => {
+    if (!preparationEnabledRef.current || !resume?.id) return;
+    preparationRef.current[resume.id]?.abort();
+    const controller = new AbortController();
+    preparationRef.current[resume.id] = controller;
+    const current = () => preparationRef.current[resume.id] === controller && !controller.signal.aborted;
+    setProfileStates(prev => ({ ...prev, [resume.id]: { status: 'preparing' } }));
+    try {
+      const prepared = await prepareResumeProfile(resume.id, { signal: controller.signal });
+      if (current()) setProfileStates(prev => ({ ...prev, [resume.id]: { status: prepared.status, warnings: prepared.warnings || [] } }));
+    } catch (err) {
+      if (current()) setProfileStates(prev => ({ ...prev, [resume.id]: { status: 'failed', error: err.message || 'Check AI settings and retry.' } }));
+    }
+  };
+
+  const publishSavedResume = saved => {
+    const updated = resumes.some(r => r.id === saved.id)
+      ? resumes.map(r => r.id === saved.id ? saved : r) : [...resumes, saved];
+    setResumes(updated);
+    onResumesUpdated?.(updated);
+  };
+
+  const saveText = async () => {
+    if (!textDraft?.trim() || !viewingResume) return;
+    const generation = generationRef.current;
+    setSavingText(true);
+    setTextError('');
+    try {
+      const saved = await updateResume(viewingResume.id, { content: textDraft });
+      if (generation !== generationRef.current) return;
+      publishSavedResume(saved);
+      setViewingResume(saved);
+      setTextDraft(null);
+      void prepareProfile(saved);
+    } catch (err) {
+      if (generation === generationRef.current) setTextError(err.message || 'Failed to save resume text.');
+    } finally {
+      if (generation === generationRef.current) setSavingText(false);
+    }
+  };
 
   const fileInputRef = useRef(null);
   const directFileInputRef = useRef(null);
   const fileParseRequestIdRef = useRef(0);
 
   const loadResumes = async () => {
+    const generation = generationRef.current;
     setLoading(true);
     try {
       const data = await getResumes();
+      if (generation !== generationRef.current) return;
       setResumes(data);
       if (onResumesUpdated) onResumesUpdated(data);
     } catch (err) {
-      setError('Failed to load resumes');
+      if (generation === generationRef.current) setError('Failed to load resumes');
     } finally {
-      setLoading(false);
+      if (generation === generationRef.current) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadResumes();
+    return () => { ++generationRef.current; ++fileParseRequestIdRef.current; };
   }, []);
 
   const handleCloseAddModal = () => {
@@ -81,32 +142,41 @@ export default function ResumeLibrary({ onResumesUpdated }) {
       setError('Both resume title and content are required.');
       return;
     }
+    const generation = generationRef.current;
     setSubmitting(true);
     setError('');
     try {
+      let saved;
       if (selectedFile) {
         // Upload the actual binary with the user's custom title and edited text content
-        await uploadResumeFile(selectedFile, newName.trim(), newContent.trim());
+        saved = await uploadResumeFile(selectedFile, newName.trim(), newContent.trim());
       } else {
         // Plain text entry
-        await addResume({ name: newName.trim(), content: newContent.trim() });
+        saved = await addResume({ name: newName.trim(), content: newContent.trim() });
       }
+      if (generation !== generationRef.current) return;
+      publishSavedResume(saved);
       handleCloseAddModal();
       await loadResumes();
+      if (generation === generationRef.current) void prepareProfile(saved);
     } catch (err) {
-      setError(err.message || 'Failed to save resume.');
+      if (generation === generationRef.current) setError(err.message || 'Failed to save resume.');
     } finally {
-      setSubmitting(false);
+      if (generation === generationRef.current) setSubmitting(false);
     }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this resume profile?')) return;
+    const generation = generationRef.current;
     try {
       await deleteResume(id);
+      if (generation !== generationRef.current) return;
+      preparationRef.current[id]?.abort();
+      delete preparationRef.current[id];
       await loadResumes();
     } catch (err) {
-      alert('Failed to delete resume');
+      if (generation === generationRef.current) alert('Failed to delete resume');
     }
   };
 
@@ -151,20 +221,25 @@ export default function ResumeLibrary({ onResumesUpdated }) {
   const handleDirectUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    const generation = generationRef.current;
     setLoading(true);
     try {
+      let saved;
       const suggestedTitle = file.name.replace(/\.[^/.]+$/, '');
       if (file.name.endsWith('.txt') || file.name.endsWith('.md')) {
         const text = await file.text();
-        await uploadResumeFile(file, suggestedTitle, text);
+        saved = await uploadResumeFile(file, suggestedTitle, text);
       } else {
-        await uploadResumeFile(file, suggestedTitle);
+        saved = await uploadResumeFile(file, suggestedTitle);
       }
+      if (generation !== generationRef.current) return;
+      publishSavedResume(saved);
       await loadResumes();
+      if (generation === generationRef.current) void prepareProfile(saved);
     } catch (err) {
-      alert(err.message || 'Failed to upload document');
+      if (generation === generationRef.current) alert(err.message || 'Failed to upload document');
     } finally {
-      setLoading(false);
+      if (generation === generationRef.current) setLoading(false);
       if (directFileInputRef.current) directFileInputRef.current.value = '';
     }
   };
@@ -191,9 +266,11 @@ export default function ResumeLibrary({ onResumesUpdated }) {
 
   const handleSaveEdit = async (id) => {
     if (!editingName.trim()) return;
+    const generation = generationRef.current;
     setRenaming(true);
     try {
       const updated = await updateResume(id, { name: editingName.trim() });
+      if (generation !== generationRef.current) return;
       setResumes((prev) =>
         prev.map((r) => (r.id === id ? { ...r, name: updated.name } : r))
       );
@@ -205,9 +282,9 @@ export default function ResumeLibrary({ onResumesUpdated }) {
       setEditingId(null);
       setEditingName('');
     } catch (err) {
-      alert(err.message || 'Failed to rename resume');
+      if (generation === generationRef.current) alert(err.message || 'Failed to rename resume');
     } finally {
-      setRenaming(false);
+      if (generation === generationRef.current) setRenaming(false);
     }
   };
 
@@ -351,7 +428,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
 
                   <div className="flex items-center gap-1 shrink-0">
                     <button
-                      onClick={() => setViewingResume(resume)}
+                      onClick={() => { setViewingResume(resume); setTextDraft(null); setTextError(''); }}
                       title="Quick View full resume"
                       className="text-[#666666] hover:text-[#0a66c2] p-1 rounded hover:bg-[#f3f6f8] transition-colors"
                     >
@@ -376,9 +453,19 @@ export default function ResumeLibrary({ onResumesUpdated }) {
               </div>
 
               <div className="pt-2 border-t border-[#e0e0e0] flex items-center justify-between text-[11px] text-[#666666]">
-                <span className="flex items-center gap-1 text-[#057642] font-semibold text-[11px]">
-                  <CheckCircle size={12} /> Ready for ATS Matching
-                </span>
+                <div aria-live="polite" className="space-y-1">
+                  {profilePreparationEnabled ? <>
+                    <p>{profileStates[resume.id]?.status === 'preparing' ? 'Preparing resume analysis...'
+                      : profileStates[resume.id]?.status === 'complete' ? 'Ready for job comparison'
+                      : profileStates[resume.id]?.status === 'failed' ? 'Analysis failed. Your resume is saved.'
+                      : profileStates[resume.id]?.status === 'needs_review' ? 'Analysis needs review. Check saved text and retry.'
+                      : 'Analyzed when compared with a job'}</p>
+                    {profileStates[resume.id]?.error && <p>{profileStates[resume.id].error}</p>}
+                    {(profileStates[resume.id]?.warnings || []).map((warning, i) => <p key={i}>{warning}</p>)}
+                    {['failed', 'needs_review'].includes(profileStates[resume.id]?.status) && <button className="btn-secondary-corporate" aria-label={`Retry analysis for ${resume.name}`} onClick={() => prepareProfile(resume)}>Retry analysis</button>}
+                  </> : <p>Saved for job comparison</p>}
+                  {(resume.extraction_warnings || []).map((warning, i) => <p key={i}>{warning}</p>)}
+                </div>
                 <span className="font-mono text-[10px] text-[#666666]">
                   {resume.content.split(/\s+/).length} words
                 </span>
@@ -588,6 +675,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
                 )}
 
                 <button
+                  disabled={savingText}
                   onClick={() => setViewingResume(null)}
                   className="text-[#666666] hover:text-[#000000] p-1.5 rounded-full hover:bg-[#f3f6f8] transition-colors"
                   title="Close"
@@ -599,9 +687,17 @@ export default function ResumeLibrary({ onResumesUpdated }) {
 
             {/* Scrollable Document Reader Body */}
             <div className="p-6 overflow-y-auto flex-1 bg-[#f8fafc]">
-              <div className="bg-white border border-[#e0e0e0] rounded-lg p-5 font-mono text-xs text-[#000000] whitespace-pre-wrap leading-relaxed shadow-sm selection:bg-[#0a66c2]/20">
-                {viewingResume.content}
-              </div>
+              {textError && <p role="alert">{textError}</p>}
+              {textDraft === null ? <>
+                <div className="bg-white border border-[#e0e0e0] rounded-lg p-5 font-mono text-xs whitespace-pre-wrap">{viewingResume.content}</div>
+                <button className="btn-secondary-corporate mt-3" onClick={() => { setTextDraft(viewingResume.content); setTextError(''); }}>Edit saved text</button>
+              </> : <div className="space-y-3">
+                <label htmlFor="saved-resume-text">Saved resume text</label>
+                <textarea id="saved-resume-text" rows={16} className="input-corporate w-full" value={textDraft} disabled={savingText} onChange={e => setTextDraft(e.target.value)} />
+                <p>Save to use this text for matching. The original uploaded file stays available.</p>
+                <button className="btn-primary-corporate" disabled={savingText || !textDraft.trim()} onClick={saveText}>{savingText ? 'Saving text...' : 'Save text'}</button>
+                <button className="btn-secondary-corporate" disabled={savingText} onClick={() => setTextDraft(null)}>Cancel text edit</button>
+              </div>}
             </div>
 
             {/* Footer */}
@@ -611,6 +707,7 @@ export default function ResumeLibrary({ onResumesUpdated }) {
               </span>
               <button
                 type="button"
+                disabled={savingText}
                 onClick={() => setViewingResume(null)}
                 className="btn-secondary-corporate text-xs py-1 px-4"
               >

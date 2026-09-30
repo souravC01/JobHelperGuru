@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Crown,
   CheckCircle,
@@ -16,13 +16,17 @@ import {
   CheckCircle2,
   X,
 } from 'lucide-react';
-import { matchResumes } from '../api/client';
+import { matchResumes, evaluateResumes } from '../api/client';
 
 export default function ResumeFitRanker({
   currentJob,
   resumes = [],
   adoptedSkillsMap = {},
   refreshKey = 0,
+  matchingEnabled = false,
+  aiProviderReady = false,
+  matchingError = '',
+  selectedResumeId = null,
   onAdoptSkills = null,
   onRemoveAdoptedSkill = null,
   onSelectKeywordForOptimization,
@@ -35,34 +39,64 @@ export default function ResumeFitRanker({
   const [expandedId, setExpandedId] = useState(null);
   const [selectedSkillsMap, setSelectedSkillsMap] = useState({});
 
-  const runRanking = async () => {
-    if (!currentJob || resumes.length === 0) return;
+  const [comparisonComplete, setComparisonComplete] = useState(false);
+  const [error, setError] = useState('');
+  const [pastedJob, setPastedJob] = useState(null);
+  const [draftJob, setDraftJob] = useState('');
+  const [legacyJob, setLegacyJob] = useState(null);
+  const [resultIdentity, setResultIdentity] = useState(null);
+  const requestRef = useRef(0);
+  const controllerRef = useRef(null);
+  const selectionCallbackRef = useRef(onBestResumeSelected);
+  selectionCallbackRef.current = onBestResumeSelected;
+  const jobIdentity = JSON.stringify(currentJob);
+  const rawJob = currentJob?.raw_text || currentJob?.analysis?.raw_text || (pastedJob?.identity === jobIdentity ? pastedJob.text : '');
+  const overallActive = matchingEnabled && legacyJob !== jobIdentity;
+  const sourceIdentity = JSON.stringify([jobIdentity, rawJob, resumes, refreshKey, matchingEnabled, overallActive, aiProviderReady, matchingError]);
+
+  const runRanking = async (fresh = false) => {
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    const requestId = ++requestRef.current;
+    setRankedResumes([]);
+    setComparisonComplete(false);
+    setError('');
+    setLoading(false);
+    setSelectedSkillsMap({});
+    setResultIdentity(sourceIdentity);
+    selectionCallbackRef.current?.(null);
+    if (!currentJob || resumes.length === 0 || matchingEnabled === null || matchingError) return;
+    if (overallActive && (!aiProviderReady || !rawJob.trim())) return;
     setLoading(true);
     try {
-      const jobPayload = currentJob?.analysis || currentJob;
-      const results = await matchResumes({ job: jobPayload, resumes });
+      const response = overallActive
+        ? await evaluateResumes(rawJob, resumes.map(r => r.id), { fresh, signal: controller.signal })
+        : await matchResumes({ job: currentJob.analysis || currentJob, resumes }, { signal: controller.signal });
+      if (requestId !== requestRef.current) return;
+      const results = overallActive ? response.evaluations : response;
+      const complete = overallActive && response.comparison_complete;
       setRankedResumes(results);
-      if (results.length > 0) {
-        setExpandedId(results[0].resume_id);
-        if (onBestResumeSelected) {
-          onBestResumeSelected(results[0]);
-        }
-      }
+      setComparisonComplete(complete);
+      setExpandedId(results[0]?.resume_id ?? null);
+      const leaders = overallActive ? (complete ? results.filter(r => r.status === 'complete' && r.is_top_match) : []) : results.slice(0, 1);
+      const leader = leaders.length === 1 ? resumes.find(r => r.id === (leaders[0].resume_id || leaders[0].id)) : null;
+      selectionCallbackRef.current?.(leader || null);
     } catch (err) {
-      console.error('Failed to rank resumes:', err);
-      if (onAiError && (err.canSwitchOffline || err.status === 502)) {
-        onAiError(err, () => runRanking());
-      }
+      if (requestId !== requestRef.current || controller.signal.aborted) return;
+      setRankedResumes([]);
+      setError(err.message || 'Evaluation failed. Check AI settings and retry.');
+      // Overall-fit failures must remain actionable errors without an offline percentage.
+      if (!overallActive && onAiError && (err.canSwitchOffline || err.status === 502)) onAiError(err, () => runRanking());
     } finally {
-      setLoading(false);
+      if (requestId === requestRef.current) setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (currentJob && resumes.length > 0) {
-      runRanking();
-    }
-  }, [currentJob, resumes.length, refreshKey]);
+    runRanking();
+    return () => { ++requestRef.current; controllerRef.current?.abort(); };
+  }, [sourceIdentity]);
 
   if (!currentJob || resumes.length === 0) {
     return null;
@@ -105,17 +139,79 @@ export default function ResumeFitRanker({
     }
   };
 
+  if (overallActive || matchingEnabled === null || matchingError) {
+    const visible = resultIdentity === sourceIdentity;
+    const leaders = comparisonComplete ? rankedResumes.filter(r => r.is_top_match) : [];
+    const categories = { required_skills: 'Required qualifications', responsibilities: 'Responsibilities', relevant_experience: 'Relevant experience', preferred_qualifications: 'Preferred qualifications' };
+    const reviewReasons = {
+      source_incomplete: 'Saved text is incomplete. Review and save the full resume in the vault.',
+      rubric_limit: 'The job description exceeds the supported requirement limit. Review the description.',
+      invalid_provider_response: 'AI returned invalid evidence. Check AI settings and retry.',
+      missing_assessment: 'AI did not assess every requirement. Retry the comparison.',
+      unresolved_evidence: 'Some evidence needs review. Check the saved source text and retry.',
+      deadline_exceeded: 'Evaluation timed out. Retry the comparison.',
+      no_assessable_requirements: 'No assessable requirements were found. Review the full job description.',
+    };
+    return (
+      <section className="card-corporate p-6 space-y-4" aria-label="Resume overall job fit">
+        <h3 className="text-base font-bold">Overall job fit</h3>
+        <p className="text-xs text-[#666666]">Source-backed fit against this job's requirements, not a hiring probability. Save resume text changes before reevaluating; marking suggestions added does not change these scores.</p>
+        {matchingError ? <p role="alert">{matchingError} Refresh the page to retry.</p>
+          : matchingEnabled === null ? <p role="status">Loading matching settings...</p>
+          : !aiProviderReady ? <p role="alert">Configure an AI provider in Settings and turn off offline mode to evaluate overall job fit.</p>
+          : !rawJob.trim() ? <div className="space-y-2">
+            <p>Paste the full job description to evaluate overall job fit. Saved keywords alone cannot establish a score.</p>
+            <label htmlFor="full-matching-jd">Full job description</label>
+            <textarea id="full-matching-jd" className="input-corporate w-full" value={draftJob} onChange={e => setDraftJob(e.target.value)} />
+            <button className="btn-primary-corporate" disabled={!draftJob.trim()} onClick={() => setPastedJob({ identity: jobIdentity, text: draftJob })}>Evaluate full description</button>
+            <button className="btn-secondary-corporate" onClick={() => setLegacyJob(jobIdentity)}>Use legacy keyword alignment</button>
+          </div> : <>
+            <button className="btn-secondary-corporate" disabled={loading || !visible} onClick={() => runRanking(true)}>Re-evaluate</button>
+            {visible && loading && <p role="status">Evaluating saved resumes...</p>}
+            {visible && error && <p role="alert">{error} Check Settings or saved text, then re-evaluate.</p>}
+            {visible && !loading && rankedResumes.length > 0 && <>
+              {!comparisonComplete && <p role="alert">Comparison incomplete. No ranks or top fit can be assigned. Review the affected resumes and retry.</p>}
+              {leaders.length > 1 && <p>Tied leaders — choose a resume explicitly.</p>}
+              <div className="space-y-3">
+                {rankedResumes.map(evaluation => {
+                  const resume = resumes.find(r => r.id === evaluation.resume_id);
+                  if (!resume) return null;
+                  return <article key={resume.id} className="border rounded-lg p-4 space-y-2">
+                    <h4 className="font-semibold">{resume.name}</h4>
+                    {evaluation.status === 'complete' ? <>
+                      <p className="text-xl font-bold">{evaluation.match_score}%</p>
+                      <p>Raw score: {evaluation.raw_score} / 100</p>
+                      {comparisonComplete && evaluation.rank != null && <p>Rank {evaluation.rank}</p>}
+                      {comparisonComplete && evaluation.is_top_match && <span>{leaders.length > 1 ? 'Tied Top Fit' : 'Top Fit'}</span>}
+                      <ul>{Object.entries(evaluation.category_scores || {}).map(([category, score]) => <li key={category}>{categories[category] || category}: {score}%</li>)}</ul>
+                      <p>Skill coverage: {evaluation.skill_coverage_score == null ? 'Not applicable' : `${evaluation.skill_coverage_score}%`}</p>
+                    </> : <p>{evaluation.status === 'needs_review' ? 'Needs review' : 'Evaluation failed'}</p>}
+                    {(evaluation.reason_codes || []).map(reason => <p key={reason}>{reviewReasons[reason] || 'Review saved source text and retry.'}</p>)}
+                    {(evaluation.warnings || []).map((warning, i) => <p key={i}>{warning}</p>)}
+                    {(evaluation.eligibility || []).map((item, i) => <p key={i}>Eligibility — {item.criterion}: {item.status}{item.reason ? ` (${item.reason})` : ''}</p>)}
+                    <button className="btn-secondary-corporate" aria-pressed={selectedResumeId === resume.id} onClick={() => selectionCallbackRef.current?.(resume)}>Use {resume.name}</button>
+                    {selectedResumeId === resume.id && <p>Selected for tailoring</p>}
+                  </article>;
+                })}
+              </div>
+            </>}
+          </>}
+      </section>
+    );
+  }
+
   return (
     <div className="card-corporate p-6 bg-white border border-[#e0e0e0] rounded-lg space-y-5 animate-fade-in">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div>
           <h3 className="text-base font-bold text-[#000000] flex items-center gap-2 tracking-tight">
             <Crown className="text-[#0a66c2]" size={18} />
-            <span>Resume Best-Fit & ATS Alignment</span>
+            <span>Legacy keyword alignment</span>
           </h3>
           <p className="text-xs text-[#666666] mt-0.5">
-            Evaluates candidate resumes against ATS keywords and required qualifications.
+            Legacy keyword coverage; this is not an overall job fit score.
           </p>
+          {matchingEnabled && <button className="btn-secondary-corporate" onClick={() => setLegacyJob(null)}>Use full description for overall fit</button>}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -135,7 +231,7 @@ export default function ResumeFitRanker({
             <span>BulletCraft</span>
           </button>
           <button
-            onClick={runRanking}
+            onClick={() => runRanking()}
             disabled={loading}
             className="btn-secondary-corporate text-xs"
           >

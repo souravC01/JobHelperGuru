@@ -32,6 +32,7 @@ import {
   getMe,
   getToken,
   getSettings,
+  getFeatures,
 } from './api/client';
 
 export default function App() {
@@ -89,6 +90,7 @@ export default function App() {
   const [currentJob, setCurrentJob] = useState(null);
   const [resumes, setResumes] = useState([]);
   const [applications, setApplications] = useState([]);
+  const [matching, setMatching] = useState({ enabled: null, ready: false, error: '' });
   const [rankingRefreshKey, setRankingRefreshKey] = useState(0);
 
   // Modals state
@@ -140,8 +142,24 @@ export default function App() {
 
   const sessionRef = useRef(0);
 
+  useEffect(() => {
+    let obsolete = false;
+    setMatching({ enabled: null, ready: false, error: '' });
+    if (currentUser) {
+      Promise.all([getFeatures(), getSettings().catch(() => null)])
+        .then(([features, settings]) => {
+          if (obsolete) return;
+          if (typeof features.matching_v2_enabled !== 'boolean') throw new Error('Invalid feature settings');
+          setMatching({ enabled: features.matching_v2_enabled, ready: !!settings?.has_api_key && !settings?.use_offline_mode, error: '' });
+        })
+        .catch(() => { if (!obsolete) setMatching({ enabled: null, ready: false, error: 'Matching settings could not be loaded.' }); });
+    }
+    return () => { obsolete = true; };
+  }, [currentUser?.id, rankingRefreshKey]);
+
   const resetAccountState = () => {
     setCurrentUser(null);
+    setMatching({ enabled: null, ready: false, error: '' });
     setResumes([]);
     setApplications([]);
     setCurrentJob(null);
@@ -221,9 +239,16 @@ export default function App() {
 
   const handleJobAnalyzed = (data) => {
     setCurrentJob(data);
+    setSelectedResumeForJob(null);
   };
 
   const handleOpenOptimizer = (keywordsArg = '', targetResume = null, sectionType = 'work_history') => {
+    const selected = targetResume || selectedResumeForJob;
+    const resume = resumes.find(r => r.id === (selected?.id || selected?.resume_id));
+    if (matching.enabled === true && !resume) {
+      window.alert('Choose a resume from the comparison before using BulletCraft.');
+      return;
+    }
     let kwList = [];
     if (Array.isArray(keywordsArg)) {
       kwList = keywordsArg;
@@ -234,9 +259,9 @@ export default function App() {
     }
     setOptimizerKeywords(kwList);
     setOptimizerSectionType(sectionType || 'work_history');
-    if (targetResume) {
-      setSelectedResumeForJob(targetResume);
-    } else if (!selectedResumeForJob && resumes.length > 0) {
+    if (resume) {
+      setSelectedResumeForJob(resume);
+    } else if (matching.enabled === false && !selectedResumeForJob && resumes.length > 0) {
       setSelectedResumeForJob(resumes[0]);
     }
     setIsOptimizerOpen(true);
@@ -540,12 +565,16 @@ export default function App() {
                   setIsAuthOpen(true);
                   return;
                 }
-                handleOpenOptimizer(kw, selectedResumeForJob || resumes[0] || null);
+                handleOpenOptimizer(kw, selectedResumeForJob);
               }}
               onOpenCoverLetter={() => {
                 if (!currentUser) {
                   setAuthMode('login');
                   setIsAuthOpen(true);
+                  return;
+                }
+                if (matching.enabled === true && !selectedResumeForJob) {
+                  window.alert('Choose a resume from the comparison before creating a cover letter.');
                   return;
                 }
                 setIsCoverLetterOpen(true);
@@ -561,6 +590,10 @@ export default function App() {
                 resumes={resumes}
                 adoptedSkillsMap={adoptedSkillsMap}
                 refreshKey={rankingRefreshKey}
+                matchingEnabled={matching.enabled}
+                aiProviderReady={matching.ready}
+                matchingError={matching.error}
+                selectedResumeId={selectedResumeForJob?.id || null}
                 onAdoptSkills={handleAdoptSkills}
                 onRemoveAdoptedSkill={handleRemoveAdoptedSkill}
                 onOpenBulletOptimizer={(skills) => {
@@ -569,7 +602,7 @@ export default function App() {
                     setIsAuthOpen(true);
                     return;
                   }
-                  handleOpenOptimizer(skills, selectedResumeForJob || resumes[0] || null);
+                  handleOpenOptimizer(skills, selectedResumeForJob);
                 }}
                 onSelectKeywordForOptimization={(skills, rank, sectionType) => {
                   if (!currentUser) {
@@ -581,8 +614,8 @@ export default function App() {
                   handleOpenOptimizer(skills, matchingResume, sectionType);
                 }}
                 onBestResumeSelected={(best) => {
-                  const matchingResume = resumes.find((r) => r.id === best.resume_id);
-                  if (matchingResume) setSelectedResumeForJob(matchingResume);
+                  const id = best?.id || best?.resume_id;
+                  setSelectedResumeForJob(id ? (resumes.find(r => r.id === id) || null) : null);
                 }}
                 onAiError={handleAiError}
               />
@@ -594,12 +627,14 @@ export default function App() {
           currentUser ? (
             <ResumeLibrary
               key={currentUser?.id || 'anon'}
+              profilePreparationEnabled={matching.enabled === true && matching.ready}
+              refreshKey={rankingRefreshKey}
               onResumesUpdated={(updated) => {
                 setResumes(updated);
                 setSelectedResumeForJob((prev) => {
-                  if (!prev) return updated[0] ?? null;
+                  if (!prev) return null;
                   const found = updated.find((r) => r.id === prev.id);
-                  return found || (updated[0] ?? null);
+                  return found && found.content === prev.content ? found : null;
                 });
               }}
             />
@@ -715,6 +750,8 @@ export default function App() {
         isOnboarding={isOnboardingSettings}
         onSettingsChanged={() => {
           setAiErrorState({ isOpen: false, errorMsg: '', modelName: '', retryAction: null });
+          setMatching({ enabled: null, ready: false, error: '' });
+          setSelectedResumeForJob(null);
           setRankingRefreshKey((prev) => prev + 1);
         }}
       />
@@ -726,6 +763,8 @@ export default function App() {
         modelName={aiErrorState.modelName}
         onSwitchToOffline={async () => {
           setAiErrorState({ isOpen: false, errorMsg: '', modelName: '', retryAction: null });
+          setMatching({ enabled: null, ready: false, error: '' });
+          setSelectedResumeForJob(null);
           setRankingRefreshKey((prev) => prev + 1);
           if (aiErrorState.retryAction) {
             await aiErrorState.retryAction();
