@@ -79,7 +79,7 @@ Verified in the isolated destination before any application transfer:
 
 ## Subsequent execution
 
-Tasks 1–4, including 4A, are complete. Task 5 and later tasks remain pending per the owner's task-by-task scope. The profile task executes as 4A before Task 4. No push, PR, deployment, or source-branch merge was performed.
+Tasks 1–5, including 4A, are complete. Task 6 and later tasks remain pending per the owner's task-by-task scope. The profile task executes as 4A before Task 4. No push, PR, deployment, or source-branch merge was performed.
 
 ## Task 2 transfer and verification
 
@@ -112,3 +112,13 @@ Tasks 1–4, including 4A, are complete. Task 5 and later tasks remain pending p
 - RED: missing profile/evidence APIs, stale cached-read/rename races, bare-list/cross-section overcredit and conflicting overlap classifications were reproduced before correction. One overlap fixture was corrected from 7,984 to 8,684 chars, then its defect was re-observed against original aggregation before restoring the fix.
 - GREEN: 87 focused tests and 293 full backend tests passed, with the existing Starlette/AnyIO deprecation warning. Source hashes unchanged. No live AI requests, frontend changes, push or deployment occurred.
 - Combined 4A/4 commit keeps the consumer fallback and shared provenance fixes together. Task 5 is next; endpoint/vault preparation/UI activation and authorized provider quality/performance gates remain later tasks.
+
+## Task 5 transfer and verification
+
+- Adapted the pinned source scorer's Decimal/category/interval-union structure into a lean pure scorer/ranker. Retained 60/20/15/5 weights; removed role detection/bonuses, presentation arithmetic, learning credit and synthesized missing-evidence outcomes. No source files changed.
+- Required/preferred literal skills receive demonstrated 1 or listed .5; other kinds require demonstration, while tenure is capped verified months / requested minimum. Empty categories renormalize; separate skill-only coverage is null when no skills exist. Repeated observations and OR alternatives do not multiply requirement credit.
+- Corrected month-end tenure arithmetic with calendar anniversaries and residual-day fractions. Union merges overlap/touching elapsed intervals only, not one-day gaps; future work is excluded and ongoing/future ends are capped at as_of. Whole-month/year thresholds and leap-boundary monotonicity are checked.
+- One shared conflict predicate rejects complete evidence containing positive/contradicted claims and rejects such scorer input. Matching profile selection now preserves all source facts instead of hiding contradiction through strongest-level selection; aggregation marks the requirement unresolved without a score.
+- Ranking uses two-decimal raw scores, half-up display, competition ties and stable resume-ID ordering. Incomplete comparisons clear all cached/new ranks and top flags. Mixed job/rubric definitions, dates, scorer versions and duplicate resume IDs are rejected; input evaluations are not mutated.
+- RED: 29 initial arithmetic/ranking checks failed, a canonical profile conflict reproduced hidden contradiction, and two invalid skill-category combinations were rejected after failing checks. GREEN: 68 focused scoring/ranking/evidence/contract tests and 328 full backend tests passed; existing Starlette warning only. Exact 75.00/53.85 arithmetic, 37.50->38 rounding, 1/1/3 ties, rounded-display non-ties, order/added-version invariance and JSON roundtrip checked.
+- All 40 source hashes remain unchanged and source checkout clean. No frontend, provider calls, deployment or release gates performed. Task 6 will orchestrate extraction/scoring and cache validated evidence; it is not implemented yet.

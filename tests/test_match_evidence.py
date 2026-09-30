@@ -207,3 +207,13 @@ def test_same_source_classification_conflict_cannot_pick_last_chunk():
         return result
     result=assess([r],[req()],Assessor({"r":[evidence(quote=quote)]},conflict))["r"]
     assert result.status!="complete"
+
+
+def test_contradicted_profile_claim_cannot_be_dropped_before_scoring():
+    r=Resume(id="r",name="R",content="Projects:\nBuilt Python services.\nNever used Python for analytics.")
+    p=profile(r,[fact("Built Python services.","Python"),fact("Never used Python for analytics.","Python",level="contradicted")])
+    engine=Assessor()
+    result=assess([r],[req("python")],engine,{"r":p})["r"]
+    assert result.status=="needs_review" and result.unresolved_requirement_ids==["q"]
+    assert not result.items and "unresolved_evidence" in result.warnings
+    assert not engine.calls

@@ -17,7 +17,7 @@ from pydantic import Field, StrictBool, StrictInt
 from backend.services.skill_matching import contains_skill
 from .chunking import TextChunk, chunk_text
 from .provenance import _quote_span
-from .models import MatchContract, NonEmptyString, Requirement, RequirementCategory, RequirementExtraction, ResumeProfile, EvidenceExtraction
+from .models import MatchContract, NonEmptyString, Requirement, RequirementCategory, RequirementExtraction, ResumeProfile, EvidenceExtraction, has_evidence_conflict
 from .normalization import aliases_for_skill, canonicalize_skill
 
 EXTRACTOR_VERSION = "overall-jd-v1"
@@ -207,11 +207,9 @@ def _local_evidence(resume, profile, requirement, as_of):
     if requirement.kind == "skill":
         facts = [f for f in profile.facts if f.kind == "skill" and f.canonical_key in keys] if profile else []
         if facts:
-            priority = {"demonstrated": 4, "listed": 3, "learning": 2, "contradicted": 1, "not_evidenced": 0}
-            best = max(priority[f.level.value] for f in facts)
             return [Evidence(requirement_id=requirement.id, level=f.level, source_quote=f.source_quote,
                              source_start=f.source_start, source_end=f.source_end, section=f.section)
-                    for f in facts if priority[f.level.value] == best]
+                    for f in facts]
         if not any(contains_skill(resume.content, k) for k in keys):
             return [Evidence(requirement_id=requirement.id, level="not_evidenced")]
     if profile and requirement.kind in {"tenure", "credential"}:
@@ -389,6 +387,10 @@ def extract_evidence_batch(resumes: list[Resume], profiles: dict[str, ResumeProf
             items=[]
             for id,observed in observations[resume.id].items():
                 if id in unresolved[resume.id]: continue
+                if has_evidence_conflict({i.level for i in observed}):
+                    unresolved[resume.id].add(id)
+                    warnings[resume.id].add("unresolved_evidence")
+                    continue
                 positive=[i for i in observed if i.level!="not_evidenced"]
                 distinct={}
                 for item in positive:

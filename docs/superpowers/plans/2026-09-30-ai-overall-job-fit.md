@@ -12,7 +12,7 @@
 
 **Spec:** This plan's “Design baseline” section records the in-chat design and the owner's choice of overall job fit. Earlier evidence-branch specs are reference material, not authority for the new branch. The proposed numeric weights, credits, batching ceilings, and release thresholds below require owner review with this plan before execution.
 
-**Execution status:** The owner authorized implementation task-by-task. Tasks 1–4, including prerequisite 4A, are complete on `codex/ai-overall-job-fit`; Task 5 and all later tasks remain pending. Each completion updates this plan and the execution ledger. Live provider requests and release activation remain unauthorized.
+**Execution status:** The owner authorized implementation task-by-task. Tasks 1–5, including prerequisite 4A, are complete on `codex/ai-overall-job-fit`; Task 6 and all later tasks remain pending. Each completion updates this plan and the execution ledger. Live provider requests and release activation remain unauthorized.
 
 **Plan persistence:** The repository ignores `docs/superpowers/`. This file is saved locally but is not automatically tracked. Task 1 must explicitly transfer it to the destination and force-add this one approved plan path when committing planning records; do not change the ignore rule or force-add the entire directory.
 
@@ -25,8 +25,8 @@
 | 3 — full-source overall-fit JD rubric | Complete | 41 focused and 253 backend tests passed; no live provider requests |
 | 4A — reusable resume profiles | Complete | Source-validated tenant/provider cache; edits, renames, deletion and simultaneous builds checked |
 | 4 — requirement evidence assessment | Complete | Combined 4A/4 verification: 87 focused and 293 backend tests passed |
-| 5 — deterministic scoring and ranking | Pending — next | |
-| 6 — rubric and assessment caches | Pending | |
+| 5 — deterministic scoring and ranking | Complete | 68 focused and 328 backend tests passed; exact weighted arithmetic and raw-score ties checked |
+| 6 — rubric and assessment caches | Pending — next | |
 | 7 — authenticated API | Pending | |
 | 8 — truthful UI and request lifecycle | Pending | |
 | 9 — provider quality and performance gates | Pending | |
@@ -38,6 +38,13 @@ Task 3 accepts validated proposals with stable source/version-based requirement 
 Tasks 4A and 4 were completed and verified together because full-source fallback and shared provenance checks exercise the profile consumer. Profiles contain only job-independent facts, validated source spans, source-verified dates and chunk coverage. They are cached by tenant, resume/source and provider/extractor version; job/scorer identity is excluded. The first complete persisted profile wins concurrent builds. Rename preserves profiles; content edit and deletion remove derived profiles. Current content is checked before publishing cached or newly prepared profiles. A discovered rename/content race was fixed by rereading the authoritative row under the update transaction.
 
 Evidence assessment sends all available activity context without a keyword prefilter, checks literal misses against the original source, and falls back to every original chunk for unsupported profile absences. Missing/duplicate/foreign IDs, invalid quotes, conflicting classifications and late responses cannot become completed assessments. Work tenure is derived from verified dated work, with ongoing intervals capped at the server as_of date; education/projects/future work cannot supply credited intervals. Ambiguous date/section semantics fail closed. Complete evidence artifacts have no scores or ranks; Task 5 calculates those. New API/vault preparation/UI integration remains in Tasks 7–8. No live provider quality measurements were performed.
+
+
+Task 5 implements pure scoring with 60/20/15/5 category weights and renormalization of populated categories. Demonstrated skills receive 1, listed skills .5, learning/absence/contradiction 0; non-skill qualifications and responsibilities require demonstration. Tenure uses verified work interval union and the requested minimum. Skill coverage is a separate unweighted skill-kind mean, null when no skill requirements exist. Missing assessments and conflicting positive/contradicted claims cannot become scores. Profile selection now preserves all matching facts so contradictions cannot be dropped before validation.
+
+The adapted source interval union measures elapsed [start,end) time: it does not merge a one-day gap or add endpoint-day credit. Whole calendar-month anniversaries plus the residual fraction to the next anniversary replace the source's month-end subtraction, which could lose short spans. Overlap, ongoing/future clipping, leap-month boundaries and monotonicity are tested. This partial-month convention is explicit; the complete-year/minimum semantics remain unchanged.
+
+Scores retain two decimal places using Decimal and ROUND_HALF_UP; display integers use half-up rounding. Competition ranks use raw scores, with resume ID only ordering ties. All positive tied leaders are marked top; all-zero comparisons have no top match. Incomplete comparisons clear every cached/new rank and top flag. Ranking refuses mixed job/rubric definitions, dates or scorer versions. `SCORER_VERSION="overall-fit-v1"` is available for Task 6's snapshot/scorer-version handling; API and UI integration remain later tasks.
 
 ## Global Constraints
 
@@ -275,7 +282,7 @@ assert storage.get_resume(resume.id, user_id=user_id) is not None  # Analysis fa
 
 **Interfaces:** `calculate_score(requirements: list[Requirement], evidence: list[Evidence], *, as_of: date) -> ScoreBreakdown`; `calculate_verified_months(intervals: list[RelevantInterval], as_of: date) -> Decimal`; `rank_evaluations(evaluations: list[Evaluation]) -> list[Evaluation]`. No `role_focus` parameter. Add `ScoreBreakdown.skill_coverage_score: Decimal|None`. Pipeline calls scorer only after explicit complete assessment.
 
-- [ ] **Step 1: Add failing arithmetic checks.** `test_category_weights_produce_overall_score`: category credits 1, .5, 0, 1 yield 75.00 and display 75 under 60/20/15/5. `test_absent_categories_renormalize`: only required/preferred, credits .5/1, yields 53.85. `test_learning_has_zero_credit`; `test_responsibility_listing_has_zero_credit`; `test_tenure_union_and_minimum_threshold`; `test_repeated_evidence_never_multiplies_credit`; `test_raw_scores_rank_before_display_rounding`; `test_equal_raw_scores_rank_one_one_three`.
+- [x] **Step 1: Add failing arithmetic checks.** `test_category_weights_produce_overall_score`: category credits 1, .5, 0, 1 yield 75.00 and display 75 under 60/20/15/5. `test_absent_categories_renormalize`: only required/preferred, credits .5/1, yields 53.85. `test_learning_has_zero_credit`; `test_responsibility_listing_has_zero_credit`; `test_tenure_union_and_minimum_threshold`; `test_repeated_evidence_never_multiplies_credit`; `test_raw_scores_rank_before_display_rounding`; `test_equal_raw_scores_rank_one_one_three`.
 
 ```python
 assert four_category_result.raw_score == Decimal("75.00")
@@ -285,10 +292,10 @@ assert learning_only_result.match_score == 0
 assert [e.rank for e in tied_rankings] == [1, 1, 3]
 assert [e.is_top_match for e in tied_rankings] == [True, True, False]
 ```
-- [ ] **Step 2: Run `./.venv/Scripts/python.exe -m pytest -q tests/test_match_scoring.py tests/test_match_ranking.py`.** Verify the deliberate departures from source weights/credits/ranking fail before adaptation.
-- [ ] **Step 3: Implement the design-baseline formula.** Retain Decimal and interval union; remove role/presentation arithmetic and learning credit. Sort raw score descending with stable resume ID for display only. Distinct raw scores rounded to the same integer are not ties; expose raw score in summary. Keep category-qualified credits and skill-only metric distinct. A positive/contradicted conflict becomes unresolved at validation, never hidden as a confident zero.
-- [ ] **Step 4: Verify exact arithmetic and invariance.** Reordering resumes or adding another version cannot change an individual's score under the same rubric; cached scores and newly computed scores use identical arithmetic.
-- [ ] **Step 5: Commit.** Subject: `feat: calculate comparable overall fit scores`.
+- [x] **Step 2: Run `./.venv/Scripts/python.exe -m pytest -q tests/test_match_scoring.py tests/test_match_ranking.py`.** Verify the deliberate departures from source weights/credits/ranking fail before adaptation.
+- [x] **Step 3: Implement the design-baseline formula.** Retain Decimal and interval union; remove role/presentation arithmetic and learning credit. Sort raw score descending with stable resume ID for display only. Distinct raw scores rounded to the same integer are not ties; expose raw score in summary. Keep category-qualified credits and skill-only metric distinct. A positive/contradicted conflict becomes unresolved at validation, never hidden as a confident zero.
+- [x] **Step 4: Verify exact arithmetic and invariance.** Reordering resumes or adding another version cannot change an individual's score under the same rubric; cached scores and newly computed scores use identical arithmetic.
+- [x] **Step 5: Commit.** Subject: `feat: calculate comparable overall fit scores`.
 
 ## Task 6: Frozen rubric cache, result cache, batching, deadlines
 

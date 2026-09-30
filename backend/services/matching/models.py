@@ -119,6 +119,11 @@ class Evidence(MatchContract):
         return self
 
 
+def has_evidence_conflict(levels: set[EvidenceLevel]) -> bool:
+    """Positive claims and explicit contradiction need review, never a guessed score."""
+    return EvidenceLevel.CONTRADICTED in levels and bool(levels & {EvidenceLevel.DEMONSTRATED, EvidenceLevel.LISTED})
+
+
 class RequirementResult(MatchContract):
     requirement: Requirement
     evidence: list[Evidence] = Field(default_factory=list)
@@ -188,6 +193,9 @@ class EvidenceExtraction(ExtractionResult):
             self.assessed_requirement_ids
         ):
             raise ValueError("assessed IDs must have explicit evidence outcomes")
+        for id in self.assessed_requirement_ids:
+            if has_evidence_conflict({item.level for item in self.items if item.requirement_id == id}):
+                raise ValueError("Conflicting evidence remains unresolved")
         seen = {}
         for item in self.items:
             key = (item.requirement_id, item.source_start, item.source_end)
