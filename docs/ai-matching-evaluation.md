@@ -1,6 +1,6 @@
 # AI overall job-fit evaluation
 
-Task 9 is **in progress** on `feat/ai-overall-job-fit`. The benchmark is implemented; live development, untouched holdout and exact-size performance evidence are pending. The matching feature remains default-off. Synthetic tests establish report/cache behavior, not ranking quality, live speed or readiness for release.
+Task 9 is **in progress** on `feat/ai-overall-job-fit`. The benchmark is implemented; live development is blocked by an unreadable saved provider credential, and untouched holdout/exact-size performance evidence are pending. The matching feature remains default-off. Synthetic tests establish report/cache behavior, not ranking quality, live speed or readiness for release.
 
 ## What is measured
 
@@ -30,7 +30,7 @@ The owner authorized documents in `D:/Grind/Resume stuff/No named resumes` and t
 
 Local inputs in `tests/fixtures/matching/private-dev.json` remove contact headers and consistently replace personal employer, institution and project names. They remain Git-ignored, along with their review record. Proposed preferences and the lifecycle edit are available locally in `scratch/task9-development-review.md`. The owner reviewed and accepted the four proposed preferences. The owner confirmed same-person ownership, all four proposed strict preferences, and a cap of 100 provider requests total for the initial main/candidate development benchmark. This does not authorize further reruns or holdout requests.
 
-Current anonymized resumes contain 3,215–4,502 characters and the two development JDs contain 5,168 and 5,594 characters. They do not satisfy the exact-size performance workload. That evidence, a separately reviewed holdout, and any additional request budget remain outstanding. No live provider call or semantic quality result has been recorded.
+Current anonymized resumes contain 3,215–4,502 characters and the two development JDs contain 5,168 and 5,594 characters. They do not satisfy the exact-size performance workload. That evidence, a separately reviewed holdout, and any additional request budget remain outstanding. No live provider call or semantic quality result has been recorded. The authorized launch stopped before AI requests because the named saved credential could not be decrypted using either the source dotenv encryption key or source local encryption secret. No credential was changed or printed; zero of the approved 100 requests were consumed. The owner has been asked to supply the selected provider key privately through the local `MATCHING_BENCHMARK_API_KEY` setting. Live development remains blocked until that key is readable.
 
 ## Running an authorized measurement
 
