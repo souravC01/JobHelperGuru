@@ -356,3 +356,31 @@ def test_generate_outreach_prefers_account_name_over_resume_filename():
     assert "Candidate" in outreach_def.cover_letter_pitch
     assert "My_Software_Resume_2026.pdf" not in outreach_def.cover_letter_pitch
 
+
+
+def test_match_request_is_full_guarded_and_score_free(monkeypatch):
+    import json
+    from types import SimpleNamespace
+    calls = []
+    def create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"chunk_index": 0, "complete": true, "items": []}'))])
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    engine = AIEngine(api_key="test-key")
+    monkeypatch.setattr(engine, "_get_client", lambda: client)
+    payload = {"task": "requirements", "source_text": "x" * 8000, "chunk_index": 0, "schema": {"type": "object"}}
+    assert engine.extract_match_chunk(payload, timeout=12)["complete"] is True
+    request = calls[0]
+    assert request["temperature"] == 0 and request["timeout"] == 12
+    assert json.loads(request["messages"][1]["content"]) == payload
+    prompt = request["messages"][0]["content"]
+    assert "untrusted" in prompt and "eligibility" in prompt and "preferred" in prompt
+    assert "Never generate scores" in prompt
+
+
+def test_match_request_requires_ai_and_positive_timeout():
+    engine = AIEngine(api_key=None)
+    with pytest.raises(RuntimeError):
+        engine.extract_match_chunk({"task": "requirements"})
+    with pytest.raises(TimeoutError):
+        engine.extract_match_chunk({"task": "requirements"}, timeout=0)

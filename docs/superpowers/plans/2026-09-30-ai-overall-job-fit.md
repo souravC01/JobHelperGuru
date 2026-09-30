@@ -12,9 +12,27 @@
 
 **Spec:** This plan's “Design baseline” section records the in-chat design and the owner's choice of overall job fit. Earlier evidence-branch specs are reference material, not authority for the new branch. The proposed numeric weights, credits, batching ceilings, and release thresholds below require owner review with this plan before execution.
 
-**Planning-only status:** No application changes, branch creation, provider requests, staging, or commits are authorized by writing this document. The earlier request to leave application code untouched remains in effect until the owner approves execution.
+**Execution status:** The owner authorized implementation task-by-task. Tasks 1–3 are complete on `codex/ai-overall-job-fit`; Task 4A and all later tasks remain pending. Each completion updates this plan and the execution ledger. Live provider requests and release activation remain unauthorized.
 
 **Plan persistence:** The repository ignores `docs/superpowers/`. This file is saved locally but is not automatically tracked. Task 1 must explicitly transfer it to the destination and force-add this one approved plan path when committing planning records; do not change the ignore rule or force-add the entire directory.
+
+## Current task status
+
+| Task | Status | Verification |
+|---|---|---|
+| 1 — isolated branch and transfer records | Complete | Backend 211, frontend 67, production build passed; commit `6a924c5` |
+| 2 — contracts and document completeness | Complete | 37 focused and 229 backend tests passed; commit `17ef20b` |
+| 3 — full-source overall-fit JD rubric | Complete | 41 focused and 253 backend tests passed; no live provider requests |
+| 4A — reusable resume profiles | Pending — next | Must precede Task 4 |
+| 4 — requirement evidence assessment | Pending | |
+| 5 — deterministic scoring and ranking | Pending | |
+| 6 — rubric and assessment caches | Pending | |
+| 7 — authenticated API | Pending | |
+| 8 — truthful UI and request lifecycle | Pending | |
+| 9 — provider quality and performance gates | Pending | |
+| 10 — final regression and handoff | Pending | |
+
+Task 3 accepts validated proposals with stable source/version-based requirement IDs; persisted frozen rubrics belong to Task 6. Its provider schema requires exact chunk acknowledgment and explicit completion. Unknown technologies survive without a taxonomy gate. Server validation rejects ambiguous quotes, split/partial literal OR groups, unsupported tenure minima, non-equivalent category conflicts and explicit document instructions. Semantic interpretation remains the AI's responsibility and is not yet validated by live quality measurements. Over-limit rubrics remain needs_review without trimming.
 
 ## Global Constraints
 
@@ -188,7 +206,7 @@ assert saved_resume.extraction_warnings
 
 **Interfaces:** `extract_requirements(text: str, *, engine: Any, deadline: float) -> RequirementExtraction`. Provider task `requirements` returns chunk acknowledgment and proposals `{category, kind, canonical_key, alternatives, source_quote, required_months}` without scores/offsets/IDs. Backend locates source spans, validates type/grouping and deduplicates, then assigns stable IDs from normalized requirement identity plus JD source fingerprint. Identical source plus extractor version yields stable IDs for the same accepted interpretation. AI classification itself is not assumed deterministic; cache freezes the accepted rubric.
 
-- [ ] **Step 1: Add failing extraction tests.** `test_overall_rubric_keeps_late_responsibility_and_preferred_tenure`; `test_or_is_one_requirement_and_and_is_two`; `test_repeated_required_and_preferred_skill_counts_once`; `test_unknown_technology_survives_taxonomy`; `test_unquoted_or_injected_requirement_is_rejected`; `test_over_limit_rubric_fails_without_trimming`. Assert all four categories and minimum-month semantics, no benefit/company/eligibility requirements, and exact stored source slices.
+- [x] **Step 1: Add failing extraction tests.** `test_overall_rubric_keeps_late_responsibility_and_preferred_tenure`; `test_or_is_one_requirement_and_and_is_two`; `test_repeated_required_and_preferred_skill_counts_once`; `test_unknown_technology_survives_taxonomy`; `test_unquoted_or_injected_requirement_is_rejected`; `test_over_limit_rubric_fails_without_trimming`. Assert all four categories and minimum-month semantics, no benefit/company/eligibility requirements, and exact stored source slices.
 
 ```python
 assert len(or_requirements) == 1 and len(and_requirements) == 2
@@ -196,10 +214,10 @@ assert set(or_requirements[0].alternatives) == {"java", "python"}
 assert tenure.required_months == 12  # JD explicitly requests 1–3 years.
 assert all(jd[r.source_start:r.source_end] == r.source_quote for r in requirements)
 ```
-- [ ] **Step 2: Run `./.venv/Scripts/python.exe -m pytest -q tests/test_match_extraction.py tests/test_ai_engine.py`.** New tests should fail until task implemented.
-- [ ] **Step 3: Implement full-source AI extraction with the defined wire contract.** Supply category/group definitions, explicit untrusted-document instructions and JSON schema in the guarded request. Derive offsets server-side using selected provenance helpers. Use full documents up to 8,000 characters and all overlapping chunks beyond that. Dedupe source overlap and semantic identity; reject non-equivalent category conflicts rather than guessing. Avoid technical candidate whitelisting and lexical gates that prevent legitimate semantic matches. Accepted rubric above 64 unique requirements is needs_review with `rubric_limit`, not shortened.
-- [ ] **Step 4: Verify focused tests and request shape.** Ensure no `text[:6000]` on the new path, no model-generated score/weights, temperature 0, valid chunk coverage. A successful JSON parse alone must not imply successful extraction.
-- [ ] **Step 5: Commit.** Subject: `feat: extract a shared overall job fit rubric`.
+- [x] **Step 2: Run `./.venv/Scripts/python.exe -m pytest -q tests/test_match_extraction.py tests/test_ai_engine.py`.** New tests should fail until task implemented.
+- [x] **Step 3: Implement full-source AI extraction with the defined wire contract.** Supply category/group definitions, explicit untrusted-document instructions and JSON schema in the guarded request. Derive offsets server-side using selected provenance helpers. Use full documents up to 8,000 characters and all overlapping chunks beyond that. Dedupe source overlap and semantic identity; reject non-equivalent category conflicts rather than guessing. Avoid technical candidate whitelisting and lexical gates that prevent legitimate semantic matches. Accepted rubric above 64 unique requirements is needs_review with `rubric_limit`, not shortened.
+- [x] **Step 4: Verify focused tests and request shape.** Ensure no `text[:6000]` on the new path, no model-generated score/weights, temperature 0, valid chunk coverage. A successful JSON parse alone must not imply successful extraction.
+- [x] **Step 5: Commit.** Subject: `feat: extract a shared overall job fit rubric`.
 
 ## Task 4: Batch AI evidence assessment without invented completion
 
@@ -394,6 +412,6 @@ assert changing_order_report["stability"]["reversed_pairs"] == 1
 - Design requirements map to Tasks 1–10 plus inserted Task 4A and the coverage table; there is no planned offline enhancement or unexplained role bonus. Execute Task 4A before Task 4.
 - Signatures/model names are consistent across extraction, scoring, pipeline, storage and API tasks. New fields have explicit null/incomplete semantics.
 - Source helpers are references to copy with dependencies/tests, not assumed available on main. Current model/schema changes are explicitly marked adaptations.
-- All five Review Focus items have named checks in owning tasks. No tests or provider quality runs have been performed for this plan.
+- All five Review Focus items have named checks in owning tasks. Execution outcomes are tracked in Current task status; no live provider quality runs have been performed.
 - Numeric/batching/release choices are proposals for owner review, not externally established best practices or proven quality improvements.
 - Only this plan document is created at planning time. Execution, source transfer, branch creation, external provider use and rollout remain later steps.

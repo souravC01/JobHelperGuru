@@ -79,7 +79,7 @@ Verified in the isolated destination before any application transfer:
 
 ## Subsequent execution
 
-Tasks 1 and 2 are complete. Task 3 and later tasks remain pending per the owner's task-by-task scope. The profile task executes as 4A before Task 4. No push, PR, deployment, or source-branch merge was performed.
+Tasks 1–3 are complete. Task 4A and later tasks remain pending per the owner's task-by-task scope. The profile task executes as 4A before Task 4. No push, PR, deployment, or source-branch merge was performed.
 
 ## Task 2 transfer and verification
 
@@ -90,3 +90,13 @@ Tasks 1 and 2 are complete. Task 3 and later tasks remain pending per the owner'
 - RED: 14 initial focused checks failed for missing functionality; a further raw-score-leading edge check failed before its correction.
 - GREEN: 37 focused tests passed; full backend suite 229 passed with the existing Starlette/AnyIO warning. No frontend implementation changes; Task 1 frontend baseline remains the latest frontend test/build run.
 - Original source files rehashed after Task 2: all 40 unchanged. Future evaluator warning gating belongs to Tasks 4A/6, which are not implemented yet.
+
+## Task 3 transfer and verification
+
+- Built a lean AI-only JD adapter rather than copying the source branch's offline taxonomy, candidate classification choices or evidence pipeline. Adapted its whitespace-only quote location and explicit minimum-tenure helpers, alongside the Task 2 canonicalization/chunking contracts.
+- Processes every 8,000-character chunk with 400-character overlap and carries the preceding section heading. Requires explicit complete chunk acknowledgment and a strict proposal schema. Derives exact source offsets and stable IDs from source hash, extractor version and accepted identity; no provider offsets, IDs, scores or weights accepted.
+- Deduplicates overlap and equivalent aliases, retains required interpretations over equivalent preferred requirements, rejects other category conflicts, and preserves distinct tenure thresholds. Checks explicit literal OR groups against the source, including omitted alternatives. Semantic qualifications do not require lexical overlap or taxonomy membership.
+- Keeps all proposals in an over-64 rubric as unresolved needs_review; does not shorten the rubric. Empty rubrics and expired deadlines cannot become complete. Provider failures expose only sanitized reason codes; source-size violations remain caller errors.
+- RED: 18 initial failures, then 3 section/group/non-fit failures and 1 partial-OR failure were observed before corresponding corrections. GREEN: 41 focused tests and 253 full backend tests pass, with the existing Starlette/AnyIO deprecation warning.
+- Guarded request tests verify full payload, schema, temperature 0 and remaining timeout through the existing configured-provider transport. No live provider calls, frontend changes or deployment occurred. Actual semantic extraction quality still requires Task 9's authorized measurements; persisted rubric freezing belongs to Task 6.
+- All 40 pinned source hashes remain unchanged and the source checkout remains clean. Task 4A is the next task; later plan checkboxes remain unchecked.
