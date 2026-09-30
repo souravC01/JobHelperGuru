@@ -302,6 +302,29 @@ export async function matchResumes(payload) {
   return res.json();
 }
 
+export async function getFeatures() {
+  const res = await authFetch(`${API_BASE}/features`);
+  if (!res.ok) throw await parseApiError(res, 'Failed to load features');
+  return res.json();
+}
+
+export async function evaluateResumes(jobText, resumeIds, { fresh = false, signal = null } = {}) {
+  const res = await authFetch(`${API_BASE}/resumes/evaluate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_text: jobText, resume_ids: resumeIds, fresh }),
+    signal,
+  });
+  if (!res.ok) throw await parseApiError(res, 'Failed to evaluate overall job fit');
+  return res.json();
+}
+
+export async function prepareResumeProfile(resumeId, { signal = null } = {}) {
+  const res = await authFetch(`${API_BASE}/resumes/${encodeURIComponent(resumeId)}/profile`, { method: 'POST', signal });
+  if (!res.ok) throw await parseApiError(res, 'Failed to analyze resume');
+  return res.json();
+}
+
 export async function optimizeBullet({
   target_job_title,
   section_type,

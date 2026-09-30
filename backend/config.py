@@ -39,6 +39,11 @@ DEFAULT_LOCAL_AI_HOSTS: List[str] = [
 ]
 
 
+def matching_v2_enabled() -> bool:
+    """Server-owned rollout switch; disabled when unset or unrecognized."""
+    return os.getenv("MATCHING_V2_ENABLED", "false").strip().lower() in {"1", "true", "yes"}
+
+
 @dataclass
 class AppConfig:
     app_mode: str = "production"  # production, local, test

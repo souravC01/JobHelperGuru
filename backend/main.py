@@ -1,12 +1,14 @@
 import os
 import re
+import time
+from datetime import date
 from pathlib import Path
 from typing import Optional, List
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-from fastapi import FastAPI, HTTPException, Response, Depends, UploadFile, File, Form, Request
+from fastapi import FastAPI, HTTPException, Response, Depends, UploadFile, File, Form, Request, Body
 from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,7 +18,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
-from backend.config import load_config
+from backend.config import load_config, matching_v2_enabled
 from backend.services.rate_limiter import RateLimiter, get_client_ip
 from backend.services.resource_leases import ResourceLeases
 from backend.models import (
@@ -26,6 +28,8 @@ from backend.models import (
     Resume,
     ResumeCreate,
     ResumeUpdate,
+    ResumeEvaluationRequest,
+    ResumeProfileRequest,
     Settings,
     SettingsUpdate,
     ProviderProfileMetadata,
@@ -47,6 +51,10 @@ from backend.services.excel_exporter import ExcelExporter
 from backend.services.object_storage import ObjectStorageService
 from backend.services.resume_files import ResumeFileManager, format_content_disposition
 from backend.services.outbound_http import SSRFBlockedError
+from backend.services.matching.chunking import MAX_DOCUMENT_CHARS
+from backend.services.matching.models import EvaluationBatch
+from backend.services.matching.pipeline import evaluate_resumes
+from backend.services.matching.profiles import get_or_build_resume_profile
 
 from backend.routers.auth import router as auth_router, get_current_user, get_optional_user, set_storage_service
 
@@ -208,6 +216,11 @@ def get_ai_engine(user_id: Optional[str] = None) -> AIEngine:
         api_key=api_key,
         model_name=settings.model_name,
     )
+
+
+@app.get("/api/features")
+def get_features(current_user: User = Depends(get_current_user)):
+    return {"matching_v2_enabled": matching_v2_enabled()}
 
 
 # --- Health ---
@@ -665,6 +678,69 @@ def match_resumes(req: MatchResumesRequest, current_user: User = Depends(get_cur
                 "model_name": ai.model_name,
             },
         )
+
+
+def _require_matching_enabled():
+    if not matching_v2_enabled():
+        raise HTTPException(status_code=404, detail="Overall job fit matching is not enabled.")
+
+
+def _matching_provider_failure():
+    return HTTPException(status_code=502, detail={
+        "message": "AI assessment failed. Please retry or check your provider settings.",
+        "error_type": "invalid_provider_response", "can_switch_offline": False,
+    })
+
+
+def _get_matching_ai(user_id: str):
+    settings = storage.get_settings(user_id=user_id)
+    ai = get_ai_engine(user_id=user_id)
+    selected_key = storage.get_provider_profile_secret(settings.active_profile_id,user_id=user_id) if settings.active_profile_id else ai.api_key
+    if settings.use_offline_mode or ai.model_name in {"offline", "offline-heuristic"} or not (selected_key or "").strip():
+        raise HTTPException(status_code=409, detail={
+            "message": "Choose a configured AI provider to evaluate overall job fit.",
+            "error_type": "ai_provider_required", "can_switch_offline": False,
+        })
+    return ai
+
+
+@app.post("/api/resumes/evaluate", response_model=EvaluationBatch)
+def evaluate_resumes_endpoint(req: ResumeEvaluationRequest, current_user: User = Depends(get_current_user)):
+    _require_matching_enabled()
+    _check_user_ai_rate_limit(current_user.id)
+    if not req.job_text.strip() or len(req.job_text)>MAX_DOCUMENT_CHARS:
+        raise HTTPException(status_code=400, detail=f"Provide the full job description, between 1 and {MAX_DOCUMENT_CHARS:,} characters.")
+    if not req.resume_ids or any(not id.strip() for id in req.resume_ids) or len(req.resume_ids)!=len(set(req.resume_ids)):
+        raise HTTPException(status_code=400, detail="Provide unique, nonempty resume IDs.")
+    resumes = [storage.get_resume(id,user_id=current_user.id) for id in req.resume_ids]
+    if any(r is None for r in resumes): raise HTTPException(status_code=404, detail="Resume not found.")
+    if any(len(r.content)>MAX_DOCUMENT_CHARS for r in resumes):
+        raise HTTPException(status_code=400, detail=f"Resume text exceeds {MAX_DOCUMENT_CHARS:,} characters.")
+    try:
+        ai = _get_matching_ai(current_user.id)
+        result = evaluate_resumes(req.job_text,resumes,user_id=current_user.id,as_of=date.today(),engine=ai,storage=storage,fresh=req.fresh)
+    except HTTPException: raise
+    except Exception: raise _matching_provider_failure() from None
+    if any(e.status=="failed" for e in result.evaluations): raise _matching_provider_failure()
+    return result
+
+
+@app.post("/api/resumes/{resume_id}/profile")
+def prepare_resume_profile(resume_id: str, req: ResumeProfileRequest = Body(default=ResumeProfileRequest()),
+                           current_user: User = Depends(get_current_user)):
+    _require_matching_enabled()
+    _check_user_ai_rate_limit(current_user.id)
+    resume = storage.get_resume(resume_id,user_id=current_user.id)
+    if not resume: raise HTTPException(status_code=404, detail="Resume not found.")
+    if len(resume.content)>MAX_DOCUMENT_CHARS:
+        raise HTTPException(status_code=400, detail=f"Resume text exceeds {MAX_DOCUMENT_CHARS:,} characters.")
+    try:
+        ai = _get_matching_ai(current_user.id)
+        profile = get_or_build_resume_profile(resume,user_id=current_user.id,engine=ai,storage=storage,deadline=time.monotonic()+300.0)
+    except HTTPException: raise
+    except Exception: raise _matching_provider_failure() from None
+    if profile.status=="failed": raise _matching_provider_failure()
+    return profile.model_dump(mode="json",include={"resume_id","status","source_hash","profile_fingerprint","warnings"})
 
 
 # --- Bulletskill Optimizer ---

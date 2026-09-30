@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, field_validator, ValidationInfo, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ValidationInfo, ConfigDict, StrictStr, StrictBool
 
 
 class ApplicationStatus(str, Enum):
@@ -103,6 +103,17 @@ class ResumeCreate(BaseModel):
 class ResumeUpdate(BaseModel):
     name: Optional[str] = None
     content: Optional[str] = None
+
+
+class ResumeEvaluationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    job_text: StrictStr
+    resume_ids: List[StrictStr]
+    fresh: StrictBool = False
+
+
+class ResumeProfileRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
 class Settings(BaseModel):

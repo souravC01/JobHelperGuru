@@ -12,7 +12,7 @@
 
 **Spec:** This plan's “Design baseline” section records the in-chat design and the owner's choice of overall job fit. Earlier evidence-branch specs are reference material, not authority for the new branch. The proposed numeric weights, credits, batching ceilings, and release thresholds below require owner review with this plan before execution.
 
-**Execution status:** The owner authorized implementation task-by-task. Tasks 1–6, including prerequisite 4A, are complete on `codex/ai-overall-job-fit`; Task 7 and all later tasks remain pending. Each completion updates this plan and the execution ledger. Live provider requests and release activation remain unauthorized.
+**Execution status:** The owner authorized implementation task-by-task. Tasks 1–7, including prerequisite 4A, are complete on `codex/ai-overall-job-fit`; Task 8 and all later tasks remain pending. Each completion updates this plan and the execution ledger. Live provider requests and release activation remain unauthorized.
 
 **Plan persistence:** The repository ignores `docs/superpowers/`. This file is saved locally but is not automatically tracked. Task 1 must explicitly transfer it to the destination and force-add this one approved plan path when committing planning records; do not change the ignore rule or force-add the entire directory.
 
@@ -27,8 +27,8 @@
 | 4 — requirement evidence assessment | Complete | Combined 4A/4 verification: 87 focused and 293 backend tests passed |
 | 5 — deterministic scoring and ranking | Complete | 68 focused and 328 backend tests passed; exact weighted arithmetic and raw-score ties checked |
 | 6 — rubric and assessment caches | Complete | 40 cache tests and 368 backend tests passed; warm zero-call comparisons, mixed hits, concurrent rubric freezing and migrations checked |
-| 7 — authenticated API | Pending — next | |
-| 8 — truthful UI and request lifecycle | Pending | |
+| 7 — authenticated API | Complete | 59 focused, 411 backend and 71 frontend tests passed; production build passed |
+| 8 — truthful UI and request lifecycle | Pending — next | |
 | 9 — provider quality and performance gates | Pending | |
 | 10 — final regression and handoff | Pending | |
 
@@ -53,6 +53,14 @@ Conflict-safe rubric insertion reads the first persisted interpretation, includi
 Five-document partitions ensure each supplied profile/source round contains at most 40,000 source characters, using the existing <=8,000-character context/chunk rules. Overflow uses at most two concurrent calls per evaluation; full-source fallback processes every original chunk. One ordinary five-resume semantic comparison uses one assessment call with prepared profiles. Deadline checks guard transport responses, both scoring paths and cache/publication boundaries; the selected source set and rubric are checked again after writes. Incomplete comparisons clear all ranks/winners. Logs contain task/duration and sanitized outcome reasons, never source text or provider bodies.
 
 Task 6 verification: 40 dedicated cache/pipeline/storage tests and 368 full backend tests passed; existing Starlette warning only. SQLite exercises actual transactions, concurrent builds and schema upgrades; PostgreSQL schema/CRUD/locking is checked with recording mocks. These tests establish functional cache/call-count behavior, not live latency or semantic quality. API/UI integration and live quality/performance gates remain in Tasks 7–9.
+
+Task 7 exposes authenticated feature discovery, AI-only overall-fit evaluation and stored-resume profile preparation. The flag remains disabled when unset/unrecognized. Evaluation accepts strict raw job text, unique stored resume IDs and a boolean fresh flag only; client dates, weights, rubric, source text and keys are rejected. The server fetches authoritative user-owned resumes, retains the full unchanged JD, derives as_of and preserves the existing shared AI-operation rate limit. Missing/foreign resumes return the same 404; invalid input returns 400/422.
+
+Both new operations use existing provider selection/transport. Offline or unconfigured providers return 409 ai_provider_required; a selected profile must have its own user-owned readable secret, so a foreign/missing profile cannot fall back to an unrelated settings key. Provider failures return sanitized 502 without exception bodies or legacy percentages. Needs-review comparisons remain structured 200 responses with null scores/ranks and no winner. Profile preparation accepts no caller facts/text/keys and exposes only resume_id, status, source_hash, profile_fingerprint and warnings; failed preparation preserves saved content, while edits during preparation invalidate old profiles.
+
+Client helpers reuse authenticated fetching/error handling, forward raw text, selected IDs, fresh and AbortSignal, and never retry or switch to offline implicitly. Existing matching/analysis/provider endpoints retain their behavior. The authenticated journey checks analysis -> saved resume -> evaluation -> zero-call warm repeat -> edit/save -> changed assessment -> different job -> provider switch -> flag rollback. Source-less legacy job metadata cannot substitute for raw JD on the new endpoint. UI labels, obsolete-request guards, and profile preparation after vault saves remain Task 8.
+
+Task 7 verification: 59 focused API/provider checks, 411 full backend tests, 71 frontend tests and production build (1,593 modules) passed; only the existing Starlette warning remains. Tests use temporary storage and synthetic provider responses; no live AI requests or rollout activation occurred. All 40 original source hashes remain unchanged.
 
 ## Global Constraints
 
@@ -334,7 +342,7 @@ assert all(e.rank is None and not e.is_top_match for e in incomplete_batch.evalu
 
 **Profile lifecycle interface:** Add authenticated `POST /api/resumes/{resume_id}/profile` to prepare/reuse the current saved profile via Task 4A; no caller-provided text, keys or facts. Return `{resume_id, status, source_hash, profile_fingerprint, warnings}` with sanitized errors, not full profile facts. Respect the same feature flag, configured-provider checks and AI rate limit. The vault calls it after a successful content save when enabled; older resumes use lazy preparation through evaluation. Failed preparation cannot roll back upload/save. Verify foreign IDs, repeat preparation zero extraction calls, offline/flag-off behavior, and content edits during preparation.
 
-- [ ] **Step 1: Add failing API checks.** `test_flag_off_preserves_legacy`; `test_foreign_duplicate_and_unknown_resume_ids_rejected`; `test_empty_or_oversized_job_rejected`; `test_offline_profile_does_not_enter_ai_evaluation`; `test_provider_failure_never_returns_legacy_percentage`; `test_full_raw_jd_reaches_pipeline`; `test_client_scoring_fields_rejected`. Preserve authenticated rate limiting.
+- [x] **Step 1: Add failing API checks.** `test_flag_off_preserves_legacy`; `test_foreign_duplicate_and_unknown_resume_ids_rejected`; `test_empty_or_oversized_job_rejected`; `test_offline_profile_does_not_enter_ai_evaluation`; `test_provider_failure_never_returns_legacy_percentage`; `test_full_raw_jd_reaches_pipeline`; `test_client_scoring_fields_rejected`. Preserve authenticated rate limiting.
 
 ```python
 assert flag_off_response.status_code == 404
@@ -344,10 +352,10 @@ assert pipeline_job_text == full_jd
 assert legacy_response.status_code == 200
 assert isinstance(legacy_response.json(), list)
 ```
-- [ ] **Step 2: Run `./.venv/Scripts/python.exe -m pytest -q tests/test_match_api.py`.** Confirm expected new route/contract failures, no external calls.
-- [ ] **Step 3: Adapt branch route/flag/client patterns.** Fetch authoritative user-owned resumes; use saved provider selection; forward raw JD. Return 404 when flag disabled, 409 with `ai_provider_required` for offline/unconfigured mode, normal 400/422 input errors, and sanitized 502 provider failure. Do not log provider response bodies or keys. Incomplete source-backed evaluations return structured statuses/reasons, not fabricated legacy results.
-- [ ] **Step 4: Verify old endpoint tests and new authenticated journey.** Analyze job -> save resumes -> evaluate -> edit/save -> evaluate -> switch job/profile -> rollback flag. Confirm older jobs without source text cannot produce overall-fit scores and continue using a labeled legacy experience.
-- [ ] **Step 5: Commit.** Subject: `feat: expose guarded AI overall fit evaluation`.
+- [x] **Step 2: Run `./.venv/Scripts/python.exe -m pytest -q tests/test_match_api.py`.** Confirm expected new route/contract failures, no external calls.
+- [x] **Step 3: Adapt branch route/flag/client patterns.** Fetch authoritative user-owned resumes; use saved provider selection; forward raw JD. Return 404 when flag disabled, 409 with `ai_provider_required` for offline/unconfigured mode, normal 400/422 input errors, and sanitized 502 provider failure. Do not log provider response bodies or keys. Incomplete source-backed evaluations return structured statuses/reasons, not fabricated legacy results.
+- [x] **Step 4: Verify old endpoint tests and new authenticated journey.** Analyze job -> save resumes -> evaluate -> edit/save -> evaluate -> switch job/profile -> rollback flag. Confirm older jobs without source text cannot produce overall-fit scores and continue using a labeled legacy experience.
+- [x] **Step 5: Commit.** Subject: `feat: expose guarded AI overall fit evaluation`.
 
 ## Task 8: Minimal truthful UI and request lifecycle
 
