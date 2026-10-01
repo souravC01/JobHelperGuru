@@ -184,3 +184,12 @@ An isolated diagnostic at `3932571` assessed the same five original full-source 
 The remaining source failures exposed a shared feedback gap: evidence validators raised fixed ambiguous-quote/literal-skill errors that the existing correction whitelist did not recognize. They now map to existing safe rule codes. Evidence correction instructions preserve frozen requirement IDs and keys, require unique literal source support and distinguish listed skills from performed work. The two-attempt cap, strict validators, scorer weights, JD/profile extraction and production batching remain unchanged; assessment cache version is v9.
 
 Both regression cases failed before the fix. All 158 focused checks and 459 backend tests pass afterwards. Cumulative conservative usage is **167/200 development requests**, with 33 remaining, including the previous two interrupted-call reservations. Live verification of the correction is next. Steps 4–7 and all release gates remain open; the untouched holdout stays unopened.
+
+
+### Live correction trace and invalid-claim feedback
+
+The assessment-v9 retry of the previously failed Java-with-skills source input remained unscored: two received responses, 52.02 seconds, 20,351 reported tokens and zero SDK failures. Both responses retained two nonexistent quotes; the correction also introduced an ambiguous quote. Usage is **169/200**, leaving 31 requests. Generic rule feedback alone did not repair this example.
+
+The shared assessment validator now examines every claim for recognized quote/literal errors and identifies all affected server-supplied resume/requirement IDs and fixed rule codes in the existing single correction pass. Arbitrary exception text is excluded. Any remaining invalid claim still rejects the assessment; no partial scoring, extra attempts or looser quotes. Assessment version v10. The new regression failed before the fix; 138 focused and all 460 backend tests pass afterwards. Live verification is pending.
+
+A separate offline trace found 21 QA criteria using 16 original source sentences: three proficiency targets share one sentence, and four understanding targets share another. The assessment prompt currently asks for the whole original sentence while extraction has split these targets. This is a concrete ambiguity to investigate, not proof that any particular cloud/pipeline credit is invalid or a reason to change scoring weights.

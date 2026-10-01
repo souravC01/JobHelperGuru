@@ -292,3 +292,22 @@ def test_evidence_correction_identifies_the_source_rule_without_changing_credit(
     assert result.status=="complete" and len(engine.calls)==2
     assert result.items[0].level=="listed" and result.items[0].source_quote=="Skills:\nRust"
     assert engine.calls[0]["resumes"]==engine.calls[1]["resumes"]
+
+
+def test_correction_identifies_all_invalid_claims_without_private_error_text():
+    resume=Resume(id="r",name="R",content="Skills:\nRust, Python\nProjects:\nBuilt Rust and Python services.")
+    class Repair(Assessor):
+        def extract_match_chunk(self,payload,*,timeout=None):
+            self.calls.append(payload)
+            feedback=payload.get("validation_feedback",{})
+            repaired=feedback.get("invalid_claims")==[
+                dict(resume_id="r",requirement_id="rust",validation_rule="source_quote_not_unique"),
+                dict(resume_id="r",requirement_id="python",validation_rule="unsupported_literal_skill")]
+            items=[evidence("rust","listed" if repaired else "demonstrated","Skills:\nRust, Python" if repaired else "Invented Rust work"),
+                   evidence("python","listed" if repaired else "demonstrated","Skills:\nRust, Python" if repaired else "Built Rust")]
+            return dict(items=[dict(resume_id="r",chunk_index=0,items=items,assessed_requirement_ids=["rust","python"],unresolved_requirement_ids=[])])
+    engine=Repair()
+    result=assess([resume],[req("Rust",id="rust"),req("Python",id="python")],engine)["r"]
+    assert result.status=="complete" and len(engine.calls)==2
+    assert all(i.level=="listed" for i in result.items)
+    assert set(engine.calls[1]["validation_feedback"])=={"reason","previous_response","validation_rule","invalid_claims"}

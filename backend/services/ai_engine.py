@@ -303,7 +303,9 @@ The same server source/schema checks will run again."""
                 system_prompt += "\nDescribed work actions/knowledge use kind=semantic; skill names must be literal in their quotes."
             elif payload.get("task") == "evidence_batch":
                 system_prompt += """
-For evidence corrections, the frozen requirement keys and IDs must stay unchanged. A positive literal
+For evidence corrections, invalid_claims identifies each resume_id/requirement_id whose quote failed.
+Recheck every identified claim, then validate the other claims too; do not retain its rejected quote.
+The frozen requirement keys and IDs must stay unchanged. A positive literal
 skill claim needs a quote containing that required technology or its explicit alias, not a related tool.
 Select an actual unique source passage; if the only support is a skills list, use listed. Never invent
 performed work or convert unclear support into a positive claim. Genuine absence is not_evidenced;

@@ -21,7 +21,13 @@ from .models import MatchContract, NonEmptyString, Requirement, RequirementCateg
 from .normalization import aliases_for_skill, canonicalize_skill
 
 EXTRACTOR_VERSION = "overall-jd-v6"
-ASSESSMENT_VERSION = "overall-assessment-v9"
+ASSESSMENT_VERSION = "overall-assessment-v10"
+_CORRECTION_RULES = {"Source quote must occur exactly once in the supplied chunk":"source_quote_not_unique",
+                  "Ambiguous or unsupported evidence quote":"source_quote_not_unique",
+                  "Alternatives require an explicit OR group":"alternatives_require_explicit_or",
+                  "Unsupported skill fact":"unsupported_literal_skill",
+                  "Unsupported literal skill":"unsupported_literal_skill",
+                  "Duplicate or foreign requirement IDs":"requirement_ids_outside_requested_set"}
 MAX_REQUIREMENTS = 64
 _INSTRUCTION = re.compile(r"ignore\b.*\b(?:rubric|instructions?)|\bscore\s*\d+|\bsystem\s*prompt", re.I)
 _ELIGIBILITY = re.compile(r"\b(?:work authorization|legally authorized|sponsorship|graduation window|class of 20\d{2})\b", re.I)
@@ -131,7 +137,7 @@ def _deduplicate(items: list[Requirement]) -> list[Requirement]:
     return sorted(selected.values(), key=lambda r: (r.source_start, r.id))
 
 
-def _validated_chunk(payload, *, engine, deadline, validate):
+def _validated_chunk(payload, *, engine, deadline, validate, invalid_claims=None):
     """Correct one received invalid response; every attempt uses the same source and validator."""
     for attempt in range(2):
         remaining=deadline-time.monotonic()
@@ -149,14 +155,10 @@ def _validated_chunk(payload, *, engine, deadline, validate):
             if attempt or isinstance(response,dict) and response.get('complete') is False:
                 raise
             # Only fixed server messages become feedback; arbitrary exceptions can contain private text.
-            rule={"Source quote must occur exactly once in the supplied chunk":"source_quote_not_unique",
-                  "Ambiguous or unsupported evidence quote":"source_quote_not_unique",
-                  "Alternatives require an explicit OR group":"alternatives_require_explicit_or",
-                  "Unsupported skill fact":"unsupported_literal_skill",
-                  "Unsupported literal skill":"unsupported_literal_skill",
-                  "Duplicate or foreign requirement IDs":"requirement_ids_outside_requested_set"}.get(str(exc))
+            rule = _CORRECTION_RULES.get(str(exc))
             feedback=dict(reason='schema_or_source_validation_failed',previous_response=response)
             if rule: feedback['validation_rule']=rule
+            if invalid_claims: feedback['invalid_claims']=list(invalid_claims)
             payload={**payload,'validation_feedback':feedback}
 
 
@@ -294,7 +296,10 @@ def _assessment_round(requests, requirements, engine, deadline, as_of):
     requirements = [r for r in requirements if r.id in requested]
     payload = dict(task="evidence_batch", requirements=[r.model_dump(mode="json") for r in requirements],
                    resumes=[request["payload"] for request in requests], schema=EvidenceBatchProposal.model_json_schema())
+    invalid_claims = []
     def validate(response):
+        invalid_claims.clear()
+        errors = []
         wire = EvidenceBatchProposal.model_validate(response)
         records = {r.resume_id: r for r in wire.items}
         expected_resumes = {r["resume"].id for r in requests}
@@ -317,8 +322,15 @@ def _assessment_round(requests, requirements, engine, deadline, as_of):
                 if proposal.requirement_id not in expected or proposal.requirement_id in seen:
                     raise ValueError("Duplicate or foreign requirement IDs")
                 seen.add(proposal.requirement_id)
-                items.append(_validate_evidence_proposal(proposal, by_id[proposal.requirement_id], resume,
-                                                        request["contexts"], profile, as_of))
+                try:
+                    items.append(_validate_evidence_proposal(proposal, by_id[proposal.requirement_id], resume,
+                                                            request["contexts"], profile, as_of))
+                except ValueError as exc:
+                    rule = _CORRECTION_RULES.get(str(exc))
+                    if rule is None: raise
+                    errors.append(str(exc))
+                    invalid_claims.append(dict(resume_id=resume.id, requirement_id=proposal.requirement_id,
+                                               validation_rule=rule))
             assessed, unresolved = set(record.assessed_requirement_ids), set(record.unresolved_requirement_ids)
             if len(assessed) != len(record.assessed_requirement_ids) or len(unresolved) != len(record.unresolved_requirement_ids) or assessed & unresolved or not (assessed | unresolved) <= expected:
                 raise ValueError("Invalid requirement coverage")
@@ -326,8 +338,9 @@ def _assessment_round(requests, requirements, engine, deadline, as_of):
                 raise ValueError("Positive outcome cannot repair unsupported coverage")
             missing = expected - (seen & assessed)
             outcomes[resume.id] = (items, missing, "missing_assessment" if expected - (assessed | unresolved) or assessed - seen else "unresolved_evidence" if missing else None)
+        if errors: raise ValueError(errors[0])
         return outcomes
-    return _validated_chunk(payload,engine=engine,deadline=deadline,validate=validate)
+    return _validated_chunk(payload,engine=engine,deadline=deadline,validate=validate,invalid_claims=invalid_claims)
 
 
 def _profile_contexts(resume, profile):

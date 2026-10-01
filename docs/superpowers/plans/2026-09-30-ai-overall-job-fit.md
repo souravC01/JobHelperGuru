@@ -465,3 +465,6 @@ Task 9 follow-up at `1b8bd3c`: all five profiles accepted and assessment reached
 
 
 Task 9 source-isolation diagnostic: identical full-source/frozen-rubric inputs at3932571, max2 concurrent calls, 4/5 complete in112.16s, seven requests, zero foreign IDs. One resume fails quote/literal validation. Existing bounded correction now recognizes those fixed validator errors using existing safe codes; frozen IDs/keys and all validators retained, assessmentv9 only. RED observed for both regression cases; 158 focused and459 backend tests pass. No production isolation routing change. Usage167/200 (33remain, conservative reservations retained). Controlled live correction verification next; Steps4-7 unchecked, Task10 pending.
+
+
+Task9 v9 controlled retry fails source validation after2calls/52.02s/20,351tokens; usage169/200,31remain. Correction now lists all invalid claims using server-supplied IDs and fixed rule codes, one correction only; v10 assessment cache invalidation. RED observed,138focused/460backend GREEN. Live verification pending. Offline QA rubric21criteria/16sentences reveals split targets vs whole-sentence assessment ambiguity; investigate without weight tuning. Steps4-7 open, Task10 pending.
