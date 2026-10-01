@@ -90,3 +90,12 @@ Candidate `296a316` received nine requests on the already reviewed QA-over-Java-
 One received response rejected by schema/source checks now receives at most one correction request using the identical source, schema and original deadline. The rejected response is untrusted input; feedback uses a fixed reason without private exception text or desired winners. The corrected response passes the same validator. Network failures, explicitly incomplete source, and missing/unresolved evidence do not trigger this correction. JD/profile/assessment versions invalidate earlier cached artifacts. No new dependencies or scoring weights were added.
 
 During Task 9 the primary checkout independently moved onto `feat/ai-overall-job-fit`; the managed worktree became detached. The clean primary feature branch was safely fast-forwarded to the tested fixes. The original `feat/evidence-based-resume-matching` ref remains pinned at `bccc938`; historical source-file hash checks refer to that earlier checkout, not the now-switched primary directory. No PR, release activation or holdout access occurred.
+
+
+### First correction smoke and JSON diagnosis
+
+At `5b74b0c`, a cold comparison of the reviewed QA-over-Java-without-skills pair accepted the JD and both complete resume profiles. The evidence response failed JSON decoding, so both evaluations remained failed and unscored. This took 99.88 seconds and four provider requests (28,734 reported tokens), with zero SDK failures. This duration is matching only, without upstream job analysis. No warm or fixed-rubric repeats were attempted on the failed comparison.
+
+One diagnostic repeated the identical evidence request. The provider reported `finish_reason=stop`; 3,311 content characters parsed as JSON (13,010 tokens). This establishes response-format variability, not a passing evidence assessment. Cumulative usage is **89/100 requests**, leaving 11. All-development token usage is still unavailable because earlier failed requests lacked usage.
+
+The existing single-correction limit now also catches a received JSON decoding failure, supplies its body as untrusted feedback and keeps the same source, validator and deadline. It does not retry generic transport failures or allow a third attempt. A malformed-response check reproduced the failure before the fix; all 453 backend tests passed. Task 9 and all live release gates remain open.

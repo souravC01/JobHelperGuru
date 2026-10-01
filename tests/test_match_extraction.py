@@ -164,3 +164,21 @@ def test_jd_repairs_received_quote_without_relaxing_provenance():
     assert result.status=='complete' and len(engine.calls)==2
     assert result.items[0].source_quote=="Required Python." and result.items[0].source_start==0
     assert engine.calls[1]['validation_feedback']['previous_response']['items'][0]['source_quote']=="Must use Python."
+
+
+def test_received_malformed_json_uses_the_same_single_correction_limit():
+    import json
+    from backend.services.matching.extraction import extract_requirements
+    class Repair:
+        def __init__(self, persistent):self.calls=[];self.persistent=persistent
+        def extract_match_chunk(self,payload,*,timeout=None):
+            self.calls.append(payload)
+            if len(self.calls)==1 or self.persistent:json.loads('{broken')
+            return dict(chunk_index=0,complete=True,items=[proposal('Required Python.','Python')])
+    for persistent in (False,True):
+        engine=Repair(persistent)
+        result=extract_requirements('Required Python.',engine=engine,deadline=time.monotonic()+30)
+        assert result.status==('failed' if persistent else 'complete')
+        assert len(engine.calls)==2
+        assert engine.calls[1]['source_text']==engine.calls[0]['source_text']
+        assert engine.calls[1]['validation_feedback']==dict(reason='invalid_json_response',previous_response='{broken')

@@ -20,8 +20,8 @@ from .provenance import _quote_span
 from .models import MatchContract, NonEmptyString, Requirement, RequirementCategory, RequirementExtraction, ResumeProfile, EvidenceExtraction, has_evidence_conflict
 from .normalization import aliases_for_skill, canonicalize_skill
 
-EXTRACTOR_VERSION = "overall-jd-v3"
-ASSESSMENT_VERSION = "overall-assessment-v3"
+EXTRACTOR_VERSION = "overall-jd-v4"
+ASSESSMENT_VERSION = "overall-assessment-v4"
 MAX_REQUIREMENTS = 64
 _INSTRUCTION = re.compile(r"ignore\b.*\b(?:rubric|instructions?)|\bscore\s*\d+|\bsystem\s*prompt", re.I)
 _ELIGIBILITY = re.compile(r"\b(?:work authorization|legally authorized|sponsorship|graduation window|class of 20\d{2})\b", re.I)
@@ -136,7 +136,12 @@ def _validated_chunk(payload, *, engine, deadline, validate):
     for attempt in range(2):
         remaining=deadline-time.monotonic()
         if remaining<=0: raise TimeoutError
-        response=engine.extract_match_chunk(payload,timeout=remaining)
+        try:
+            response=engine.extract_match_chunk(payload,timeout=remaining)
+        except json.JSONDecodeError as exc:
+            if attempt: raise
+            payload={**payload,'validation_feedback':dict(reason='invalid_json_response',previous_response=exc.doc)}
+            continue
         if time.monotonic()>=deadline: raise TimeoutError
         try:
             return validate(response)
