@@ -360,3 +360,17 @@ def test_invalid_inputs_make_no_provider_calls(setup,case):
     else: kwargs["deadline_seconds"]=float("nan")
     with pytest.raises(ValueError): evaluate_resumes(**kwargs)
     assert p.calls==[]
+
+
+def test_cold_profiles_overlap_with_two_workers_and_warm_reuses_them(setup):
+    from threading import Barrier
+    s,r,p=setup
+    resumes=[r]+[s.add_resume(str(i),r.content,user_id="u") for i in range(3)]
+    barrier=Barrier(2,timeout=2)
+    p.hook=lambda payload: barrier.wait() if payload["task"]=="resume_profile" else None
+    cold=run(s,resumes,p)
+    assert cold.comparison_complete and p.peak==2
+    assert p.counts()["resume_profile"]==4
+    p.calls.clear()
+    warm=run(s,resumes,p)
+    assert warm.model_dump()==cold.model_dump() and p.calls==[]

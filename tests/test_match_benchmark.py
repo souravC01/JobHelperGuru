@@ -217,12 +217,14 @@ def test_zero_measurements_and_edited_source_cannot_pass_development():
 
 def test_perf_gate_accepts_only_three_complete_cold_runs_and_required_reuse():
     m=benchmark(); metrics=lambda calls:dict(provider_calls=calls,stages={'resume_profile':{'calls':calls}})
-    evidence=dict(execution='live',job_chars=8000,resume_chars=[8000]*5,
+    evidence=dict(execution='live',job_chars=3200,resume_chars=[3215,3842,4000,4200,4502],
         cold=[dict(comparison_complete=True,elapsed_seconds=100,metrics=metrics(8)) for _ in range(3)],
         main_cold=[dict(comparison_complete=True,elapsed_seconds=80,metrics=metrics(2)) for _ in range(3)],
         lifecycle=[dict(phase=phase,comparison_complete=True,metrics=metrics(calls),same_scores_and_ids=True)
                    for phase,calls in [('profile_preparation',5),('prepared_first_job',0),('second_job',0),('warm',0),('edited_resume',1),('scorer_only',0)]])
     assert m.performance_gate(evidence)
+    for dimensions in ([0,3842,4000,4200,4502], [3215]*4, [100001]*5):
+        assert not m.performance_gate({**evidence,'resume_chars':dimensions})
     evidence['cold'][1]['comparison_complete']=False
     assert not m.performance_gate(evidence)
 

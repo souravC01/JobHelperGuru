@@ -136,11 +136,18 @@ def evaluate_resumes(job_text: str, resumes: list[Resume], *, user_id: str, as_o
         frozen = _validate_rubric(row,job_text)
     rubric_fingerprint = row["rubric_fingerprint"]
     prepared, results, misses, keys, cached_payloads = {}, {}, [], {}, {}
-    for resume in sorted(resumes,key=lambda r:r.id):
-        if time.monotonic() >= deadline:
+    ordered = sorted(resumes,key=lambda r:r.id)
+    def prepare(resume):
+        if time.monotonic() >= deadline: return None
+        return profiles.get_or_build_resume_profile(resume,user_id=user_id,engine=engine,storage=storage,deadline=deadline)
+    if len(ordered)>1:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            prepared_profiles = list(pool.map(prepare,ordered))
+    else: prepared_profiles = [prepare(r) for r in ordered]
+    for resume, profile in zip(ordered,prepared_profiles):
+        if profile is None or time.monotonic() >= deadline:
             results[resume.id] = incomplete(resume,"deadline_exceeded")
             continue
-        profile = profiles.get_or_build_resume_profile(resume,user_id=user_id,engine=engine,storage=storage,deadline=deadline)
         if profile.status != "complete":
             results[resume.id] = incomplete(resume,profile.warnings[0],profile.status.value)
             continue

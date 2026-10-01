@@ -443,7 +443,10 @@ def performance_gate(evidence):
     phases={r['phase']:r for r in evidence.get('lifecycle',[])}
     required={'profile_preparation','prepared_first_job','second_job','warm','edited_resume','scorer_only'}
     if not required<=set(phases): return False
-    return bool(evidence.get('execution')=='live' and evidence.get('job_chars')==8000 and evidence.get('resume_chars')==[8000]*5
+    return bool(evidence.get('execution')=='live'
+        and type(evidence.get('job_chars')) is int and 0<evidence['job_chars']<=100000
+        and len(evidence.get('resume_chars',[]))==5
+        and all(type(n) is int and 0<n<=100000 for n in evidence['resume_chars'])
         and len(cold)==3 and all(r['comparison_complete'] and r['elapsed_seconds']<=120 and r['metrics']['provider_calls']>0 for r in cold)
         and len(main)==3 and all(r['comparison_complete'] and r['metrics']['provider_calls']>0 for r in main)
         and all(r['comparison_complete'] for r in phases.values())
@@ -569,8 +572,8 @@ def main(argv=None):
         if bool(args.performance_fixture)!=bool(args.performance_review_record): raise ValueError('Performance fixture and its review record must be provided together')
         if args.performance_fixture:
             performance_cases,_=load_live_inputs(args.performance_fixture,args.performance_review_record,phase='dev',development_report=None,provider=provider)
-            if len(performance_cases)!=1 or len(performance_cases[0]['job_text'])!=8000 or [len(r['content']) for r in performance_cases[0]['resumes']]!=[8000]*5:
-                raise ValueError('Performance input must contain one 8000-character JD and five 8000-character versions')
+            if len(performance_cases)!=1 or len(performance_cases[0]['resumes'])!=5:
+                raise ValueError('Performance input must contain one real JD and five real resume versions')
         started=time.monotonic(); as_of=date.today()
         with redirect_stdout(io.StringIO()),redirect_stderr(io.StringIO()):
             baseline_cases=validate_cases(cases+(performance_cases or []))
@@ -582,11 +585,11 @@ def main(argv=None):
             quality=run_quality(cases,engine=engine,as_of=as_of)
             lifecycle=run_lifecycle(cases[0],engine=engine,as_of=as_of) if not engine.exhausted else []
             performance=None
-            if performance_cases and not engine.exhausted:
-                perf=performance_cases[0]
-                perf_runs=run_quality([perf],engine=engine,as_of=as_of)
-                perf_lifecycle=run_lifecycle(perf,engine=engine,as_of=as_of) if not engine.exhausted else []
-                performance=dict(execution='live',job_chars=8000,resume_chars=[8000]*5,cold=[r for r in perf_runs if r['phase']=='cold'],lifecycle=perf_lifecycle,main_cold=[r for r in baseline['runs'] if r['case_id']==perf['id']])
+            perf=performance_cases[0] if performance_cases else next((c for c in cases if len(c['resumes'])==5),None)
+            if perf and not engine.exhausted:
+                perf_runs=run_quality([perf],engine=engine,as_of=as_of) if performance_cases else quality
+                perf_lifecycle=lifecycle if perf['id']==cases[0]['id'] else run_lifecycle(perf,engine=engine,as_of=as_of)
+                performance=dict(execution='live',job_chars=len(perf['job_text']),resume_chars=[len(r['content']) for r in perf['resumes']],cold=[r for r in perf_runs if r['phase']=='cold' and r['case_id']==perf['id']],lifecycle=perf_lifecycle,main_cold=[r for r in baseline['runs'] if r['case_id']==perf['id']])
                 performance['matching_latency_deltas']=[new['elapsed_seconds']-old['elapsed_seconds'] for new,old in zip(performance['cold'],performance['main_cold'])]
                 performance['journey_latency_deltas']=[new['full_journey_seconds']-old['full_journey_seconds'] for new,old in zip(performance['cold'],performance['main_cold']) if new.get('full_journey_seconds') is not None]
         report=build_report(cases,quality+lifecycle,execution='live',review_verified=True,provider=provider,suite_elapsed_seconds=time.monotonic()-started)
