@@ -377,6 +377,7 @@ def run_lifecycle(case, *, engine, as_of):
                 sources={r.id:r.content for r in resumes}
                 return _measure(case,phase,0,engine,lambda:pipeline.evaluate_resumes(job or case['job_text'],resumes,user_id='benchmark',as_of=as_of,engine=engine,storage=storage),aliases,sources)
             first=measure('prepared_first_job'); runs.append(first)
+            if not first['comparison_complete']: return runs
             if case.get('second_job_text'): runs.append(measure('second_job',case['second_job_text']))
             warm=measure('warm'); warm['same_scores_and_ids']=_same(first,warm); runs.append(warm)
             id=resumes[0].id

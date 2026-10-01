@@ -310,6 +310,20 @@ def test_failed_preparation_does_not_repeat_profiles_as_fixed_evidence_or_lifecy
     assert engine.engine.counts()['resume_profile']==4
 
 
+def test_failed_first_job_stops_lifecycle_before_mislabeled_warm_extraction():
+    m=benchmark()
+    class FailedJob(Provider):
+        def extract_match_chunk(self,payload,*,timeout=None):
+            if payload['task']=='requirements':
+                self.calls.append(payload)
+                return dict(chunk_index=payload['chunk_index'],complete=False,items=[])
+            return super().extract_match_chunk(payload,timeout=timeout)
+    engine=m.CountingEngine(FailedJob(),max_calls=20)
+    rows=m.run_lifecycle(case(),engine=engine,as_of=date(2026,10,1))
+    assert [r['phase'] for r in rows]==['profile_preparation','prepared_first_job']
+    assert engine.engine.counts()=={'resume_profile':2,'requirements':1}
+
+
 def test_skill_gate_requires_exact_scores_ranks_and_zero_comparison_calls():
     m=benchmark(); c=case()
     runs=[record(repeat=i) for i in range(3)]
