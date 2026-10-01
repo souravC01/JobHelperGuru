@@ -10,7 +10,7 @@ from .models import MatchContract, NonEmptyString, EvaluationStatus, EvidenceLev
 from .normalization import CANONICAL_SKILL_ALIASES, canonicalize_skill
 from .provenance import _quote_span, date_ranges, fingerprint, section_at, source_hash, verified_level, work_span
 
-PROFILE_EXTRACTOR_VERSION = "resume-profile-v4"
+PROFILE_EXTRACTOR_VERSION = "resume-profile-v5"
 
 
 class FactProposal(MatchContract):

@@ -399,3 +399,14 @@ def test_profile_and_evidence_transport_use_guarded_non_scoring_prompts(monkeypa
     assert all(c["temperature"]==0 and c["timeout"]==15 for c in calls)
     assert "job-independent" in calls[0]["messages"][0]["content"]
     assert "untrusted" in calls[1]["messages"][0]["content"] and "frozen rubric" in calls[1]["messages"][0]["content"]
+
+
+def test_json_parser_accepts_only_redundant_closing_delimiters_after_complete_value():
+    import json
+    import pytest
+    value={'items':[{'source_quote':'Literal source.','complete':True}]}
+    for suffix in ('}', '}}', ']}}'):
+        assert extract_json_from_llm_response(json.dumps(value)+suffix)==value
+    for suffix in (' {}', ' {"score":100}', '} unexpected data'):
+        with pytest.raises(json.JSONDecodeError):
+            extract_json_from_llm_response(json.dumps(value)+suffix)

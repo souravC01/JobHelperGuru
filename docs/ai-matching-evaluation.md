@@ -99,3 +99,12 @@ At `5b74b0c`, a cold comparison of the reviewed QA-over-Java-without-skills pair
 One diagnostic repeated the identical evidence request. The provider reported `finish_reason=stop`; 3,311 content characters parsed as JSON (13,010 tokens). This establishes response-format variability, not a passing evidence assessment. Cumulative usage is **89/100 requests**, leaving 11. All-development token usage is still unavailable because earlier failed requests lacked usage.
 
 The existing single-correction limit now also catches a received JSON decoding failure, supplies its body as untrusted feedback and keeps the same source, validator and deadline. It does not retry generic transport failures or allow a third attempt. A malformed-response check reproduced the failure before the fix; all 453 backend tests passed. Task 9 and all live release gates remain open.
+
+
+### Final cold diagnostic and parser root cause
+
+Candidate `248e5b2` used seven requests (77,311 reported tokens) in a 217.89-second cold QA-pair comparison. There were zero SDK failures. One ambiguous profile-evidence quote was corrected successfully; the full-source response and its correction both failed JSON decoding. Evaluations remained failed/unscored; no warm or fixed repeats followed. Cumulative usage is **96/100 requests**, leaving four.
+
+Both JSON failures were `Extra data`: each contained an already complete JSON value followed by two closing delimiters. The shared parser now recovers only a complete value whose remaining suffix consists solely of whitespace/closing delimiters. Additional structured data and other trailing content cannot enter this fallback. Existing schema, complete coverage, original-quote and skill/section checks remain enforced. Cached extraction/assessment versions are bumped. An offline replay recovered the recorded full-source response and all 50 supplied evidence items for both resumes passed the unchanged source/coverage validator; this replay made zero provider requests and is not a live gate pass.
+
+Fresh regression: **454 backend tests passed**, with the existing Starlette/AnyIO warning only. The last four requests are reserved for fresh full-source evidence against the recorded, validated development rubric. That diagnostic cannot establish cold/profile/cache performance or complete the broader development gates.

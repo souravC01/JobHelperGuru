@@ -51,7 +51,14 @@ def extract_json_from_llm_response(text: str) -> Any:
     clean_text = re.sub(r"^```json\s*", "", text)
     clean_text = re.sub(r"^```\s*", "", clean_text)
     clean_text = re.sub(r"\s*```$", "", clean_text)
-    return json.loads(clean_text)
+    try:
+        return json.loads(clean_text)
+    except json.JSONDecodeError:
+        value, end = json.JSONDecoder().raw_decode(clean_text)
+        # Some providers append closing delimiters after an already complete JSON value.
+        if re.fullmatch(r"[\s}\]]+", clean_text[end:]):
+            return value
+        raise
 
 
 def extract_raw_content_from_response(resp: Any) -> str:
