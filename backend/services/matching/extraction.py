@@ -21,7 +21,7 @@ from .models import MatchContract, NonEmptyString, Requirement, RequirementCateg
 from .normalization import aliases_for_skill, canonicalize_skill
 
 EXTRACTOR_VERSION = "overall-jd-v5"
-ASSESSMENT_VERSION = "overall-assessment-v6"
+ASSESSMENT_VERSION = "overall-assessment-v7"
 MAX_REQUIREMENTS = 64
 _INSTRUCTION = re.compile(r"ignore\b.*\b(?:rubric|instructions?)|\bscore\s*\d+|\bsystem\s*prompt", re.I)
 _ELIGIBILITY = re.compile(r"\b(?:work authorization|legally authorized|sponsorship|graduation window|class of 20\d{2})\b", re.I)
@@ -320,6 +320,16 @@ def _assessment_round(requests, requirements, engine, deadline, as_of):
     return _validated_chunk(payload,engine=engine,deadline=deadline,validate=validate)
 
 
+def _profile_contexts(resume, profile):
+    spans = []
+    for fact in sorted(profile.facts, key=lambda f: (f.source_start, f.source_end)):
+        if spans and fact.source_start <= spans[-1][1]:
+            spans[-1][1] = max(spans[-1][1], fact.source_end)
+        else:
+            spans.append([fact.source_start, fact.source_end])
+    return [TextChunk(start, end, resume.content[start:end]) for start, end in spans]
+
+
 def extract_evidence_batch(resumes: list[Resume], profiles: dict[str, ResumeProfile], requirements: list[Requirement], *, as_of: date, engine: Any, deadline: float) -> dict[str, EvidenceExtraction]:
     """Assess one supplied batch; source fallback covers all original chunks."""
     from .models import Evidence, EvidenceExtraction
@@ -367,7 +377,7 @@ def extract_evidence_batch(resumes: list[Resume], profiles: dict[str, ResumeProf
                 if local is None: pending.append(requirement.id)
                 else: observations[resume.id][requirement.id] = local
             if not pending: continue
-            contexts = [TextChunk(f.source_start,f.source_end,f.source_quote) for f in profile.facts] if profile else []
+            contexts = _profile_contexts(resume, profile) if profile else []
             # No keyword filter: all activities/credentials/work context may support semantics.
             text = "\n".join(c.text for c in contexts)
             missing_literal = any(by_id[id].kind=="skill" for id in pending)

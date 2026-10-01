@@ -240,3 +240,22 @@ def test_received_invalid_evidence_gets_one_source_validated_correction():
     assert results['r'].status=='complete' and len(engine.calls)==2
     assert results['r'].items[0].source_quote=='Maintained service availability.'
     assert 'validation_feedback' in engine.calls[1]
+
+
+def test_overlapping_profile_facts_share_context_without_source_fallback():
+    entry='Engineer | Jan 2022 - Present\nBuilt Python, Java, Rust and Go services.\n'+('Operational context. '*180)+'\nCut outages by deploying redundant workers.'
+    resume=Resume(id='r',name='R',content='Work Experience:\n'+entry)
+    facts=[fact(entry,'backend','employment')]+[fact(entry,key) for key in ('Python','Java','Rust','Go')]+[fact('Cut outages by deploying redundant workers.','availability','activity')]
+    cached=profile(resume,facts)
+    assert cached.status=='complete'
+    assert sum(len(f.source_quote) for f in cached.facts)>8000>len(resume.content)
+    engine=Assessor({'r':[evidence(quote='Cut outages by deploying redundant workers.')]})
+    result=assess([resume],[req('Maintain service availability',kind='semantic',category='responsibilities')],engine,{'r':cached})['r']
+    assert result.status=='complete'
+    supplied=engine.calls[0]['resumes'][0]
+    assert supplied['mode']=='profile'
+    assert supplied['source_text']==entry
+    assert len(supplied['facts'])==len(cached.facts)
+    assert all(f.source_quote in supplied['source_text'] for f in cached.facts)
+    item=result.items[0]
+    assert resume.content[item.source_start:item.source_end]==item.source_quote
