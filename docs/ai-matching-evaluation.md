@@ -129,3 +129,10 @@ Fourteen supplied semantic requirement credits varied across identical requests:
 Cumulative approved development usage is **99/100 provider requests**, leaving one. Further development measurements need a higher approved total cap; no further calls or holdout access are authorized yet. Token usage for the entire campaign remains unavailable because earlier failed requests did not report usage; the figures above are known totals for each identified diagnostic, not a complete campaign total.
 
 Task 9 remains in progress. Steps 4–7 are unchecked; Task 10 is pending. Holdout jobs/pairs remain separately unreviewed and unopened. Exact-size real performance inputs remain unavailable. The default-off feature flag is unchanged. Fresh backend regression remains 454 passed; only documentation changed after that verification. No PR, rollout or new GitHub push occurred.
+
+
+### Development continuation: 200 total requests
+
+The owner raised the development cap to **200 total requests**, not 200 additional; 99 were already consumed. The remaining semantic uncertainty is narrower than syntax/provenance: partial or related activities can receive inconsistent full-work credit. The assessment prompt now uses the original JD quote, direct action/object and every essential qualifier, scans every activity before absence, preserves true paraphrases and AND/OR meaning, and distinguishes work evidence from a tool/title/degree or unsupported extension to a different task. Only assessment version changes; profile/JD extraction and scorer weights remain unchanged.
+
+The prior live control is the observed failure (2/3 reviewed order, 14 unstable semantic credits). Regression: 108 focused evidence/pipeline/provider/benchmark checks passed. A controlled three-repeat source comparison retains the exact original payload, including native IDs, frozen requirements and source text; only assessment instructions change. Its live outcome is pending. The broader development/cache/holdout/performance gates remain open.
