@@ -21,7 +21,7 @@ from .models import MatchContract, NonEmptyString, Requirement, RequirementCateg
 from .normalization import aliases_for_skill, canonicalize_skill
 
 EXTRACTOR_VERSION = "overall-jd-v6"
-ASSESSMENT_VERSION = "overall-assessment-v8"
+ASSESSMENT_VERSION = "overall-assessment-v9"
 MAX_REQUIREMENTS = 64
 _INSTRUCTION = re.compile(r"ignore\b.*\b(?:rubric|instructions?)|\bscore\s*\d+|\bsystem\s*prompt", re.I)
 _ELIGIBILITY = re.compile(r"\b(?:work authorization|legally authorized|sponsorship|graduation window|class of 20\d{2})\b", re.I)
@@ -150,8 +150,10 @@ def _validated_chunk(payload, *, engine, deadline, validate):
                 raise
             # Only fixed server messages become feedback; arbitrary exceptions can contain private text.
             rule={"Source quote must occur exactly once in the supplied chunk":"source_quote_not_unique",
+                  "Ambiguous or unsupported evidence quote":"source_quote_not_unique",
                   "Alternatives require an explicit OR group":"alternatives_require_explicit_or",
                   "Unsupported skill fact":"unsupported_literal_skill",
+                  "Unsupported literal skill":"unsupported_literal_skill",
                   "Duplicate or foreign requirement IDs":"requirement_ids_outside_requested_set"}.get(str(exc))
             feedback=dict(reason='schema_or_source_validation_failed',previous_response=response)
             if rule: feedback['validation_rule']=rule

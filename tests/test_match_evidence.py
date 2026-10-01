@@ -274,3 +274,21 @@ def test_assessment_excludes_already_verified_requirements_without_losing_credit
     result=assess([r],requirements,engine,{"r":p})["r"]
     assert result.status=="complete" and {i.requirement_id for i in result.items}=={"q","semantic"}
     assert all(i.level=="demonstrated" for i in result.items) and len(engine.calls)==1
+
+
+@pytest.mark.parametrize("failure,rule",[("literal","unsupported_literal_skill"),("ambiguous","source_quote_not_unique")])
+def test_evidence_correction_identifies_the_source_rule_without_changing_credit(failure,rule):
+    text="Skills:\nRust\nProjects:\nBuilt Python services and Rust tools."
+    resume=Resume(id="r",name="R",content=text)
+    class Repair(Assessor):
+        def extract_match_chunk(self,payload,*,timeout=None):
+            self.calls.append(payload)
+            repaired=payload.get("validation_feedback",{}).get("validation_rule")==rule
+            quote="Skills:\nRust" if repaired else "Built Python services" if failure=="literal" else "Rust"
+            item=evidence(level="listed" if repaired else "demonstrated",quote=quote)
+            return dict(items=[dict(resume_id="r",chunk_index=0,items=[item],assessed_requirement_ids=["q"],unresolved_requirement_ids=[])])
+    engine=Repair()
+    result=assess([resume],[req("rust")],engine)["r"]
+    assert result.status=="complete" and len(engine.calls)==2
+    assert result.items[0].level=="listed" and result.items[0].source_quote=="Skills:\nRust"
+    assert engine.calls[0]["resumes"]==engine.calls[1]["resumes"]
