@@ -259,3 +259,18 @@ def test_overlapping_profile_facts_share_context_without_source_fallback():
     assert all(f.source_quote in supplied['source_text'] for f in cached.facts)
     item=result.items[0]
     assert resume.content[item.source_start:item.source_end]==item.source_quote
+
+
+def test_assessment_excludes_already_verified_requirements_without_losing_credit():
+    quote="Built Python services with redundant workers."
+    r=Resume(id="r",name="R",content="Projects:\n"+quote)
+    p=profile(r,[fact(quote,"Python"),fact(quote,"reliability","activity")])
+    requirements=[req("python"),req("Maintain service availability",kind="semantic",category="responsibilities",id="semantic")]
+    def answer(result,payload):
+        assert [q["id"] for q in payload["requirements"]]==["semantic"]
+        assert payload["resumes"][0]["requirement_ids"]==["semantic"]
+        return result
+    engine=Assessor({"r":[evidence("semantic",quote=quote)]},answer)
+    result=assess([r],requirements,engine,{"r":p})["r"]
+    assert result.status=="complete" and {i.requirement_id for i in result.items}=={"q","semantic"}
+    assert all(i.level=="demonstrated" for i in result.items) and len(engine.calls)==1

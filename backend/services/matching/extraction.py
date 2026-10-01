@@ -21,7 +21,7 @@ from .models import MatchContract, NonEmptyString, Requirement, RequirementCateg
 from .normalization import aliases_for_skill, canonicalize_skill
 
 EXTRACTOR_VERSION = "overall-jd-v6"
-ASSESSMENT_VERSION = "overall-assessment-v7"
+ASSESSMENT_VERSION = "overall-assessment-v8"
 MAX_REQUIREMENTS = 64
 _INSTRUCTION = re.compile(r"ignore\b.*\b(?:rubric|instructions?)|\bscore\s*\d+|\bsystem\s*prompt", re.I)
 _ELIGIBILITY = re.compile(r"\b(?:work authorization|legally authorized|sponsorship|graduation window|class of 20\d{2})\b", re.I)
@@ -151,7 +151,8 @@ def _validated_chunk(payload, *, engine, deadline, validate):
             # Only fixed server messages become feedback; arbitrary exceptions can contain private text.
             rule={"Source quote must occur exactly once in the supplied chunk":"source_quote_not_unique",
                   "Alternatives require an explicit OR group":"alternatives_require_explicit_or",
-                  "Unsupported skill fact":"unsupported_literal_skill"}.get(str(exc))
+                  "Unsupported skill fact":"unsupported_literal_skill",
+                  "Duplicate or foreign requirement IDs":"requirement_ids_outside_requested_set"}.get(str(exc))
             feedback=dict(reason='schema_or_source_validation_failed',previous_response=response)
             if rule: feedback['validation_rule']=rule
             payload={**payload,'validation_feedback':feedback}
@@ -287,6 +288,8 @@ def _assessment_round(requests, requirements, engine, deadline, as_of):
     """Validate claims before reconciling the provider's coverage metadata."""
     remaining = deadline - time.monotonic()
     if remaining <= 0: raise TimeoutError
+    requested = {id for request in requests for id in request["payload"]["requirement_ids"]}
+    requirements = [r for r in requirements if r.id in requested]
     payload = dict(task="evidence_batch", requirements=[r.model_dump(mode="json") for r in requirements],
                    resumes=[request["payload"] for request in requests], schema=EvidenceBatchProposal.model_json_schema())
     def validate(response):
