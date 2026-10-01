@@ -10,7 +10,7 @@
 
 **Active specification:** [Cached Skill Matching — Task 9 Revision](2026-10-01-cached-skill-matching.md). Read that revision before implementing any further Task 9 changes. It defines the score, reusable components, removed paths, exact interfaces/tests and revised gates. Its requirements take precedence over historical sections below.
 
-**Execution status:** Tasks 9.1–9.4 are implemented and verified under the cached-skill pivot. Task 9.5's benchmark implementation is verified; reviewed real extraction quality and full cold/holdout measurements remain pending. Task 9 overall stays in progress; Task 10 remains pending. Existing branch and default-off feature are preserved. Current request usage is 173/200 before the new bounded smoke.
+**Execution status:** Tasks 9.1–9.4 are implemented and verified under the cached-skill pivot. Task9.5 benchmark code is verified; first-JD/resume lists are reviewed, fresh extraction grouping and second-JD review/full cold/holdout gates remain pending. Task 9 overall stays in progress; Task 10 remains pending. Existing branch and default-off feature are preserved. Current usage186/200;14 remain. Final457 backend and90 frontend tests plus production build pass.
 
 **Historical records:** Earlier completed steps and measurements are retained for provenance, not as instructions to restore semantic overall-fit scoring. The revised tasks replace that older path.
 
