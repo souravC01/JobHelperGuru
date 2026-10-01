@@ -108,3 +108,24 @@ Candidate `248e5b2` used seven requests (77,311 reported tokens) in a 217.89-sec
 Both JSON failures were `Extra data`: each contained an already complete JSON value followed by two closing delimiters. The shared parser now recovers only a complete value whose remaining suffix consists solely of whitespace/closing delimiters. Additional structured data and other trailing content cannot enter this fallback. Existing schema, complete coverage, original-quote and skill/section checks remain enforced. Cached extraction/assessment versions are bumped. An offline replay recovered the recorded full-source response and all 50 supplied evidence items for both resumes passed the unchanged source/coverage validator; this replay made zero provider requests and is not a live gate pass.
 
 Fresh regression: **454 backend tests passed**, with the existing Starlette/AnyIO warning only. The last four requests are reserved for fresh full-source evidence against the recorded, validated development rubric. That diagnostic cannot establish cold/profile/cache performance or complete the broader development gates.
+
+
+### Fresh source-only evidence results and remaining work
+
+At candidate `c2b3f4105840721f8894688425d60e865eb192c4`, three fresh full-source comparisons used the same recorded, revalidated JD rubric and the reviewed QA-over-Java-without-skills pair. All three completed with source-validated evidence. The provider request payloads were identical; temperature remained zero. Each comparison used one evidence request, without profile preparation or upstream JD analysis. Total: three requests, 36,818 reported tokens, zero SDK failures.
+
+| Repeat | QA raw score | Java without skills raw score | Reviewed order | Evidence duration |
+|---|---:|---:|---|---:|
+| 1 | 41.99 | 44.89 | Reversed | 47.85 s |
+| 2 | 43.80 | 30.05 | Correct | 47.95 s |
+| 3 | 40.18 | 36.56 | Correct | 47.28 s |
+
+Strict agreement is **2/3 (66.7%)** on this single pair; no ties or unscored observations. This is not the full-development sample and does not satisfy its no-reversal rule. Source/schema completeness is now demonstrated for this targeted path, while ranking quality remains a failure.
+
+Fourteen supplied semantic requirement credits varied across identical requests: five for Java without skills (three responsibilities, two required qualifications) and nine for QA (three responsibilities, six required qualifications). Literal skill credits did not vary in this diagnostic. Java responsibility coverage moved from 30.77% to 7.69% to 15.38%; QA responsibility coverage moved from 38.46% to 46.15% to 30.77%. The server applies deterministic scoring to those accepted evidence decisions. A valid source quote alone does not establish reliable semantic relevance or consistent grading.
+
+**Next measured diagnosis:** review the unstable requirement/source pairings, distinguish direct action/object support from generic or transferable background, and tighten semantic evidence decisions without changing weights to fit expected winners. Then rerun the full two-job/five-version cold and frozen-rubric development comparisons plus the real cache lifecycle. Cold JD interpretation drift and profile-vs-source score/order agreement remain unverified on the latest candidate. No additional implementation is assumed from this report.
+
+Cumulative approved development usage is **99/100 provider requests**, leaving one. Further development measurements need a higher approved total cap; no further calls or holdout access are authorized yet. Token usage for the entire campaign remains unavailable because earlier failed requests did not report usage; the figures above are known totals for each identified diagnostic, not a complete campaign total.
+
+Task 9 remains in progress. Steps 4–7 are unchecked; Task 10 is pending. Holdout jobs/pairs remain separately unreviewed and unopened. Exact-size real performance inputs remain unavailable. The default-off feature flag is unchanged. Fresh backend regression remains 454 passed; only documentation changed after that verification. No PR, rollout or new GitHub push occurred.
