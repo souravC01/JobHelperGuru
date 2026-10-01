@@ -75,12 +75,12 @@ def test_profile_is_user_provider_scoped_and_corrupt_cache_rejected(tmp_path):
     storage.close()
 
 
-def test_profile_covers_late_activity_and_all_chunks():
+def test_profile_covers_late_skill_and_all_chunks():
     from backend.services.matching.profiles import extract_resume_profile
     from backend.services.matching.chunking import chunk_text
-    text="Projects:\n" + "Background.\n"*750 + "Cut outages by deploying redundant workers."
+    text="Projects:\n" + "Background.\n"*750 + "Built NebulaDB services."
     r=Resume(id="r", name="R", content=text)
-    engine=ProfileProvider([fact("Cut outages by deploying redundant workers.", "reliability", "activity")])
+    engine=ProfileProvider([fact("Built NebulaDB services.", "NebulaDB")])
     p=extract_resume_profile(r, engine=engine, deadline=time.monotonic()+30)
     assert p.status == "complete" and len(p.facts)==1
     assert [(s.start,s.end) for s in p.processed_source_chunks] == [(c.start,c.end) for c in chunk_text(text)]
@@ -110,7 +110,7 @@ def test_late_old_content_profile_not_current(tmp_path):
     storage.close()
 
 
-def test_profile_levels_and_source_dates_are_server_verified():
+def test_profile_skill_levels_are_server_verified():
     from backend.services.matching.profiles import extract_resume_profile
     text="Skills:\nPython\nProjects:\nLearning Rust.\nWork Experience:\nDeveloper | Jan 2022 - Present\nBuilt Python services."
     facts=[fact("Python", "Python"),fact("Learning Rust.", "Rust"),fact("Developer | Jan 2022 - Present\nBuilt Python services.", "developer", "employment"),fact("Built Python services.", "Python")]
@@ -119,9 +119,7 @@ def test_profile_levels_and_source_dates_are_server_verified():
     p=extract_resume_profile(Resume(id="r",name="R",content=text),engine=ProfileProvider(facts),deadline=time.monotonic()+30)
     assert p.status == "complete"
     assert p.facts[0].level == "listed" and p.facts[1].level == "learning"
-    employment=next(f for f in p.facts if f.kind=="employment")
-    assert str(employment.start)=="2022-01-01" and employment.end is None
-    assert p.facts[-1].employment_id==employment.id
+    assert all(f.kind=="skill" and f.employment_id is None for f in p.facts)
 
 
 def test_source_warnings_and_injection_block_complete_profile():
@@ -305,4 +303,36 @@ def test_cached_coursework_listing_is_revalidated_before_matching(tmp_path,monke
         monkeypatch.setattr(profiles,"verified_level",original)
         corrected=build(r,engine,storage)
         assert corrected.facts[0].level=="learning" and len(engine.calls)==2
+    finally:storage.close()
+
+
+def test_new_profile_ignores_unused_activity_claims_but_validates_skills():
+    from backend.services.matching.profiles import extract_resume_profile
+    r=Resume(id="r",name="R",content="Skills:\nPython")
+    items=[fact("Python","Python",level="listed"),fact("Invented accomplishments.","accomplishments","activity")]
+    engine=ProfileProvider([],lambda response:{**response,"items":items})
+    p=extract_resume_profile(r,engine=engine,deadline=time.monotonic()+30)
+    assert p.status=="complete" and len(p.facts)==1
+    assert p.facts[0].kind=="skill" and p.facts[0].canonical_key=="python"
+    items[0]["canonical_key"]="Invented technology"
+    assert extract_resume_profile(r,engine=engine,deadline=time.monotonic()+30).status=="failed"
+
+
+def test_existing_rich_profile_remains_reusable_without_reextraction(tmp_path):
+    from backend.services.matching import profiles
+    from backend.services.matching.chunking import TextChunk
+    from backend.services.matching.models import ResumeProfile
+    storage=StorageService(str(tmp_path/"legacy-rich.db"),force_sqlite=True)
+    try:
+        text="Work Experience:\nDeveloper | Jan 2022 - Present\nBuilt Python services."
+        r=storage.add_resume("R",text,user_id="u");engine=ProfileProvider([fact("Built Python services.","Python")])
+        base=profiles.extract_resume_profile(r,engine=engine,deadline=time.monotonic()+30)
+        employment=profiles._fact(profiles.FactProposal(**fact(text.split("\n",1)[1],"developer","employment")),TextChunk(0,len(text),text),text)
+        base.facts[0].employment_id=employment.id
+        legacy=ResumeProfile.model_validate({**base.model_dump(),"facts":[employment,*base.facts]})
+        legacy.profile_fingerprint=profiles._profile_fingerprint(legacy)
+        storage.save_resume_profile(user_id="u",resume_id=r.id,source_hash=legacy.source_hash,version_key=legacy.version_key,payload_json=legacy.model_dump_json())
+        reused=build(r,engine,storage)
+        assert reused.model_dump()==legacy.model_dump() and len(engine.calls)==1
+        assert reused.extractor_version=="resume-profile-v5"
     finally:storage.close()

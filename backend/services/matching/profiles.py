@@ -96,15 +96,10 @@ def extract_resume_profile(resume: Resume, *, engine: Any, deadline: float) -> R
             def validate(response):
                 result=ProfileChunk.model_validate(response)
                 if result.chunk_index!=index or not result.complete: raise ValueError("Incomplete source analysis")
-                return [_fact(proposal,chunk,resume.content) for proposal in result.items]
+                return [_fact(proposal,chunk,resume.content) for proposal in result.items if proposal.kind=="skill"]
             for f in _validated_chunk(payload,engine=engine,deadline=deadline,validate=validate):
                 unique.setdefault(f.id,f)
         facts=sorted(unique.values(),key=lambda f:(f.source_start,f.source_end,f.id))
-        employment=[f for f in facts if f.kind=="employment"]
-        for f in facts:
-            if f.kind=="employment": continue
-            linked=[e for e in employment if e.source_start<=f.source_start<f.source_end<=e.source_end]
-            if len(linked)==1: f.employment_id=linked[0].id
         profile=ResumeProfile.model_construct(status=EvaluationStatus.COMPLETE, facts=facts,
                     processed_source_chunks=[SourceSpan(start=c.start,end=c.end) for c in chunks],warnings=[],**metadata)
         profile.profile_fingerprint=_profile_fingerprint(profile)
