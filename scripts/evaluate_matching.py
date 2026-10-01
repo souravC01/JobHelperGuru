@@ -468,11 +468,17 @@ def performance_gate(evidence):
     counts=edit['metrics'].get('profile_source_call_counts',{})
     edited_calls=sum(counts.values())
     edited_source_only=bool(expected) and set(counts)==set(expected) and all(1<=n<=2 for n in counts.values())
+    def within_cold_target(run):
+        if run.get('analysis_seconds') is not None:
+            return (run.get('analysis_succeeded') is True
+                    and isinstance(run.get('full_journey_seconds'),(int,float))
+                    and run['full_journey_seconds']<=120)
+        return run['elapsed_seconds']<=120
     return bool(evidence.get('execution')=='live'
         and type(evidence.get('job_chars')) is int and 0<evidence['job_chars']<=100000
         and len(evidence.get('resume_chars',[]))==5
         and all(type(n) is int and 0<n<=100000 for n in evidence['resume_chars'])
-        and len(cold)==3 and all(r['comparison_complete'] and r['elapsed_seconds']<=120 and r['metrics']['provider_calls']>0 for r in cold)
+        and len(cold)==3 and all(r['comparison_complete'] and within_cold_target(r) and r['metrics']['provider_calls']>0 for r in cold)
         and len(main)==3 and all(r['comparison_complete'] and r['metrics']['provider_calls']>0 for r in main)
         and all(r['comparison_complete'] for r in phases.values())
         and phases['prepared_first_job']['metrics']['stages'].get('resume_profile',{}).get('calls',0)==0

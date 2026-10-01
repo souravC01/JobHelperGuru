@@ -231,6 +231,15 @@ def test_perf_gate_accepts_only_three_complete_cold_runs_and_required_reuse():
             row['expected_profile_source_hashes']=['edited']
             row['metrics']['profile_source_call_counts']={'edited':1}
     assert m.performance_gate(evidence)
+    for row in evidence['cold']:
+        row.update(analysis_seconds=100,analysis_succeeded=True,full_journey_seconds=200)
+    assert not m.performance_gate(evidence)
+    for row in evidence['cold']:
+        row.update(analysis_seconds=10,full_journey_seconds=110)
+    assert m.performance_gate(evidence)
+    evidence['cold'][0]['analysis_succeeded']=False
+    assert not m.performance_gate(evidence)
+    evidence['cold'][0]['analysis_succeeded']=True
     for dimensions in ([0,3842,4000,4200,4502], [3215]*4, [100001]*5):
         assert not m.performance_gate({**evidence,'resume_chars':dimensions})
     evidence['cold'][1]['comparison_complete']=False
