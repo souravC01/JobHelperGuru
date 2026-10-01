@@ -10,9 +10,9 @@
 
 **Active specification:** [Cached Skill Matching — Task 9 Revision](2026-10-01-cached-skill-matching.md). Read that revision before implementing any further Task 9 changes. It defines the score, reusable components, removed paths, exact interfaces/tests and revised gates. Its requirements take precedence over historical sections below.
 
-**Execution status:** Tasks 1–8 were implemented under the previous overall-fit design. Task 9 is replanned as Tasks 9.1–9.5 in the linked revision; implementation of the pivot is pending. Task 10 remains pending. Preserve the existing native, task-by-task execution method and `feat/ai-overall-job-fit` branch. Latest existing-code verification is 460 backend tests; it does not establish the new design. Development usage remains 173/200, with 27 requests remaining. No calls were made for this planning update; holdout and feature activation remain unauthorized.
+**Execution status:** Tasks 9.1–9.4 are implemented and verified under the cached-skill pivot. Task 9.5's benchmark implementation is verified; reviewed real extraction quality and full cold/holdout measurements remain pending. Task 9 overall stays in progress; Task 10 remains pending. Existing branch and default-off feature are preserved. Current request usage is 173/200 before the new bounded smoke.
 
-**Historical records:** Earlier completed steps and measurements are retained for provenance, not as instructions to restore semantic overall-fit scoring. Existing code still implements that older path until the revised tasks are executed.
+**Historical records:** Earlier completed steps and measurements are retained for provenance, not as instructions to restore semantic overall-fit scoring. The revised tasks replace that older path.
 
 **Plan persistence:** `docs/superpowers/` is ignored. The original plan is already tracked; explicitly force-add only the new `2026-10-01-cached-skill-matching.md` revision when committing it. Do not change the ignore rule or stage private planning directories.
 
@@ -29,7 +29,7 @@
 | 6 — rubric and assessment caches | Complete | 40 cache tests and 368 backend tests passed; warm zero-call comparisons, mixed hits, concurrent rubric freezing and migrations checked |
 | 7 — authenticated API | Complete | 59 focused, 411 backend and 71 frontend tests passed; production build passed |
 | 8 — truthful UI and request lifecycle | Complete | 89 frontend and 43 authenticated API tests passed; production build passed (1,593 modules); no live provider calls |
-| 9 — cached skill matching pivot and validation | Replanned; implementation pending | Active Tasks 9.1–9.5; 173/200 requests used; former evidence/semantic experiments superseded |
+| 9 — cached skill matching pivot and validation | In progress; pivot implemented | Tasks 9.1–9.4 verified; 9.5 reviewed/live gates pending; former semantic experiments superseded |
 | 10 — final regression and handoff | Pending | |
 
 Task 3 accepts validated proposals with stable source/version-based requirement IDs; persisted frozen rubrics belong to Task 6. Its provider schema requires exact chunk acknowledgment and explicit completion. Unknown technologies survive without a taxonomy gate. Server validation rejects ambiguous quotes, split/partial literal OR groups, unsupported tenure minima, non-equivalent category conflicts and explicit document instructions. Semantic interpretation remains the AI's responsibility and is not yet validated by live quality measurements. Over-limit rubrics remain needs_review without trimming.
@@ -390,10 +390,10 @@ expect(screen.getByText('Overall job fit')).toBeInTheDocument();
 **Active plan:** [2026-10-01-cached-skill-matching.md](2026-10-01-cached-skill-matching.md). This replaces the former Task 9 execution steps and their AI-evidence/full-source gates.
 
 - [x] Record the owner-approved scope: AI extracts; backend compares cached skills and scores.
-- [ ] **9.1:** Narrow frozen JD extraction to required/preferred skills.
-- [ ] **9.2:** Implement pure cached-skill matching and deterministic Skill fit arithmetic.
-- [ ] **9.3:** Connect local matching to existing caches and delete retired AI comparison paths.
-- [ ] **9.4:** Update API/UI scope, copy and matched/missing skill summaries.
+- [x] **9.1:** Narrow frozen JD extraction to required/preferred skills.
+- [x] **9.2:** Implement pure cached-skill matching and deterministic Skill fit arithmetic.
+- [x] **9.3:** Connect local matching to existing caches and delete retired AI comparison paths.
+- [x] **9.4:** Update API/UI scope, copy and matched/missing skill summaries.
 - [ ] **9.5:** Verify reviewed extraction accuracy, deterministic scores, zero-call cached comparisons, lifecycle and honest performance gates.
 
 Keep existing profile/source validation, cache isolation, parser fixes, aliases and UI race safeguards. The passage-reference and atomic-semantic experiments are cancelled. Historical measurements remain in `docs/ai-matching-evaluation.md`; they do not pass the revised gates. All implementation checkboxes remain open until their actual verification passes.

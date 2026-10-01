@@ -153,6 +153,19 @@ def validate_cases(cases):
         second = case.get('second_job_text')
         if second is not None and (not isinstance(second,str) or not second.strip() or len(second)>100000 or second==case['job_text']):
             raise ValueError('Second job must be a different complete description')
+        gold = case.get('expected_requirements')
+        skills = case.get('expected_resume_skills')
+        if gold is not None or skills is not None:
+            if not isinstance(gold,list) or not gold or not isinstance(skills,dict) or set(skills)!=set(ids):
+                raise ValueError('Reviewed extraction sets must cover the JD and every resume')
+            if any(not isinstance(r,dict) or r.get('category') not in {'required_skills','preferred_qualifications'}
+                   or not isinstance(r.get('alternatives'),list) or not r['alternatives']
+                   or any(not isinstance(k,str) or not k.strip() for k in r['alternatives']) for r in gold):
+                raise ValueError('Reviewed JD groups need required/preferred categories and skill alternatives')
+            if any(not isinstance(facts,list) or any(not isinstance(f,dict) or not isinstance(f.get('canonical_key'),str)
+                   or not f['canonical_key'].strip() or f.get('level') not in {'listed','demonstrated','learning','contradicted'}
+                   for f in facts) for facts in skills.values()):
+                raise ValueError('Reviewed resume skills need explicit names and presence levels')
     return cases
 
 
@@ -162,6 +175,8 @@ def verify_review(cases, record, fixture_hash):
         date.fromisoformat(record.get('reviewed_at','')[:10])
         return bool(record.get('reviewed_by') and record.get('fixture_sha256')==fixture_hash
                     and record.get('approved_for_provider_use') is True
+                    and record.get('score_scope')=='skill_fit' and record.get('skills_reviewed') is True
+                    and all(c.get('expected_requirements') and isinstance(c.get('expected_resume_skills'),dict) for c in cases)
                     and len(record.get('case_ids',[]))==len(ids) and set(record['case_ids'])==set(ids))
     except (TypeError,ValueError,KeyError):
         return False
@@ -196,7 +211,7 @@ def baseline_pairs(cases, runs):
 
 
 def _projection(evaluation, content):
-    fields = ('resume_id','status','match_score','raw_score','rank','is_top_match','job_fingerprint',
+    fields = ('resume_id','score_scope','status','match_score','raw_score','rank','is_top_match','job_fingerprint',
               'source_fingerprint','profile_fingerprint','rubric_fingerprint','evaluation_id','scorer_version',
               'assessment_version','category_scores','skill_coverage_score','reason_codes')
     result = {k:evaluation.get(k) for k in fields if k in evaluation}
@@ -219,7 +234,7 @@ def _projection(evaluation, content):
 
 def _safe_evaluation(evaluation,content):
     if 'requirement_results' in evaluation: return _projection(evaluation,content)
-    fields=('resume_id','status','match_score','raw_score','rank','is_top_match','job_fingerprint','source_fingerprint','profile_fingerprint','rubric_fingerprint','evaluation_id','scorer_version','assessment_version','category_scores','skill_coverage_score','reason_codes','quote_count','quote_validation_failures','evidence_levels','unsupported_score')
+    fields=('resume_id','score_scope','status','match_score','raw_score','rank','is_top_match','job_fingerprint','source_fingerprint','profile_fingerprint','rubric_fingerprint','evaluation_id','scorer_version','assessment_version','category_scores','skill_coverage_score','reason_codes','quote_count','quote_validation_failures','evidence_levels','unsupported_score')
     return {k:evaluation[k] for k in fields if k in evaluation}
 
 
@@ -229,7 +244,7 @@ def build_report(cases, runs, *, execution='synthetic', review_verified=False, s
     runs=[{**run, 'evaluations':[_safe_evaluation(e,contents[run['case_id']].get(e['resume_id'],'')) for e in run.get('evaluations',[])]} for run in runs]
     strict = dict(total=0,correct=0,tied=0,reversed=0,unscored=0)
     reviewed_ties = dict(total=0,correct=0,unscored=0)
-    reversed_pairs=set(); changed_pairs=set(); unscored_pairs=set(); score_drift=set()
+    reversed_pairs=set(); changed_pairs=set(); unscored_pairs=set(); score_drift=set(); rank_drift=set()
     rubric_drift = dict(cold_cases=0,fixed_cases=0)
     repeats_complete = True
     for c in cases:
@@ -257,6 +272,8 @@ def build_report(cases, runs, *, execution='synthetic', review_verified=False, s
         for id in (r['id'] for r in c['resumes']):
             values={str(_score(e)) for r in fixed for e in r['evaluations'] if e['resume_id']==id}
             if len(values)>1: score_drift.add((c['id'],id))
+            ranks={(e.get('rank'),e.get('is_top_match')) for r in fixed for e in r['evaluations'] if e['resume_id']==id}
+            if len(ranks)>1: rank_drift.add((c['id'],id))
     strict['agreement_pct'] = strict['correct']*100/strict['total'] if strict['total'] else 0
     evaluations=[e for r in runs for e in r.get('evaluations',[])]
     reasons = Counter(reason for e in evaluations for reason in e.get('reason_codes',[]))
@@ -267,15 +284,19 @@ def build_report(cases, runs, *, execution='synthetic', review_verified=False, s
     same_person=all(len({r.get('owner_id') for r in c['resumes']})==1 and all(r.get('owner_id') for r in c['resumes']) for c in cases)
     quotes=sum(e.get('quote_count',0) for e in evaluations)
     quote_errors=sum(e.get('quote_validation_failures',0) for e in evaluations)
-    quality_complete = all(r.get('comparison_complete') for r in runs if r['phase'] in {'fixed_rubric','cold'}) and bool(runs)
+    quality_complete = all(r.get('comparison_complete') and {e['resume_id'] for e in r['evaluations']}==set(contents[r['case_id']]) and all(_score(e) is not None for e in r['evaluations']) for r in runs if r['phase'] in {'fixed_rubric','cold'}) and bool(runs)
     cold_pairs=baseline_pairs(cases,[r for r in runs if r['phase']=='cold'])
     cold_complete=all(len([r for r in runs if r['case_id']==c['id'] and r['phase']=='cold'])==3 for c in cases)
     development_checks=dict(three_cold_runs=cold_complete, cold_preferences=cold_pairs['correct']==cold_pairs['total'], reviewed_ties=reviewed_ties['correct']==reviewed_ties['total'], live_provider=execution=='live' and calls>0, reviewed_labels=review_verified,
         same_person=same_person, real_sources=all(c['source_type']=='anonymized_real' for c in cases),
         three_fixed_runs=repeats_complete, complete_evaluations=quality_complete,
         no_preference_reversal=strict['reversed']==0 and strict['unscored']==0 and strict['tied']==0,
-        stable_evidence_order=not changed_pairs and not unscored_pairs,
-        frozen_rubric=rubric_drift['fixed_cases']==0, quote_provenance=quote_errors==0 and quotes>0,
+        stable_skill_order=not changed_pairs and not unscored_pairs,
+        identical_local_scores_and_ranks=repeats_complete and not score_drift and not rank_drift,
+        local_comparisons=all(r['metrics'].get('stages',{}).get('evidence_batch',{}).get('calls',0)==0 and (r['phase'] not in {'fixed_rubric','warm','rename','fresh','scorer_only'} or r['metrics']['provider_calls']==0) for r in runs) and bool(runs),
+        skill_fit_scope=bool(evaluations) and all(e.get('score_scope')=='skill_fit' for e in evaluations),
+        reviewed_skill_extractions=review_verified and cold_complete and all(c.get('expected_requirements') and c.get('expected_resume_skills') is not None for c in cases) and all(r.get('extraction_matches') is True for r in runs if r['phase']=='cold'),
+        frozen_rubric=rubric_drift['fixed_cases']==0, quote_provenance=quote_errors==0,
         supported_scores=all(not e.get('unsupported_score',True) for e in evaluations),
         request_budget=all(not r['metrics'].get('request_limit_reached',False) for r in runs))
     dev_pass=all(development_checks.values())
@@ -292,18 +313,18 @@ def build_report(cases, runs, *, execution='synthetic', review_verified=False, s
     safe_runs=[]
     contents={c['id']:{r['id']:r['content'] for r in c['resumes']} for c in cases}
     for run in runs:
-        fields=('case_id','phase','repeat','elapsed_seconds','comparison_complete','job_fingerprint','metrics','analysis_seconds','analysis_metrics','analysis_succeeded','full_journey_seconds','same_scores_and_ids','score_changes','ranking_changes','completeness_regression')
+        fields=('case_id','phase','repeat','elapsed_seconds','comparison_complete','job_fingerprint','metrics','analysis_seconds','analysis_metrics','analysis_succeeded','full_journey_seconds','same_scores_and_ids','score_changes','ranking_changes','completeness_regression','extraction_matches')
         safe={k:run[k] for k in fields if k in run}
         safe['evaluations']=[_safe_evaluation(e,contents[run['case_id']].get(e['resume_id'],'')) for e in run.get('evaluations',[])]
         safe_runs.append(safe)
-    return dict(execution=execution, provider=provider, strict_pairs=strict, cold_strict_pairs=cold_pairs, reviewed_ties=reviewed_ties,
+    return dict(execution=execution, score_scope='skill_fit', provider=provider, strict_pairs=strict, cold_strict_pairs=cold_pairs, reviewed_ties=reviewed_ties,
         complete_evaluations=sum(e.get('status')=='complete' for e in evaluations),
         incomplete_evaluations=sum(e.get('status')!='complete' for e in evaluations), reason_codes=dict(reasons),
         quote_validation_failures=quote_errors, validated_quotes=quotes, provider_calls=calls, token_usage=tokens, usage_available=available,
         suite_elapsed_seconds=suite_elapsed_seconds, runs=safe_runs,
-        stability=dict(reversed_pairs=len(reversed_pairs),changed_pairs=len(changed_pairs),unscored_pairs=len(unscored_pairs),score_drift_resumes=len(score_drift)),
+        stability=dict(reversed_pairs=len(reversed_pairs),changed_pairs=len(changed_pairs),unscored_pairs=len(unscored_pairs),score_drift_resumes=len(score_drift),rank_drift_resumes=len(rank_drift)),
         rubric_drift=rubric_drift, holdout_jobs=holdout_jobs, holdout_strict_labels=holdout_pairs,
-        development_gate_passed=dev_pass, release_gate_passed=False,
+        development_gate_passed=dev_pass, development_gates=development_checks, release_gate_passed=False,
         gates=release_checks, failed_gates=[k for k,v in release_checks.items() if not v])
 
 
@@ -356,6 +377,12 @@ def run_lifecycle(case, *, engine, as_of):
             first=measure('prepared_first_job'); runs.append(first)
             if case.get('second_job_text'): runs.append(measure('second_job',case['second_job_text']))
             warm=measure('warm'); warm['same_scores_and_ids']=_same(first,warm); runs.append(warm)
+            id=resumes[0].id
+            storage.update_resume(id,name='Renamed version',user_id='benchmark')
+            resumes=[storage.get_resume(r.id,user_id='benchmark') for r in resumes]
+            renamed=measure('rename'); renamed['same_scores_and_ids']=_same(first,renamed); runs.append(renamed)
+            fresh=_measure(case,'fresh',0,engine,lambda:pipeline.evaluate_resumes(case['job_text'],resumes,user_id='benchmark',as_of=as_of,engine=engine,storage=storage,fresh=True),aliases,{r.id:r.content for r in resumes})
+            fresh['same_scores_and_ids']=_same(first,fresh); runs.append(fresh)
             edit=case.get('edited_resume')
             if edit:
                 id=next(id for id,alias in aliases.items() if alias==edit['id'])
@@ -372,6 +399,23 @@ def run_lifecycle(case, *, engine, as_of):
     return runs
 
 
+def _extractions_match(case, batch, resumes, storage, engine):
+    """Compare complete extracted artifacts to hash-bound, human-reviewed sets."""
+    from backend.services.matching.profiles import get_or_build_resume_profile
+    from backend.services.matching.normalization import canonicalize_skill
+    if not batch.comparison_complete or not case.get('expected_requirements') or case.get('expected_resume_skills') is None:
+        return False
+    groups=lambda rows: sorted((r['category'],tuple(sorted(canonicalize_skill(k) for k in (r['alternatives'] or [r['canonical_key']])))) for r in rows)
+    actual=[r.requirement.model_dump(mode='json') for r in batch.evaluations[0].requirement_results]
+    if groups(actual)!=groups(case['expected_requirements']): return False
+    skills=lambda facts: {(canonicalize_skill(f['canonical_key']),f['level']) for f in facts}
+    for resume,spec in zip(resumes,case['resumes']):
+        profile=get_or_build_resume_profile(resume,user_id='benchmark',engine=engine,storage=storage,deadline=time.monotonic()+300)
+        actual=[f.model_dump(mode='json') for f in profile.facts if f.kind=='skill']
+        if profile.status!='complete' or skills(actual)!=skills(case['expected_resume_skills'][spec['id']]): return False
+    return True
+
+
 def run_quality(cases, *, engine, as_of):
     from backend.storage import StorageService
     from backend.services.matching.pipeline import evaluate_resumes
@@ -383,8 +427,12 @@ def run_quality(cases, *, engine, as_of):
                 storage=StorageService(str(Path(folder)/'isolated.db'),force_sqlite=True)
                 try:
                     resumes,aliases=_stored_cases(storage,case); sources={r.id:r.content for r in resumes}
+                    extraction_matches=False
                     def evaluate(fresh=False):
-                        return evaluate_resumes(case['job_text'],resumes,user_id='benchmark',as_of=as_of,engine=engine,storage=storage,fresh=fresh)
+                        nonlocal extraction_matches
+                        batch=evaluate_resumes(case['job_text'],resumes,user_id='benchmark',as_of=as_of,engine=engine,storage=storage,fresh=fresh)
+                        if not fresh: extraction_matches=_extractions_match(case,batch,resumes,storage,engine)
+                        return batch
                     analysis_seconds=None; analysis_metrics=None; analysis_succeeded=None
                     if hasattr(engine.engine,'analyze_job'):
                         mark=engine.mark(); start=time.monotonic()
@@ -393,13 +441,12 @@ def run_quality(cases, *, engine, as_of):
                         except Exception: analysis_succeeded=False
                         analysis_seconds=time.monotonic()-start; analysis_metrics=engine.since(mark)
                     cold=_measure(case,'cold',repeat,engine,evaluate,aliases,sources)
-                    cold.update(analysis_seconds=analysis_seconds,analysis_metrics=analysis_metrics,analysis_succeeded=analysis_succeeded,
+                    cold.update(extraction_matches=extraction_matches,analysis_seconds=analysis_seconds,analysis_metrics=analysis_metrics,analysis_succeeded=analysis_succeeded,
                                 full_journey_seconds=cold['elapsed_seconds']+analysis_seconds if analysis_seconds is not None else None)
                     runs.append(cold)
                     if repeat==0:
                         # Local repeats require valid extracted artifacts; failed preparation stays a cold-run failure.
-                        for index in range(3) if all(e.get('profile_fingerprint') for e in cold['evaluations']) else []:
-                            if engine.exhausted: break
+                        for index in range(3) if cold['comparison_complete'] else []:
                             runs.append(_measure(case,'fixed_rubric',index,engine,lambda:evaluate(True),aliases,sources))
                 finally: storage.close()
     return runs
@@ -409,7 +456,7 @@ def performance_gate(evidence):
     cold=evidence.get('cold',[])
     main=evidence.get('main_cold',[])
     phases={r['phase']:r for r in evidence.get('lifecycle',[])}
-    required={'profile_preparation','prepared_first_job','second_job','warm','edited_resume','scorer_only'}
+    required={'profile_preparation','prepared_first_job','second_job','warm','rename','fresh','edited_resume','scorer_only'}
     if not required<=set(phases): return False
     return bool(evidence.get('execution')=='live'
         and type(evidence.get('job_chars')) is int and 0<evidence['job_chars']<=100000
@@ -420,8 +467,11 @@ def performance_gate(evidence):
         and all(r['comparison_complete'] for r in phases.values())
         and phases['prepared_first_job']['metrics']['stages'].get('resume_profile',{}).get('calls',0)==0
         and phases['second_job']['metrics']['stages'].get('resume_profile',{}).get('calls',0)==0
+        and all(phases[p]['metrics']['stages'].get('requirements',{}).get('calls',0)>0 and phases[p]['metrics']['provider_calls']==phases[p]['metrics']['stages']['requirements']['calls'] for p in ('prepared_first_job','second_job'))
         and phases['edited_resume']['metrics']['stages'].get('resume_profile',{}).get('calls',0)==1
-        and all(phases[p]['metrics']['provider_calls']==0 and phases[p].get('same_scores_and_ids') for p in ('warm','scorer_only')))
+        and phases['edited_resume']['metrics']['provider_calls']==1
+        and all(r['metrics'].get('stages',{}).get('evidence_batch',{}).get('calls',0)==0 for r in cold+list(phases.values()))
+        and all(phases[p]['metrics']['provider_calls']==0 and phases[p].get('same_scores_and_ids') for p in ('warm','rename','fresh','scorer_only')))
 
 
 def load_live_inputs(fixture, review_path, *, phase, development_report, provider):
@@ -568,8 +618,6 @@ def main(argv=None):
         report.update(provider_calls=totals['provider_calls'],token_usage=totals['token_usage'],usage_available=totals['usage_available'])
         baseline_tokens=baseline['metrics']['token_usage']
         report['total_token_usage']={k:baseline_tokens[k]+totals['token_usage'][k] for k in TOKENS} if baseline_tokens is not None and totals['token_usage'] is not None else None
-        compared=[r for r in quality+lifecycle if r['phase'] not in {'full_source','profile_preparation'}]
-        report['profile_fallback']=dict(resume_chunks=sum(r['metrics']['full_source_resume_chunks'] for r in compared),resume_comparisons=sum(len(r['evaluations']) for r in compared),resume_fallbacks=sum(len(r['metrics']['full_source_resume_ids']) for r in compared))
         report['gates']['live_performance_and_cache']=performance_gate(performance or {})
         report['gates']['development_passed_before_holdout']=args.phase=='holdout'
         report['release_gate_passed']=all(report['gates'].values())

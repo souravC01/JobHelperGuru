@@ -8,7 +8,7 @@
 
 **Tech Stack:** Existing Python/FastAPI/Pydantic/Decimal, SQLite/PostgreSQL, guarded AI client, React/Vite/Vitest and pytest. No new dependency, service or database table.
 
-**Spec:** The owner's 2026-10-01 instruction approves this pivot and adjustment of Task 9. This document supersedes earlier overall-fit scope, semantic-assessment gates and the proposed passage-reference experiment. Product implementation is pending; this update changes planning documents only.
+**Spec:** The owner's 2026-10-01 instruction approves this pivot and adjustment of Task 9. This document supersedes earlier overall-fit scope, semantic-assessment gates and the proposed passage-reference experiment. Tasks 9.1–9.4 are implemented; Task 9.5 implementation checks pass, with reviewed/live gates still pending.
 
 ## Global constraints
 
@@ -111,8 +111,8 @@ Example: required Java and Python; preferred SQL. A resume containing Java and S
 
 **Interfaces:** Adapt existing `run_quality`, `run_lifecycle` and `performance_gate`. Record `score_scope="skill_fit"`, candidate/provider/extractor/matcher/scorer identities, document hashes/lengths, exact scores, extraction calls/tokens, local comparison latency, completeness and review provenance. Missing token usage stays unavailable. Never label historical overall-fit measurements as skill-fit results.
 
-- [ ] Add report checks proving a comparison with cached JD/profiles makes zero requests, an evidence-task call fails the gate, fixed extracted inputs produce identical per-resume scores/ranks in three repeats, and unreviewed extraction labels cannot pass the quality gate. Keep strict ties/unscored observations in the denominator, privacy and request-cap accounting.
-- [ ] Run `.venv/Scripts/python.exe -B -m pytest tests/test_match_benchmark.py -q`, observe new behavior failures, then adapt the runner. Replace repeated AI-evidence/full-source comparison gates with reviewed extraction accuracy and deterministic local comparisons. Keep cold extraction drift separate from local scoring stability.
+- [x] Add report checks proving a comparison with cached JD/profiles makes zero requests, an evidence-task call fails the gate, fixed extracted inputs produce identical per-resume scores/ranks in three repeats, and unreviewed extraction labels cannot pass the quality gate. Keep strict ties/unscored observations in the denominator, privacy and request-cap accounting.
+- [x] Run `.venv/Scripts/python.exe -B -m pytest tests/test_match_benchmark.py -q`, observe new behavior failures, then adapt the runner. Replace repeated AI-evidence/full-source comparison gates with reviewed extraction accuracy and deterministic local comparisons. Keep cold extraction drift separate from local scoring stability.
 - [ ] Prepare a private review sheet of required/preferred JD skill groups and cached resume skills for the already authorized two JDs/five resumes. Check every proposed skill against the real source and expose omissions. Obtain human review before treating these sets as ground truth. Keep the four earlier overall-fit preferences as historical evidence; they are not automatically skill-fit labels and must not determine new weights.
 - [ ] Run the local reviewed-fixture comparisons first: exact expected arithmetic, 100% matching/alias/grouping checks, complete comparisons and identical three-repeat scores/ranks. A fresh live extraction must match the reviewed skill sets/categories/groups, with no unsupported additions or omissions, before it can count as passing on these small development fixtures.
 - [ ] Run an initial live extraction smoke on an authorized JD with the prepared vault, capped at two of the remaining 27 requests. Stop and diagnose if extraction fails. Count every SDK request, including failures/corrections, against the existing shared 200-request cap; the two interrupted-call reservations remain charged. Never consume the holdout to debug development.
@@ -131,4 +131,4 @@ Example: required Java and Python; preferred SQL. A resume containing Java and S
 - [x] Every Review Focus item maps to a named test step; old preferences/results are explicitly separated from the new score's validation.
 - [ ] Tasks 9.1–9.5 implemented and verified. Nothing in this planning update establishes passing product behavior.
 
-Next implementation unit: **Task 9.1**. Continue with the preserved native, task-by-task execution method when execution resumes.
+Next validation unit: **Task 9.5**. Complete the private skill-set review and bounded live checks; keep remaining gates open until measured.

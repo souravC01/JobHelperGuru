@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 import pytest
-from backend.services.matching.models import Evidence, EvidenceExtraction, Requirement, RelevantInterval
+from backend.services.matching.models import Evidence, Requirement
 
 AS_OF=date(2026,9,30)
 
@@ -61,8 +61,6 @@ def test_incomplete_or_invalid_inputs_cannot_score(requirements,evidence):
 
 def test_positive_contradicted_conflicts_are_unresolved_at_validation():
     evidence=[ev(),ev(level="contradicted",start=20)]
-    with pytest.raises(ValueError):
-        EvidenceExtraction(status="complete",items=evidence,assessed_requirement_ids=["q"],source_hash="source",extractor_version="test")
     with pytest.raises(ValueError,match="[Cc]onflict"):
         score([req()],evidence)
 

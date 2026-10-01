@@ -37,11 +37,9 @@ def test_contract_kinds_reasons_and_removed_role_fields():
 
 
 def test_positive_evidence_requires_provenance_and_coverage():
-    from backend.services.matching.models import Evidence, EvidenceExtraction
+    from backend.services.matching.models import Evidence
     with pytest.raises(ValidationError):
         Evidence(requirement_id="q", level="demonstrated")
-    with pytest.raises(ValidationError):
-        EvidenceExtraction(status="complete", source_hash="s", extractor_version="v", assessed_requirement_ids=["q"], items=[])
 
 
 def test_batch_cannot_claim_complete_or_mix_rubrics():

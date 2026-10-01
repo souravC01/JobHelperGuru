@@ -184,27 +184,6 @@ class RequirementExtraction(ExtractionResult):
         return self
 
 
-class EvidenceExtraction(ExtractionResult):
-    items: list[Evidence] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def validate_evidence(self) -> EvidenceExtraction:
-        if {item.requirement_id for item in self.items} != set(
-            self.assessed_requirement_ids
-        ):
-            raise ValueError("assessed IDs must have explicit evidence outcomes")
-        for id in self.assessed_requirement_ids:
-            if has_evidence_conflict({item.level for item in self.items if item.requirement_id == id}):
-                raise ValueError("Conflicting evidence remains unresolved")
-        seen = {}
-        for item in self.items:
-            key = (item.requirement_id, item.source_start, item.source_end)
-            if key in seen:
-                raise ValueError("duplicate evidence provenance")
-            seen[key] = item
-        return self
-
-
 class EligibilityResult(MatchContract):
     criterion: NonEmptyString
     status: EligibilityStatus

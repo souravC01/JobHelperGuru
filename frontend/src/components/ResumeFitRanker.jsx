@@ -188,7 +188,7 @@ export default function ResumeFitRanker({
                         const skills = (evaluation.requirement_results || []).filter(result =>
                           result.requirement.kind === 'skill' && result.requirement.category === category &&
                           result.evidence.some(item => ['listed', 'demonstrated'].includes(item.level)) === matched
-                        ).map(result => result.requirement.alternatives.join(' or '));
+                        ).map(result => (result.requirement.alternatives.length ? result.requirement.alternatives : [result.requirement.canonical_key]).join(' or '));
                         return <p key={`${category}-${matched}`}>{matched ? 'Matched' : 'Missing'} {label.toLowerCase()}: {skills.join(', ') || 'None'}</p>;
                       }))}
                     </> : <p>{evaluation.status === 'needs_review' ? 'Needs review' : 'Evaluation failed'}</p>}

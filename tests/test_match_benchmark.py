@@ -136,6 +136,8 @@ def test_case_validation_rejects_unknown_pairs_and_invalid_documents():
 def test_human_review_is_bound_to_exact_fixture_and_provider_permission():
     m=benchmark(); c=case(); c['source_type']='anonymized_real'
     review=dict(reviewed_by='Reviewer',reviewed_at='2026-09-30',fixture_sha256='hash',case_ids=['one'],approved_for_provider_use=True)
+    c.update(expected_requirements=[dict(category='required_skills',alternatives=['python'])],expected_resume_skills={'a':[],'b':[]})
+    review.update(score_scope='skill_fit',skills_reviewed=True)
     assert m.verify_review([c],review,'hash')
     assert not m.verify_review([c],review,'edited-hash')
     review['approved_for_provider_use']=False
@@ -197,8 +199,9 @@ def test_live_cli_refuses_ambient_keys_without_explicit_live_selection(tmp_path)
 def test_fixture_review_covers_secondary_jobs_and_edits_in_the_same_hashed_file(tmp_path):
     m=benchmark(); c=case(); c['source_type']='anonymized_real'; c['second_job_text']='Different approved JD'
     c['edited_resume']=dict(id='a',content='New allowed text')
+    c.update(expected_requirements=[dict(category='required_skills',alternatives=['python'])],expected_resume_skills={'a':[],'b':[]})
     fixture=tmp_path/'dev.json'; fixture.write_text(json.dumps([c]),encoding='utf-8')
-    review=tmp_path/'review.json'; review.write_text(json.dumps(dict(reviewed_by='Reviewer',reviewed_at='2026-09-30',fixture_sha256=m.source_hash(fixture.read_text()),case_ids=['one'],approved_for_provider_use=True)),encoding='utf-8')
+    review=tmp_path/'review.json'; review.write_text(json.dumps(dict(reviewed_by='Reviewer',reviewed_at='2026-09-30',fixture_sha256=m.source_hash(fixture.read_text()),case_ids=['one'],approved_for_provider_use=True,score_scope='skill_fit',skills_reviewed=True)),encoding='utf-8')
     loaded,digest=m.load_live_inputs(fixture,review,phase='dev',development_report=None,provider={'host':'provider.example','model':'test'})
     assert loaded==[c] and digest==m.source_hash(fixture.read_text())
 
@@ -221,7 +224,9 @@ def test_perf_gate_accepts_only_three_complete_cold_runs_and_required_reuse():
         cold=[dict(comparison_complete=True,elapsed_seconds=100,metrics=metrics(8)) for _ in range(3)],
         main_cold=[dict(comparison_complete=True,elapsed_seconds=80,metrics=metrics(2)) for _ in range(3)],
         lifecycle=[dict(phase=phase,comparison_complete=True,metrics=metrics(calls),same_scores_and_ids=True)
-                   for phase,calls in [('profile_preparation',5),('prepared_first_job',0),('second_job',0),('warm',0),('edited_resume',1),('scorer_only',0)]])
+                   for phase,calls in [('profile_preparation',5),('prepared_first_job',0),('second_job',0),('warm',0),('rename',0),('fresh',0),('edited_resume',1),('scorer_only',0)]])
+    for row in evidence['lifecycle']:
+        if row['phase'] in {'prepared_first_job','second_job'}: row['metrics']=dict(provider_calls=1,stages={'requirements':{'calls':1}})
     assert m.performance_gate(evidence)
     for dimensions in ([0,3842,4000,4200,4502], [3215]*4, [100001]*5):
         assert not m.performance_gate({**evidence,'resume_chars':dimensions})
@@ -255,7 +260,7 @@ def test_performance_gate_requires_main_baseline_and_prepared_profiles():
     evidence=dict(execution='live',job_chars=8000,resume_chars=[8000]*5,
         cold=[dict(comparison_complete=True,elapsed_seconds=100,metrics=metrics(8)) for _ in range(3)],
         lifecycle=[dict(phase=p,comparison_complete=True,metrics=metrics(n),same_scores_and_ids=True)
-            for p,n in [('profile_preparation',5),('prepared_first_job',0),('second_job',0),('warm',0),('edited_resume',1),('scorer_only',0)]])
+            for p,n in [('profile_preparation',5),('prepared_first_job',0),('second_job',0),('warm',0),('rename',0),('fresh',0),('edited_resume',1),('scorer_only',0)]])
     assert not m.performance_gate(evidence)
     evidence['main_cold']=[dict(comparison_complete=True,metrics=metrics(2)) for _ in range(3)]
     evidence['lifecycle'][1]['metrics']=metrics(1)
@@ -291,3 +296,51 @@ def test_failed_preparation_does_not_repeat_profiles_as_fixed_evidence_or_lifecy
     lifecycle=m.run_lifecycle(case(),engine=engine,as_of=date(2026,9,30))
     assert [r['phase'] for r in lifecycle]==['profile_preparation']
     assert engine.engine.counts()['resume_profile']==4
+
+
+def test_skill_gate_requires_exact_scores_ranks_and_zero_comparison_calls():
+    m=benchmark(); c=case()
+    runs=[record(repeat=i) for i in range(3)]
+    for run in runs:
+        run['metrics']['provider_calls']=0
+        for e in run['evaluations']: e['score_scope']='skill_fit'
+    report=m.build_report([c],runs)
+    assert report['score_scope']=='skill_fit'
+    assert report['gates']['local_comparisons']
+    assert report['gates']['identical_local_scores_and_ranks']
+    runs[1]['evaluations'][0]['raw_score']='81'
+    report=m.build_report([c],runs)
+    assert not report['gates']['identical_local_scores_and_ranks']
+    runs[1]['evaluations'][0]['raw_score']='80'
+    runs[1]['evaluations'][0]['rank']=2
+    assert not m.build_report([c],runs)['gates']['identical_local_scores_and_ranks']
+    runs[1]['metrics']['stages']['evidence_batch']={'calls':1}
+    assert not m.build_report([c],runs)['gates']['local_comparisons']
+
+
+def test_old_review_cannot_approve_skill_extraction_quality():
+    m=benchmark(); c=case()
+    review=dict(reviewed_by='Reviewer',reviewed_at='2026-09-30',fixture_sha256='hash',case_ids=['one'],approved_for_provider_use=True)
+    assert not m.verify_review([c],review,'hash')
+    assert not m.build_report([c],[record()],execution='live',review_verified=True)['gates']['reviewed_skill_extractions']
+
+
+def test_cold_extraction_checks_reviewed_skill_sets_without_extra_requests():
+    m=benchmark(); c=case()
+    c.update(expected_requirements=[dict(category='required_skills',alternatives=['python'])],
+             expected_resume_skills={'a':[dict(canonical_key='python',level='demonstrated')],'b':[]})
+    engine=m.CountingEngine(Provider(),max_calls=9)
+    runs=m.run_quality([c],engine=engine,as_of=date(2026,9,30))
+    cold=[r for r in runs if r['phase']=='cold']
+    assert len(cold)==3 and all(r['extraction_matches'] for r in cold)
+    assert all(r['metrics']['provider_calls']==3 for r in cold)
+    c['expected_requirements'][0]['alternatives']=['java']
+    runs=m.run_quality([c],engine=m.CountingEngine(Provider(),max_calls=9),as_of=date(2026,9,30))
+    assert all(not r['extraction_matches'] for r in runs if r['phase']=='cold')
+
+
+def test_local_repeats_continue_after_exact_extraction_request_cap():
+    m=benchmark(); engine=m.CountingEngine(Provider(),max_calls=3)
+    runs=m.run_quality([case()],engine=engine,as_of=date(2026,9,30))
+    assert len([r for r in runs if r['phase']=='fixed_rubric'])==3
+    assert all(r['metrics']['provider_calls']==0 for r in runs if r['phase']=='fixed_rubric')

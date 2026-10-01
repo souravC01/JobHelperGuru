@@ -166,7 +166,7 @@ describe('Skill fit UI and lifecycle', () => {
     const evaluation = result('a')
     evaluation.score_scope = 'skill_fit'
     evaluation.requirement_results = [
-      { requirement: { id: 'python', kind: 'skill', category: 'required_skills', alternatives: ['Python'] }, evidence: [{ level: 'listed' }] },
+      { requirement: { id: 'python', kind: 'skill', category: 'required_skills', canonical_key: 'python', alternatives: [] }, evidence: [{ level: 'listed' }] },
       { requirement: { id: 'java', kind: 'skill', category: 'required_skills', alternatives: ['Java', 'Rust'] }, evidence: [{ level: 'not_evidenced' }] },
       { requirement: { id: 'sql', kind: 'skill', category: 'preferred_qualifications', alternatives: ['SQL'] }, evidence: [{ level: 'demonstrated' }] },
       { requirement: { id: 'aws', kind: 'skill', category: 'preferred_qualifications', alternatives: ['AWS'] }, evidence: [{ level: 'not_evidenced' }] },
@@ -174,7 +174,7 @@ describe('Skill fit UI and lifecycle', () => {
     apiClient.evaluateResumes.mockResolvedValue(batch([evaluation]))
     render(<ResumeFitRanker {...props} />)
     await screen.findByRole('region', { name: 'Resume skill fit' })
-    await screen.findByText('Matched required skills: Python')
+    await screen.findByText('Matched required skills: python')
     expect(screen.getByText('Missing required skills: Java or Rust')).toBeInTheDocument()
     expect(screen.getByText('Matched preferred skills: SQL')).toBeInTheDocument()
     expect(screen.getByText('Missing preferred skills: AWS')).toBeInTheDocument()
