@@ -682,12 +682,12 @@ def match_resumes(req: MatchResumesRequest, current_user: User = Depends(get_cur
 
 def _require_matching_enabled():
     if not matching_v2_enabled():
-        raise HTTPException(status_code=404, detail="Overall job fit matching is not enabled.")
+        raise HTTPException(status_code=404, detail="Skill fit matching is not enabled.")
 
 
 def _matching_provider_failure():
     return HTTPException(status_code=502, detail={
-        "message": "AI assessment failed. Please retry or check your provider settings.",
+        "message": "AI skill extraction failed. Please retry or check your provider settings.",
         "error_type": "invalid_provider_response", "can_switch_offline": False,
     })
 
@@ -698,7 +698,7 @@ def _get_matching_ai(user_id: str):
     selected_key = storage.get_provider_profile_secret(settings.active_profile_id,user_id=user_id) if settings.active_profile_id else ai.api_key
     if settings.use_offline_mode or ai.model_name in {"offline", "offline-heuristic"} or not (selected_key or "").strip():
         raise HTTPException(status_code=409, detail={
-            "message": "Choose a configured AI provider to evaluate overall job fit.",
+            "message": "Choose a configured AI provider to extract job and resume skills.",
             "error_type": "ai_provider_required", "can_switch_offline": False,
         })
     return ai

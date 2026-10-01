@@ -86,7 +86,7 @@ export default function ResumeFitRanker({
       if (requestId !== requestRef.current || controller.signal.aborted) return;
       setRankedResumes([]);
       setError(err.message || 'Evaluation failed. Check AI settings and retry.');
-      // Overall-fit failures must remain actionable errors without an offline percentage.
+      // Skill-fit failures must remain actionable errors without an offline percentage.
       if (!overallActive && onAiError && (err.canSwitchOffline || err.status === 502)) onAiError(err, () => runRanking());
     } finally {
       if (requestId === requestRef.current) setLoading(false);
@@ -142,25 +142,24 @@ export default function ResumeFitRanker({
   if (overallActive || matchingEnabled === null || matchingError) {
     const visible = resultIdentity === sourceIdentity;
     const leaders = comparisonComplete ? rankedResumes.filter(r => r.is_top_match) : [];
-    const categories = { required_skills: 'Required qualifications', responsibilities: 'Responsibilities', relevant_experience: 'Relevant experience', preferred_qualifications: 'Preferred qualifications' };
+    const categories = { required_skills: 'Required skills', preferred_qualifications: 'Preferred skills' };
     const reviewReasons = {
       source_incomplete: 'Saved text is incomplete. Review and save the full resume in the vault.',
       rubric_limit: 'The job description exceeds the supported requirement limit. Review the description.',
-      invalid_provider_response: 'AI returned invalid evidence. Check AI settings and retry.',
-      missing_assessment: 'AI did not assess every requirement. Retry the comparison.',
-      unresolved_evidence: 'Some evidence needs review. Check the saved source text and retry.',
+      invalid_provider_response: 'AI could not extract valid skills. Check AI settings and retry.',
+      unresolved_evidence: 'Cached skill facts conflict. Review the saved resume text and retry.',
       deadline_exceeded: 'Evaluation timed out. Retry the comparison.',
-      no_assessable_requirements: 'No assessable requirements were found. Review the full job description.',
+      no_assessable_requirements: 'No required or preferred skills were found. Review the full job description.',
     };
     return (
-      <section className="card-corporate p-6 space-y-4" aria-label="Resume overall job fit">
-        <h3 className="text-base font-bold">Overall job fit</h3>
-        <p className="text-xs text-[#666666]">Source-backed fit against this job's requirements, not a hiring probability. Save resume text changes before reevaluating; marking suggestions added does not change these scores.</p>
+      <section className="card-corporate p-6 space-y-4" aria-label="Resume skill fit">
+        <h3 className="text-base font-bold">Skill fit</h3>
+        <p className="text-xs text-[#666666]">Required skills carry more weight than preferred skills. Skill coverage counts each skill group equally. Save resume text changes before reevaluating; marking suggestions added does not change these scores.</p>
         {matchingError ? <p role="alert">{matchingError} Refresh the page to retry.</p>
           : matchingEnabled === null ? <p role="status">Loading matching settings...</p>
-          : !aiProviderReady ? <p role="alert">Configure an AI provider in Settings and turn off offline mode to evaluate overall job fit.</p>
+          : !aiProviderReady ? <p role="alert">Configure an AI provider in Settings and turn off offline mode to evaluate skill fit.</p>
           : !rawJob.trim() ? <div className="space-y-2">
-            <p>Paste the full job description to evaluate overall job fit. Saved keywords alone cannot establish a score.</p>
+            <p>Paste the full job description to evaluate skill fit. Saved keywords alone cannot establish a score.</p>
             <label htmlFor="full-matching-jd">Full job description</label>
             <textarea id="full-matching-jd" className="input-corporate w-full" value={draftJob} onChange={e => setDraftJob(e.target.value)} />
             <button className="btn-primary-corporate" disabled={!draftJob.trim()} onClick={() => setPastedJob({ identity: jobIdentity, text: draftJob })}>Evaluate full description</button>
@@ -185,6 +184,13 @@ export default function ResumeFitRanker({
                       {comparisonComplete && evaluation.is_top_match && <span>{leaders.length > 1 ? 'Tied Top Fit' : 'Top Fit'}</span>}
                       <ul>{Object.entries(evaluation.category_scores || {}).map(([category, score]) => <li key={category}>{categories[category] || category}: {score}%</li>)}</ul>
                       <p>Skill coverage: {evaluation.skill_coverage_score == null ? 'Not applicable' : `${evaluation.skill_coverage_score}%`}</p>
+                      {Object.entries(categories).flatMap(([category, label]) => [true, false].map(matched => {
+                        const skills = (evaluation.requirement_results || []).filter(result =>
+                          result.requirement.kind === 'skill' && result.requirement.category === category &&
+                          result.evidence.some(item => ['listed', 'demonstrated'].includes(item.level)) === matched
+                        ).map(result => result.requirement.alternatives.join(' or '));
+                        return <p key={`${category}-${matched}`}>{matched ? 'Matched' : 'Missing'} {label.toLowerCase()}: {skills.join(', ') || 'None'}</p>;
+                      }))}
                     </> : <p>{evaluation.status === 'needs_review' ? 'Needs review' : 'Evaluation failed'}</p>}
                     {(evaluation.reason_codes || []).map(reason => <p key={reason}>{reviewReasons[reason] || 'Review saved source text and retry.'}</p>)}
                     {(evaluation.warnings || []).map((warning, i) => <p key={i}>{warning}</p>)}
@@ -209,9 +215,9 @@ export default function ResumeFitRanker({
             <span>Legacy keyword alignment</span>
           </h3>
           <p className="text-xs text-[#666666] mt-0.5">
-            Legacy keyword coverage; this is not an overall job fit score.
+            Legacy keyword coverage from saved job keywords.
           </p>
-          {matchingEnabled && <button className="btn-secondary-corporate" onClick={() => setLegacyJob(null)}>Use full description for overall fit</button>}
+          {matchingEnabled && <button className="btn-secondary-corporate" onClick={() => setLegacyJob(null)}>Use full description for skill fit</button>}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">

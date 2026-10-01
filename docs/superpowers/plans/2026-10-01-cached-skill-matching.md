@@ -100,10 +100,10 @@ Example: required Java and Python; preferred SQL. A resume containing Java and S
 
 **Interface:** Retain `/api/resumes/evaluate`, vault profile preparation and the existing default-off feature flag. Return `skill_fit`, backend raw/display scores, coverage and per-skill results. Keep selected provider identity/security checks; a temporarily unreachable provider must not prevent a valid cached comparison through a network call.
 
-- [ ] Update API/UI assertions for the exact label `Skill fit`, required/preferred matched and missing skills, truthful ties and null incomplete scores. Retain edit/job/provider switch race checks and save-success despite extraction failure. Confirm generic responsibilities/tenure do not appear as scored categories.
-- [ ] Run `.venv/Scripts/python.exe -B -m pytest tests/test_match_api.py -q` and, in `frontend`, `npm run test:run -- src/test/ResumeFitRanker.test.jsx src/test/ClientMatching.test.jsx src/test/ResumeLibrary.test.jsx`; observe the intended scope/copy failures.
-- [ ] Adapt existing summaries and error copy to skill extraction/matching. Explain weighted Skill fit and unweighted Skill coverage plainly; use existing requirement results for matched/missing skills. Preserve accessible selection, stale-response guards, legacy mode labeling and the existing upload/edit flow.
-- [ ] Rerun these tests and `npm run build` in frontend; commit and update the checklist.
+- [x] Update API/UI assertions for the exact label `Skill fit`, required/preferred matched and missing skills, truthful ties and null incomplete scores. Retain edit/job/provider switch race checks and save-success despite extraction failure. Confirm generic responsibilities/tenure do not appear as scored categories.
+- [x] Run `.venv/Scripts/python.exe -B -m pytest tests/test_match_api.py -q` and, in `frontend`, `npm run test:run -- src/test/ResumeFitRanker.test.jsx src/test/ClientMatching.test.jsx src/test/ResumeLibrary.test.jsx`; observe the intended scope/copy failures.
+- [x] Adapt existing summaries and error copy to skill extraction/matching. Explain weighted Skill fit and unweighted Skill coverage plainly; use existing requirement results for matched/missing skills. Preserve accessible selection, stale-response guards, legacy mode labeling and the existing upload/edit flow.
+- [x] Rerun these tests and `npm run build` in frontend; commit and update the checklist.
 
 ## Task 9.5: Replace obsolete gates and measure the agreed workflow
 

@@ -5,6 +5,8 @@ import pytest
 from backend import main
 from tests.test_match_pipeline import Provider, JOB, QUOTE
 
+JOB = JOB.replace("Required:", "Required skills for this software engineering position:")
+
 
 @pytest.fixture
 def setup(two_users,monkeypatch):
@@ -108,7 +110,7 @@ def test_full_raw_jd_reaches_pipeline(setup,monkeypatch):
             p.calls.append(payload)
             quote=JOB.splitlines()[-1]
             return dict(chunk_index=payload["chunk_index"],complete=True,
-                        items=[proposal(quote,quote,"responsibilities","semantic")] if quote in payload["source_text"] else [])
+                        items=[proposal(quote,"Python","required_skills","skill")] if quote in payload["source_text"] else [])
         return base_extract(payload,timeout=timeout)
     monkeypatch.setattr(p,"extract_match_chunk",anchored)
     raw="  "+JOB+"\n\n"+"Context.\n"*1000
@@ -125,7 +127,7 @@ def test_profile_preparation_is_minimal_and_repeat_makes_zero_calls(setup):
     assert set(first.json())=={"resume_id","status","source_hash","profile_fingerprint","warnings"}
     assert p.counts()=={"resume_profile":1}; p.calls.clear()
     assert client.post(url,headers=a).json()==first.json() and p.calls==[]
-    assert evaluate(client,a,[r["id"]]).status_code==200 and p.counts()=={"requirements":1,"evidence_batch":1}
+    assert evaluate(client,a,[r["id"]]).status_code==200 and p.counts()=={"requirements":1}
 
 
 @pytest.mark.parametrize("body",[{"content":"fake"},{"api_key":"fake"},{"facts":[]},{"source_hash":"fake"}])
@@ -147,12 +149,13 @@ def test_profile_edit_during_preparation_is_incomplete(setup):
 
 def test_incomplete_comparison_returns_null_scores_and_no_winner(setup):
     client,a,b,r,p=setup
-    p.incomplete.add(r["id"])
-    response=evaluate(client,a,[r["id"]])
+    uid=client.get("/api/auth/me",headers=a).json()["id"]
+    warned=main.storage.add_resume("Unreadable",r["content"],extraction_warnings=["source_incomplete"],user_id=uid)
+    response=evaluate(client,a,[warned.id])
     assert response.status_code==200 and not response.json()["comparison_complete"]
     e=response.json()["evaluations"][0]
     assert e["raw_score"] is None and e["rank"] is None and not e["is_top_match"]
-    assert "missing_assessment" in e["reason_codes"]
+    assert "source_incomplete" in e["reason_codes"]
 
 
 @pytest.mark.parametrize("route",["evaluate","profile"])
@@ -218,12 +221,12 @@ def test_authenticated_analyze_save_edit_switch_and_rollback_journey(setup,monke
     assert edited.status_code==200
     after_edit=evaluate(client,a,[r["id"]])
     assert after_edit.status_code==200 and after_edit.json()["evaluations"][0]["evaluation_id"]!=initial.json()["evaluations"][0]["evaluation_id"]
-    assert p.counts()=={"resume_profile":1,"evidence_batch":1}
+    assert p.counts()=={"resume_profile":1}
     p.calls.clear()
-    assert evaluate(client,a,[r["id"]],job="Responsibilities:\nPrevent service outages.").status_code==200
-    assert p.counts()=={"requirements":1,"evidence_batch":1}
+    assert evaluate(client,a,[r["id"]],job="Required:\nPython knowledge.").status_code==200
+    assert p.counts()=={"requirements":1}
     p.calls.clear(); p.model_name="another-provider-model"
-    assert evaluate(client,a,[r["id"]]).status_code==200 and p.counts()=={"requirements":1,"resume_profile":1,"evidence_batch":1}
+    assert evaluate(client,a,[r["id"]]).status_code==200 and p.counts()=={"requirements":1,"resume_profile":1}
     p.calls.clear()
     old=client.post('/api/resumes/evaluate',headers=a,json={"job":analyzed.json()["analysis"],"resume_ids":[r["id"]]})
     assert old.status_code==422 and p.calls==[]
@@ -253,3 +256,17 @@ def test_engine_resolution_errors_are_sanitized(setup,monkeypatch):
     monkeypatch.setattr(main,"get_ai_engine",fail)
     for response in [evaluate(client,a,[r["id"]]),client.post(f'/api/resumes/{r["id"]}/profile',headers=a)]:
         assert response.status_code==502 and "private-key-in-config-error" not in response.text
+
+
+def test_skill_fit_response_and_cached_fresh_comparison(setup):
+    client,a,b,r,p=setup
+    first=evaluate(client,a,[r["id"]])
+    assert first.status_code==200
+    row=first.json()["evaluations"][0]
+    assert row["score_scope"]=="skill_fit"
+    assert all(v["requirement"]["kind"]=="skill" for v in row["requirement_results"])
+    calls=p.counts().copy()
+    p.hook=lambda *args: (_ for _ in ()).throw(AssertionError("Cached comparison contacted AI"))
+    again=client.post("/api/resumes/evaluate",headers=a,json={"job_text":JOB,"resume_ids":[r["id"]],"fresh":True})
+    assert again.status_code==200 and p.counts()==calls
+    assert again.json()["evaluations"][0]["raw_score"]==row["raw_score"]

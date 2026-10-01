@@ -96,7 +96,7 @@ const batch = (evaluations = [result('a'), result('b', 50, 2)], comparison_compl
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no }); return { promise, resolve, reject } }
 const props = { currentJob: fullJob, resumes: stored, matchingEnabled: true, aiProviderReady: true }
 
-describe('Overall job fit UI and lifecycle', () => {
+describe('Skill fit UI and lifecycle', () => {
   beforeEach(() => { vi.resetAllMocks(); apiClient.evaluateResumes.mockResolvedValue(batch()) })
 
   it('reranks_after_same_count_content_edit', async () => {
@@ -155,11 +155,30 @@ describe('Overall job fit UI and lifecycle', () => {
     rerender(<ResumeFitRanker {...props} adoptedSkillsMap={{ a: ['SQL'] }} />)
     expect(screen.getByText('80%')).toBeInTheDocument()
     expect(screen.getByText('Raw score: 80 / 100')).toBeInTheDocument()
-    expect(screen.getAllByText('Required qualifications: 75.50%')).toHaveLength(2)
+    expect(screen.getAllByText('Required skills: 75.50%')).toHaveLength(2)
     expect(screen.getAllByText('Skill coverage: 50.00%')).toHaveLength(2)
     expect(screen.queryByText(/Boost/)).not.toBeInTheDocument()
     expect(apiClient.evaluateResumes).toHaveBeenCalledTimes(1)
-    expect(screen.getByText('Overall job fit')).toBeInTheDocument()
+    expect(screen.getByText('Skill fit')).toBeInTheDocument()
+  })
+
+  it('shows_required_and_preferred_matched_and_missing_skills', async () => {
+    const evaluation = result('a')
+    evaluation.score_scope = 'skill_fit'
+    evaluation.requirement_results = [
+      { requirement: { id: 'python', kind: 'skill', category: 'required_skills', alternatives: ['Python'] }, evidence: [{ level: 'listed' }] },
+      { requirement: { id: 'java', kind: 'skill', category: 'required_skills', alternatives: ['Java', 'Rust'] }, evidence: [{ level: 'not_evidenced' }] },
+      { requirement: { id: 'sql', kind: 'skill', category: 'preferred_qualifications', alternatives: ['SQL'] }, evidence: [{ level: 'demonstrated' }] },
+      { requirement: { id: 'aws', kind: 'skill', category: 'preferred_qualifications', alternatives: ['AWS'] }, evidence: [{ level: 'not_evidenced' }] },
+    ]
+    apiClient.evaluateResumes.mockResolvedValue(batch([evaluation]))
+    render(<ResumeFitRanker {...props} />)
+    await screen.findByRole('region', { name: 'Resume skill fit' })
+    await screen.findByText('Matched required skills: Python')
+    expect(screen.getByText('Missing required skills: Java or Rust')).toBeInTheDocument()
+    expect(screen.getByText('Matched preferred skills: SQL')).toBeInTheDocument()
+    expect(screen.getByText('Missing preferred skills: AWS')).toBeInTheDocument()
+    expect(screen.queryByText(/Responsibilities:/)).not.toBeInTheDocument()
   })
 
   it('missing_raw_text_requests_full_jd', async () => {
