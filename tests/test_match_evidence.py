@@ -62,3 +62,9 @@ def test_coursework_only_positive_fact_cannot_match(level):
     p=profile("Coursework:\nPython",[fact("Python","Python",level=level)])
     assert p.facts[0].level=="learning"
     assert match([req("python")],p)[0].level=="not_evidenced"
+
+
+def test_oop_and_oops_use_one_explicit_skill_identity():
+    p=profile("Skills:\nOOPS",[fact("OOPS","OOP",level="listed")])
+    assert p.facts[0].canonical_key=="oop"
+    assert match([req("object-oriented programming")],p)[0].level=="listed"
