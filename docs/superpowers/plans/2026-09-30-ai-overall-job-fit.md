@@ -468,3 +468,18 @@ Task 9 source-isolation diagnostic: identical full-source/frozen-rubric inputs a
 
 
 Task9 v9 controlled retry fails source validation after2calls/52.02s/20,351tokens; usage169/200,31remain. Correction now lists all invalid claims using server-supplied IDs and fixed rule codes, one correction only; v10 assessment cache invalidation. RED observed,138focused/460backend GREEN. Live verification pending. Offline QA rubric21criteria/16sentences reveals split targets vs whole-sentence assessment ambiguity; investigate without weight tuning. Steps4-7 open, Task10 pending.
+
+
+### Task 9 architecture decision pending after source-copy failures
+
+Latest v10 live correction remains unscored after2requests/122.43s/19,720tokens. Runtime-only QA atomic-criterion control and experiment each return InternalServerError; stopped after2requests, no production prompt change or semantic conclusion. Conservative usage173/200,27remain. Latest production verification460backend tests passing. Steps4-7 remain open, Task10 pending.
+
+Proposed smallest next experiment, pending owner architecture review:
+
+- [ ] Supply server-generated source-passage references and let evidence proposals select a reference rather than freely copy source_quote. Reuse existing profile spans and original chunk helpers; preserve every supplied context and all original source in fallback, with no keyword filtering, new database table, second model or invented work.
+- [ ] Resolve the selected reference on the server to exact saved text and offsets before the existing evidence/section/literal/tenure checks. Reject unknown, foreign-resume, foreign-chunk or unsupplied references. Reference boundaries come from the server; the provider cannot publish offsets or arbitrary quoted text. Preserve explicit absence and unresolved handling.
+- [ ] Retain complete per-resume checklist coverage, original chunk coverage, strict scoring and one bounded correction. Regression must cover repeated text selected by an unambiguous reference, invalid reference rejection, section/negation/learning rules and failure remaining unscored. Bump assessment cache identity only if the transport changes; preserve original JD/profile data and scorer weights.
+- [ ] Verify the previously failed source input first, capped at two additional requests. Expand to five resumes only if complete; stop on failure and record evidence. All further development calls stay within the existing173/200 ledger and retain the two interrupted-call reservations.
+- [ ] Separately test atomic-criterion versus whole-sentence grading after provider availability returns, using the identical frozen QA rubric/source inputs. Do not assume a preferred winner proves correct credits, remove legitimate cloud/pipeline evidence or change weights to fit labels.
+- [ ] Consider removing unused provider-facing provenance fields only after retaining all facts/source and measuring the effect: current offline estimate123,379->82,701serialized characters,33.0% smaller, not a latency/token claim. Preserve all server-native provenance and cache validation.
+- [ ] Rerun authorized full development/cold/cache measurements only after the bounded probes pass. Holdout stays unopened until development gates pass; release flag remains off. No Task10, push or PR from this checkpoint.
