@@ -8,8 +8,8 @@ import pytest
 from backend.storage import StorageService
 from tests.test_match_profiles import fact
 
-JOB = "Responsibilities:\nMaintain service availability."
-QUOTE = "Cut outages by deploying redundant workers."
+JOB = "Required:\nPython and Rust."
+QUOTE = "Built Python and Rust services."
 AS_OF = date(2026, 9, 30)
 
 
@@ -35,21 +35,12 @@ class Provider:
             if task == "requirements":
                 quote = payload["source_text"].splitlines()[-1]
                 return dict(chunk_index=payload["chunk_index"], complete=True, items=[dict(
-                    category="responsibilities",kind="semantic",canonical_key=quote,
+                    category="required_skills",kind="skill",canonical_key="Python",
                     alternatives=[],source_quote=quote,required_months=None)])
             if task == "resume_profile":
-                items = [fact(QUOTE,"reliability","activity")] if QUOTE in payload["source_text"] else []
-                return dict(chunk_index=payload["chunk_index"],complete=True,items=items)
-            assert task == "evidence_batch"
-            records=[]
-            for r in payload["resumes"]:
-                ids=r["requirement_ids"]
-                if r["resume_id"] in self.incomplete: continue
-                records.append(dict(resume_id=r["resume_id"],chunk_index=r["chunk_index"],
-                    assessed_requirement_ids=ids,unresolved_requirement_ids=[],items=[dict(
-                        requirement_id=id,level="demonstrated" if QUOTE in r["source_text"] else "not_evidenced",
-                        source_quote=QUOTE if QUOTE in r["source_text"] else None) for id in ids]))
-            return dict(items=records)
+                items = [fact(QUOTE,"Python")] if QUOTE in payload["source_text"] else []
+                return dict(chunk_index=payload["chunk_index"],complete=payload["source_text"] not in self.incomplete,items=items)
+            raise AssertionError("Comparison attempted an AI call")
         finally:
             with self.lock: self.active -= 1
     def counts(self): return Counter(c["task"] for c in self.calls)
@@ -84,8 +75,7 @@ def test_partial_cache_hit_reuses_frozen_rubric(setup):
     mixed=run(s,[new,r],p)
     assert mixed.comparison_complete and len({e.rubric_fingerprint for e in mixed.evaluations})==1
     assert next(e for e in mixed.evaluations if e.resume_id==r.id).evaluation_id==old.evaluation_id
-    assert p.counts()=={"resume_profile":1,"evidence_batch":1}
-    assert [x["resume_id"] for x in p.calls[-1]["resumes"]]==[new.id]
+    assert p.counts()=={"resume_profile":1}
     p.calls.clear()
     subset=run(s,[new],p)
     assert subset.evaluations[0].rank==1 and p.calls==[]
@@ -93,16 +83,16 @@ def test_partial_cache_hit_reuses_frozen_rubric(setup):
 
 @pytest.mark.parametrize("change",["endpoint","model","jd","assessment","profile"])
 def test_provider_endpoint_model_and_versions_invalidate(setup,monkeypatch,change):
-    from backend.services.matching import extraction,profiles
+    from backend.services.matching import extraction,profiles,scoring
     s,r,p=setup; old=run(s,[r],p); p.calls.clear()
     if change=="endpoint": p.api_base_url += "/new"
     elif change=="model": p.model_name="new-model"
     elif change=="jd": monkeypatch.setattr(extraction,"EXTRACTOR_VERSION","jd-new")
-    elif change=="assessment": monkeypatch.setattr(extraction,"ASSESSMENT_VERSION","assessment-new")
+    elif change=="assessment": monkeypatch.setattr(scoring,"MATCHER_VERSION","matcher-new")
     else: monkeypatch.setattr(profiles,"PROFILE_EXTRACTOR_VERSION","profile-new")
     new=run(s,[r],p)
     assert new.comparison_complete and new.evaluations[0].evaluation_id!=old.evaluations[0].evaluation_id
-    assert p.counts()["evidence_batch"]==1
+    assert p.counts()["evidence_batch"]==0
     assert p.counts()["resume_profile"]==(change in {"endpoint","model","profile"})
 
 
@@ -112,7 +102,7 @@ def test_users_cannot_share_rubric_or_evidence(setup):
     assert p.calls==[]
     other=s.add_resume("Other",r.content,user_id="other")
     assert run(s,[other],p,user_id="other").comparison_complete
-    assert p.counts()=={"requirements":1,"resume_profile":1,"evidence_batch":1}
+    assert p.counts()=={"requirements":1,"resume_profile":1}
 
 
 def test_resume_edit_or_delete_invalidates(setup):
@@ -129,7 +119,7 @@ def test_resume_edit_or_delete_invalidates(setup):
 
 def test_deadline_result_not_scored_or_cached(setup):
     s,r,p=setup
-    p.hook=lambda payload: time.sleep(.025) if payload["task"]=="evidence_batch" else None
+    p.hook=lambda payload: time.sleep(.025) if payload["task"]=="resume_profile" else None
     result=run(s,[r],p,deadline_seconds=.02)
     assert not result.comparison_complete
     assert result.evaluations[0].raw_score is None and "deadline_exceeded" in result.evaluations[0].reason_codes
@@ -137,21 +127,19 @@ def test_deadline_result_not_scored_or_cached(setup):
         c.execute("SELECT COUNT(*) FROM matching_snapshots"); assert c.fetchone()[0]==0
 
 
-def test_partition_respects_five_docs_and_forty_thousand_chars(setup):
+def test_many_resumes_need_no_ai_comparison_batches(setup):
     s,r,p=setup
     resumes=[r]+[s.add_resume(str(i),r.content,user_id="u") for i in range(11)]
-    p.hook=lambda payload: time.sleep(.015) if payload["task"]=="evidence_batch" else None
     result=run(s,list(reversed(resumes)),p)
-    assert result.comparison_complete
-    calls=[c for c in p.calls if c["task"]=="evidence_batch"]
-    assert len(calls)==3 and p.peak<=2
-    assert all(len(c["resumes"])<=5 and sum(len(r["source_text"]) for r in c["resumes"])<=40000 for c in calls)
-    assert sorted(r["resume_id"] for c in calls for r in c["resumes"])==sorted(r.id for r in resumes)
+    assert result.comparison_complete and p.peak<=2
+    assert p.counts()=={"requirements":1,"resume_profile":12}
+
+
 
 
 def test_incomplete_batch_has_no_winner(setup):
     s,r,p=setup; run(s,[r],p)
-    new=s.add_resume("New",r.content,user_id="u"); p.incomplete.add(new.id)
+    new=s.add_resume("New",r.content,user_id="u"); p.incomplete.add(new.content)
     result=run(s,[r,new],p)
     assert not result.comparison_complete and all(e.rank is None and not e.is_top_match for e in result.evaluations)
     assert next(e for e in result.evaluations if e.resume_id==r.id).raw_score==100
@@ -162,7 +150,7 @@ def test_invalid_cached_json_recomputed_safely(setup,table):
     s,r,p=setup; run(s,[r],p); p.calls.clear()
     with s._get_cursor() as c: c.execute(f"UPDATE {table} SET payload_json = ?", ('{"bad":true}',))
     assert run(s,[r],p).comparison_complete
-    assert p.counts()["evidence_batch"]==1 and p.counts()["resume_profile"]==0
+    assert p.counts()["evidence_batch"]==0 and p.counts()["resume_profile"]==0
     assert p.counts()["requirements"]==(table=="matching_rubrics")
 
 
@@ -184,50 +172,50 @@ def test_scorer_change_recomputes_without_provider_calls(setup,monkeypatch):
         assert 'score-new' in c.fetchone()[0]
 
 
-def test_new_job_reuses_profiles_but_assesses_new_requirements(setup):
+def test_new_jd_only_calls_requirements(setup):
     from backend.services.matching.pipeline import evaluate_resumes
     s,r,p=setup; run(s,[r],p); p.calls.clear()
-    result=evaluate_resumes("Responsibilities:\nPrevent service outages.",[r],user_id="u",as_of=AS_OF,engine=p,storage=s)
-    assert result.comparison_complete and p.counts()=={"requirements":1,"evidence_batch":1}
+    result=evaluate_resumes("Required:\nPython knowledge.",[r],user_id="u",as_of=AS_OF,engine=p,storage=s)
+    assert result.comparison_complete and p.counts()=={"requirements":1}
 
 
 def test_changed_resume_only_reextracts_changed_profile(setup):
     s,r,p=setup; b=s.add_resume("B",r.content,user_id="u"); run(s,[r,b],p); p.calls.clear()
     b=s.update_resume(b.id,content=b.content+"\nMore context.",user_id="u")
     assert run(s,[r,b],p).comparison_complete
-    assert p.counts()=={"resume_profile":1,"evidence_batch":1}
+    assert p.counts()=={"resume_profile":1}
 
 
 def test_profile_version_invalidates_dependent_assessment(setup,monkeypatch):
     test_provider_endpoint_model_and_versions_invalidate(setup,monkeypatch,"profile")
 
 
-def test_fresh_and_date_change_reuse_profile_and_rubric(setup):
+def test_fresh_recomputes_locally(setup):
     s,r,p=setup; run(s,[r],p); p.calls.clear()
     p.api_key="changed-secret"
     assert run(s,[r],p).comparison_complete and p.calls==[]
-    assert run(s,[r],p,fresh=True).comparison_complete and p.counts()=={"evidence_batch":1}
+    assert run(s,[r],p,fresh=True).comparison_complete and p.calls==[]
     p.calls.clear()
-    assert run(s,[r],p,as_of=date(2026,10,1)).comparison_complete and p.counts()=={"evidence_batch":1}
+    assert run(s,[r],p,as_of=date(2026,10,1)).comparison_complete and p.calls==[]
 
 
-def test_edit_during_assessment_is_not_published(setup):
+def test_edit_during_preparation_is_not_published(setup):
     s,r,p=setup
-    p.hook=lambda payload: s.update_resume(r.id,content="Edited",user_id="u") if payload["task"]=="evidence_batch" else None
+    p.hook=lambda payload: s.update_resume(r.id,content="Edited",user_id="u") if payload["task"]=="resume_profile" else None
     result=run(s,[r],p)
     assert not result.comparison_complete and result.evaluations[0].raw_score is None
     with s._get_cursor() as c:
         c.execute("SELECT COUNT(*) FROM matching_snapshots"); assert c.fetchone()[0]==0
 
 
-def test_cached_provenance_tampering_reassesses(setup):
+def test_cached_provenance_tampering_rebuilds_locally(setup):
     import json
     s,r,p=setup; run(s,[r],p); p.calls.clear()
     with s._get_cursor() as c:
         c.execute("SELECT payload_json FROM matching_snapshots"); data=json.loads(c.fetchone()[0])
         data["requirement_results"][0]["evidence"][0]["source_quote"]="X"*len(QUOTE)
         c.execute("UPDATE matching_snapshots SET payload_json=?",(json.dumps(data),))
-    assert run(s,[r],p).comparison_complete and p.counts()=={"evidence_batch":1}
+    assert run(s,[r],p).comparison_complete and p.calls==[]
 
 
 def test_logs_contain_call_types_durations_and_reasons_without_sources(setup,caplog):
@@ -235,7 +223,7 @@ def test_logs_contain_call_types_durations_and_reasons_without_sources(setup,cap
     s,r,p=setup
     with caplog.at_level(logging.INFO): assert run(s,[r],p).comparison_complete
     text=caplog.text
-    assert all(task in text for task in ["resume_profile","requirements","evidence_batch"])
+    assert all(task in text for task in ["resume_profile","requirements"])
     assert "duration" in text and "reason" in text
     assert QUOTE not in text and JOB not in text and p.api_key not in text
 
@@ -277,41 +265,28 @@ def test_simultaneous_cold_requests_share_winning_rubric(setup):
             if payload["task"]=="requirements": result["items"][0]["canonical_key"]=self.key
             return result
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results=list(pool.map(lambda provider:run(s,[r],provider),[DifferentInterpretation("availability"),DifferentInterpretation("reliability")]))
+        results=list(pool.map(lambda provider:run(s,[r],provider),[DifferentInterpretation("Python"),DifferentInterpretation("Rust")]))
     assert all(result.comparison_complete for result in results)
     a,b=[result.evaluations[0] for result in results]
     assert a.rubric_fingerprint==b.rubric_fingerprint and a.requirement_results==b.requirement_results
 
 
-def test_five_prepared_resumes_one_semantic_call(setup):
+def test_five_prepared_resumes_only_extract_jd(setup):
     from tests.test_match_profiles import build
     s,r,p=setup; resumes=[r]+[s.add_resume(str(i),r.content,user_id="u") for i in range(4)]
     for resume in resumes: assert build(resume,p,s).status=="complete"
     p.calls.clear()
-    assert run(s,resumes,p).comparison_complete and p.counts()=={"requirements":1,"evidence_batch":1}
+    assert run(s,resumes,p).comparison_complete and p.counts()=={"requirements":1}
 
 
-def test_long_source_fallback_processes_all_chunks_within_batch_bounds(setup):
+def test_long_sources_are_prepared_once_then_compared_locally(setup):
     s,r,p=setup
-    resumes=[s.add_resume(str(i),"Projects:\n"+"Context.\n"*1100+QUOTE,user_id="u") for i in range(6)]
-    assert run(s,resumes,p).comparison_complete
-    calls=[c for c in p.calls if c["task"]=="evidence_batch"]
-    for c in calls:
-        assert len(c["resumes"])<=5 and sum(len(r["source_text"]) for r in c["resumes"])<=40000
-    # Make profiles deliberately incomplete in fact coverage while source analysis remains complete.
-    with s._get_cursor() as c: c.execute("DELETE FROM resume_profiles")
-    class EmptyProfiles(Provider):
-        def extract_match_chunk(self,payload,*,timeout):
-            result=super().extract_match_chunk(payload,timeout=timeout)
-            if payload["task"]=="resume_profile": result["items"]=[]
-            return result
-    p=EmptyProfiles(); assert run(s,resumes,p,fresh=True).comparison_complete
-    calls=[c for c in p.calls if c["task"]=="evidence_batch"]
-    assert all(r["mode"]=="source" for c in calls for r in c["resumes"])
-    for resume in resumes:
-        indices={r["chunk_index"] for c in calls for r in c["resumes"] if r["resume_id"]==resume.id}
-        assert indices=={0,1}
-    assert all(sum(len(r["source_text"]) for r in c["resumes"])<=40000 for c in calls)
+    resume=s.add_resume("Long","Projects:\n"+"Context.\n"*1100+QUOTE,user_id="u")
+    result=run(s,[resume],p)
+    assert result.comparison_complete and result.evaluations[0].match_score==100
+    assert p.counts()=={"requirements":1,"resume_profile":2}
+    p.calls.clear()
+    assert run(s,[resume],p,fresh=True).comparison_complete and p.calls==[]
 
 
 def test_alias_version_change_invalidates_extraction_and_assessment(setup,monkeypatch):
@@ -320,32 +295,29 @@ def test_alias_version_change_invalidates_extraction_and_assessment(setup,monkey
     monkeypatch.setitem(CANONICAL_SKILL_ALIASES,"new-alias",("NewAlias",))
     result=run(s,[r],p)
     assert result.comparison_complete and result.evaluations[0].evaluation_id!=old.evaluations[0].evaluation_id
-    assert p.counts()=={"requirements":1,"resume_profile":1,"evidence_batch":1}
+    assert p.counts()=={"requirements":1,"resume_profile":1}
 
 
-def test_local_skills_credentials_and_tenure_roundtrip_without_assessment(tmp_path):
-    from backend.services.matching.pipeline import evaluate_resumes
-    from tests.test_match_extraction import proposal
-    work="Jan 2024 - Jan 2025\nBuilt Python services."
-    degree="Bachelor of Computer Science."
-    jd="Required: Python.\nRequired: 1 year Python experience.\nBachelor degree required."
-    class LocalProvider(Provider):
-        def extract_match_chunk(self,payload,*,timeout):
-            self.calls.append(payload)
-            assert payload["task"]!="evidence_batch"
-            items=[proposal("Required: Python.","python"),
-                   proposal("Required: 1 year Python experience.","python","relevant_experience","tenure",months=12),
-                   proposal("Bachelor degree required.","bachelor",kind="credential")] if payload["task"]=="requirements" else [
-                   fact("Skills:\nPython","python",level="listed"),fact(work,"python","employment"),fact(degree,"bachelor","credential")]
-            return dict(chunk_index=payload["chunk_index"],complete=True,items=items)
-    s=StorageService(str(tmp_path/"local.db"),force_sqlite=True)
-    r=s.add_resume("R","Skills:\nPython\nWork Experience:\n"+work+"\nEducation:\n"+degree,user_id="u")
-    p=LocalProvider()
-    cold=evaluate_resumes(jd,[r],user_id="u",as_of=AS_OF,engine=p,storage=s)
-    assert cold.comparison_complete; p.calls.clear()
-    warm=evaluate_resumes(jd,[r],user_id="u",as_of=AS_OF,engine=p,storage=s)
-    assert warm.model_dump()==cold.model_dump() and p.calls==[]
-    s.close()
+def test_cached_skills_comparison_forbids_provider_calls(setup):
+    s,r,p=setup
+    original=run(s,[r],p)
+    assert original.comparison_complete and original.evaluations[0].raw_score==100
+    def forbidden(payload):raise AssertionError("Cached comparison called provider")
+    p.calls.clear();p.hook=forbidden
+    for _ in range(3):
+        result=run(s,[r],p,fresh=True)
+        assert result.model_dump()==original.model_dump() and p.calls==[]
+
+
+def test_old_overall_snapshot_cannot_be_skill_fit(setup):
+    import json
+    s,r,p=setup;run(s,[r],p);p.calls.clear()
+    with s._get_cursor() as c:
+        c.execute("SELECT payload_json FROM matching_snapshots")
+        data=json.loads(c.fetchone()[0]);data['score_scope']='overall_job_fit';data['raw_score']='1.00';data['match_score']=1
+        c.execute("UPDATE matching_snapshots SET payload_json=?",(json.dumps(data),))
+    result=run(s,[r],p).evaluations[0]
+    assert result.score_scope=='skill_fit' and result.raw_score==100 and p.calls==[]
 
 
 @pytest.mark.parametrize("case",["duplicate","empty_job","long_job","negative_deadline","nan_deadline"])
@@ -374,3 +346,15 @@ def test_cold_profiles_overlap_with_two_workers_and_warm_reuses_them(setup):
     p.calls.clear()
     warm=run(s,resumes,p)
     assert warm.model_dump()==cold.model_dump() and p.calls==[]
+
+
+def test_complete_cached_profile_omission_does_not_launch_source_assessment(setup):
+    s,r,_=setup
+    class EmptyProfile(Provider):
+        def extract_match_chunk(self,payload,*,timeout):
+            result=super().extract_match_chunk(payload,timeout=timeout)
+            if payload['task']=='resume_profile':result['items']=[]
+            return result
+    p=EmptyProfile();result=run(s,[r],p)
+    assert result.comparison_complete and result.evaluations[0].raw_score==0
+    assert p.counts()=={'requirements':1,'resume_profile':1}

@@ -1,4 +1,4 @@
-"""AI-only comparison orchestration with frozen rubrics and reusable evidence."""
+"""Extract missing artifacts, then match cached skills and score locally."""
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 import logging
@@ -9,7 +9,7 @@ from typing import Any
 from backend.models import Resume
 from . import extraction, profiles, scoring
 from .chunking import TextChunk, chunk_text
-from .models import Evaluation, EvaluationBatch, EvidenceExtraction, RequirementExtraction
+from .models import Evaluation, EvaluationBatch, RequirementExtraction
 from .normalization import CANONICAL_SKILL_ALIASES
 from .provenance import fingerprint, source_hash
 
@@ -54,39 +54,6 @@ def _validate_rubric(row, text):
     return result
 
 
-def _validate_cached(evaluation, resume, rubric, profile, *, as_of, rubric_fingerprint, evaluation_id):
-    if (evaluation.status != "complete" or evaluation.resume_id != resume.id or evaluation.as_of != as_of or
-        evaluation.job_fingerprint != rubric.source_hash or evaluation.source_fingerprint != source_hash(resume.content) or
-        evaluation.resume_fingerprint != source_hash(resume.content) or evaluation.rubric_fingerprint != rubric_fingerprint or
-        evaluation.profile_fingerprint != profile.profile_fingerprint or evaluation.assessment_version != extraction.ASSESSMENT_VERSION or
-        evaluation.evaluation_id != evaluation_id):
-        raise ValueError("Cached assessment identity mismatch")
-    if [r.requirement for r in evaluation.requirement_results] != rubric.items:
-        raise ValueError("Cached rubric coverage mismatch")
-    evidence = []
-    for result in evaluation.requirement_results:
-        for item in result.evidence:
-            contexts = []
-            if item.source_quote is not None:
-                if resume.content[item.source_start:item.source_end] != item.source_quote:
-                    raise ValueError("Cached source quote mismatch")
-                contexts = [TextChunk(item.source_start,item.source_end,item.source_quote)]
-            proposal = extraction.EvidenceProposal(requirement_id=item.requirement_id,level=item.level.value,source_quote=item.source_quote)
-            accepted = extraction._validate_evidence_proposal(proposal,result.requirement,resume,contexts,profile,as_of)
-            if accepted != item: raise ValueError("Cached evidence does not match verified source")
-            evidence.append(item)
-    EvidenceExtraction(status="complete",source_hash=source_hash(resume.content),extractor_version=extraction.ASSESSMENT_VERSION,
-                       items=evidence,assessed_requirement_ids=[r.id for r in rubric.items])
-    return evidence
-
-
-def _partition(resumes):
-    # Each extraction round supplies at most one <=8k profile/source context per resume.
-    # Long profiles use all original chunks through the existing evidence adapter.
-    ordered = sorted(resumes,key=lambda r:r.id)
-    return [ordered[i:i+5] for i in range(0,len(ordered),5)]
-
-
 def evaluate_resumes(job_text: str, resumes: list[Resume], *, user_id: str, as_of: date,
                      engine: Any, storage: Any, fresh: bool=False, deadline_seconds: float=300.0) -> EvaluationBatch:
     """Reuse validated artifacts, then score and rank only the current selected set."""
@@ -113,7 +80,7 @@ def evaluate_resumes(job_text: str, resumes: list[Resume], *, user_id: str, as_o
                           resume_fingerprint=source_hash(resume.content),source_fingerprint=source_hash(resume.content),
                           rubric_fingerprint=rubric_fingerprint,reason_codes=[reason],
                           profile_fingerprint=profile.profile_fingerprint if profile else None,
-                          assessment_version=extraction.ASSESSMENT_VERSION,scorer_version=scoring.SCORER_VERSION)
+                          assessment_version=scoring.MATCHER_VERSION,scorer_version=scoring.SCORER_VERSION)
 
     def batch(evaluations):
         ranked = scoring.rank_evaluations(evaluations)
@@ -135,7 +102,7 @@ def evaluate_resumes(job_text: str, resumes: list[Resume], *, user_id: str, as_o
         # Conflict-safe insert freezes the first complete interpretation for every caller.
         frozen = _validate_rubric(row,job_text)
     rubric_fingerprint = row["rubric_fingerprint"]
-    prepared, results, misses, keys, cached_payloads = {}, {}, [], {}, {}
+    results, keys, cached_payloads = {}, {}, {}
     ordered = sorted(resumes,key=lambda r:r.id)
     def prepare(resume):
         if time.monotonic() >= deadline: return None
@@ -151,51 +118,27 @@ def evaluate_resumes(job_text: str, resumes: list[Resume], *, user_id: str, as_o
         if profile.status != "complete":
             results[resume.id] = incomplete(resume,profile.warnings[0],profile.status.value)
             continue
-        prepared[resume.id] = profile
-        key = fingerprint([rubric_key,rubric_fingerprint,profile.profile_fingerprint,extraction.ASSESSMENT_VERSION,
-                           source_hash(resume.content),as_of.isoformat()])
+        key = fingerprint(["skill_fit", rubric_key, rubric_fingerprint, profile.profile_fingerprint,
+                           scoring.MATCHER_VERSION, source_hash(resume.content), as_of.isoformat()])
         id = fingerprint([user_id,resume.id,job_hash,key,as_of.isoformat()])
         keys[resume.id] = (key,id)
         cached = None if fresh else storage.get_matching_snapshot(user_id=user_id,resume_id=resume.id,job_hash=job_hash,
                                                                  version_key=key,as_of=as_of.isoformat())
-        if cached:
-            try:
-                evaluation = Evaluation.model_validate_json(cached["payload_json"])
-                evidence = _validate_cached(evaluation,resume,frozen,profile,as_of=as_of,
-                                            rubric_fingerprint=rubric_fingerprint,evaluation_id=id)
-                if time.monotonic() >= deadline:
-                    results[resume.id] = incomplete(resume,"deadline_exceeded")
-                    continue
-                cached_payloads[resume.id] = cached["payload_json"]
-                breakdown = scoring.calculate_score(frozen.items,evidence,as_of=as_of)
-                results[resume.id] = Evaluation.model_validate({**evaluation.model_dump(),**breakdown.model_dump(),
-                                          "scorer_version":scoring.SCORER_VERSION,"rank":None,"is_top_match":False})
-                continue
-            except (ValueError,TypeError,KeyError):
-                logger.info("matching cache reason=invalid_cached_assessment")
-        misses.append(resume)
-    partitions = _partition(misses)
-    def assess(partition):
-        return extraction.extract_evidence_batch(partition,prepared,frozen.items,as_of=as_of,engine=engine,deadline=deadline)
-    if len(partitions)>1:
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            assessments = list(pool.map(assess,partitions))
-    else: assessments = [assess(p) for p in partitions]
-    outcomes = {id: outcome for part in assessments for id,outcome in part.items()}
-    for resume in misses:
-        outcome = outcomes[resume.id]
-        if outcome.status != "complete":
-            results[resume.id] = incomplete(resume,outcome.warnings[0],outcome.status.value,prepared[resume.id])
-            continue
+        if cached: cached_payloads[resume.id] = cached["payload_json"]
         if time.monotonic() >= deadline:
             results[resume.id] = incomplete(resume,"deadline_exceeded")
             continue
-        breakdown = scoring.calculate_score(frozen.items,outcome.items,as_of=as_of)
+        try:
+            evidence = scoring.match_cached_skills(frozen.items, profile)
+        except ValueError:
+            results[resume.id] = incomplete(resume,"unresolved_evidence",profile=profile)
+            continue
+        breakdown = scoring.calculate_score(frozen.items,evidence,as_of=as_of)
         results[resume.id] = Evaluation(resume_id=resume.id,status="complete",as_of=as_of,job_fingerprint=job_hash,
                     resume_fingerprint=source_hash(resume.content),source_fingerprint=source_hash(resume.content),
-                    rubric_fingerprint=rubric_fingerprint,profile_fingerprint=prepared[resume.id].profile_fingerprint,
-                    assessment_version=extraction.ASSESSMENT_VERSION,scorer_version=scoring.SCORER_VERSION,
-                    evaluation_id=keys[resume.id][1],**breakdown.model_dump())
+                    rubric_fingerprint=rubric_fingerprint,profile_fingerprint=profile.profile_fingerprint,
+                    assessment_version=scoring.MATCHER_VERSION,scorer_version=scoring.SCORER_VERSION,
+                    evaluation_id=id,**breakdown.model_dump())
     for resume in resumes:
         evaluation = results[resume.id]
         if time.monotonic() >= deadline:

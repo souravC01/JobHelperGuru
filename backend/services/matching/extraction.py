@@ -6,10 +6,7 @@ import hashlib
 import json
 import re
 import time
-from decimal import Decimal
-from datetime import date
 
-from backend.models import Resume
 from typing import Any, Literal
 
 from pydantic import Field, StrictBool, StrictInt
@@ -17,17 +14,14 @@ from pydantic import Field, StrictBool, StrictInt
 from backend.services.skill_matching import contains_skill
 from .chunking import TextChunk, chunk_text
 from .provenance import _quote_span
-from .models import MatchContract, NonEmptyString, Requirement, RequirementCategory, RequirementExtraction, ResumeProfile, EvidenceExtraction, has_evidence_conflict
+from .models import MatchContract, NonEmptyString, Requirement, RequirementCategory, RequirementExtraction
 from .normalization import aliases_for_skill, canonicalize_skill
 
 EXTRACTOR_VERSION = "skill-jd-v1"
-ASSESSMENT_VERSION = "overall-assessment-v10"
 _CORRECTION_RULES = {"Source quote must occur exactly once in the supplied chunk":"source_quote_not_unique",
-                  "Ambiguous or unsupported evidence quote":"source_quote_not_unique",
                   "Alternatives require an explicit OR group":"alternatives_require_explicit_or",
                   "Unsupported skill fact":"unsupported_literal_skill",
-                  "Unsupported literal skill":"unsupported_literal_skill",
-                  "Duplicate or foreign requirement IDs":"requirement_ids_outside_requested_set"}
+}
 MAX_REQUIREMENTS = 64
 _INSTRUCTION = re.compile(r"ignore\b.*\b(?:rubric|instructions?)|\bscore\s*\d+|\bsystem\s*prompt", re.I)
 _ELIGIBILITY = re.compile(r"\b(?:work authorization|legally authorized|sponsorship|graduation window|class of 20\d{2})\b", re.I)
@@ -51,18 +45,6 @@ class RequirementChunk(MatchContract):
     items: list[RequirementProposal]
 
 
-
-
-def _tenure_months(quote: str) -> set[int]:
-    # Borrowed minimum-range semantics; no provider-invented experience thresholds.
-    factor = lambda unit: 12 if unit.lower().startswith("year") else 1
-    span = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)\s*(years?|months?)\b", quote, re.I)
-    if span:
-        lower, upper = Decimal(span[1]), Decimal(span[2])
-        months = lower * factor(span[3])
-        return {int(months)} if lower <= upper and months == int(months) else set()
-    return {int(months) for match in re.finditer(r"\b(\d+(?:\.\d+)?)\+?\s*(years?|months?)\b", quote, re.I)
-            if (months := Decimal(match[1]) * factor(match[2])) == int(months)}
 
 
 def _skill_group(quote: str, key: str, alternatives: list[str]) -> None:
@@ -96,13 +78,6 @@ def _materialize(item: RequirementProposal, chunk: TextChunk, source: str, sourc
     alternatives = sorted({canonicalize_skill(a) for a in item.alternatives})
     if not key or any(not a for a in alternatives):
         raise ValueError("Empty requirement identity")
-    if item.kind == "tenure":
-        if alternatives or item.category not in {RequirementCategory.RELEVANT_EXPERIENCE, RequirementCategory.PREFERRED_QUALIFICATIONS}:
-            raise ValueError("Invalid tenure classification")
-        if _tenure_months(quote) != {item.required_months}:
-            raise ValueError("Tenure must use the explicit source minimum")
-    elif item.required_months is not None:
-        raise ValueError("Only tenure requirements have numeric months")
     if alternatives:
         if len(alternatives) < 2 or not re.search(r"\bor\b", quote, re.I):
             raise ValueError("Alternatives require an explicit OR group")
@@ -137,7 +112,7 @@ def _deduplicate(items: list[Requirement]) -> list[Requirement]:
     return sorted(selected.values(), key=lambda r: (r.source_start, r.id))
 
 
-def _validated_chunk(payload, *, engine, deadline, validate, invalid_claims=None):
+def _validated_chunk(payload, *, engine, deadline, validate):
     """Correct one received invalid response; every attempt uses the same source and validator."""
     for attempt in range(2):
         remaining=deadline-time.monotonic()
@@ -158,7 +133,6 @@ def _validated_chunk(payload, *, engine, deadline, validate, invalid_claims=None
             rule = _CORRECTION_RULES.get(str(exc))
             feedback=dict(reason='schema_or_source_validation_failed',previous_response=response)
             if rule: feedback['validation_rule']=rule
-            if invalid_claims: feedback['invalid_claims']=list(invalid_claims)
             payload={**payload,'validation_feedback':feedback}
 
 
@@ -195,267 +169,3 @@ def extract_requirements(text: str, *, engine: Any, deadline: float) -> Requirem
                                  assessed_requirement_ids=[] if reason else [r.id for r in items],
                                  unresolved_requirement_ids=[r.id for r in items] if reason else [],
                                  warnings=[reason] if reason else [], **metadata)
-
-
-class EvidenceProposal(MatchContract):
-    requirement_id: NonEmptyString
-    level: Literal["demonstrated", "listed", "learning", "not_evidenced", "contradicted"]
-    source_quote: NonEmptyString | None
-
-
-class ResumeEvidenceProposal(MatchContract):
-    resume_id: NonEmptyString
-    chunk_index: StrictInt = Field(ge=0)
-    items: list[EvidenceProposal]
-    assessed_requirement_ids: list[NonEmptyString]
-    unresolved_requirement_ids: list[NonEmptyString]
-
-
-class EvidenceBatchProposal(MatchContract):
-    items: list[ResumeEvidenceProposal]
-
-
-def _verified_intervals(quote, start, end, resume, profile, as_of):
-    from .models import RelevantInterval
-    from .provenance import date_ranges, work_span
-    if not work_span(resume.content, start, end):
-        return []
-    parents = [f for f in profile.facts if f.kind == "employment" and
-               f.source_start <= start < end <= f.source_end] if profile else []
-    if len(parents) == 1:
-        ranges = [(parents[0].start, parents[0].end)]
-    else:
-        ranges = date_ranges(quote)
-        if len(ranges) != 1:
-            return []
-    return [RelevantInterval(start=a, end=min(b or as_of, as_of)) for a, b in ranges
-            if a <= as_of and (b is None or b >= a)]
-
-
-def _local_evidence(resume, profile, requirement, as_of):
-    from .models import Evidence
-    keys = requirement.alternatives or [requirement.canonical_key]
-    if requirement.kind == "skill":
-        facts = [f for f in profile.facts if f.kind == "skill" and f.canonical_key in keys] if profile else []
-        if facts:
-            return [Evidence(requirement_id=requirement.id, level=f.level, source_quote=f.source_quote,
-                             source_start=f.source_start, source_end=f.source_end, section=f.section)
-                    for f in facts]
-        if not any(contains_skill(resume.content, k) for k in keys):
-            return [Evidence(requirement_id=requirement.id, level="not_evidenced")]
-    if profile and requirement.kind in {"tenure", "credential"}:
-        kind = "employment" if requirement.kind == "tenure" else "credential"
-        facts = [f for f in profile.facts if f.kind == kind and f.level == "demonstrated"
-                 and any(contains_skill(f.source_quote, k) for k in keys)]
-        result = []
-        for f in facts:
-            intervals = _verified_intervals(f.source_quote, f.source_start, f.source_end, resume, profile, as_of) if kind == "employment" else []
-            if kind == "employment" and not intervals: continue
-            result.append(Evidence(requirement_id=requirement.id, level=f.level, source_quote=f.source_quote,
-                                   source_start=f.source_start, source_end=f.source_end, section=f.section,
-                                   relevant_intervals=intervals))
-        if result: return result
-    return None
-
-
-def _validate_evidence_proposal(proposal, requirement, resume, contexts, profile, as_of):
-    from .models import Evidence
-    from .provenance import section_at, verified_level
-    if proposal.level == "not_evidenced":
-        if proposal.source_quote is not None:
-            raise ValueError("Absence does not publish a positive quote")
-        return Evidence(requirement_id=requirement.id, level="not_evidenced")
-    if proposal.source_quote is None:
-        raise ValueError("Evidence needs a source quote")
-    spans = set()
-    for context in contexts:
-        try: spans.add(_quote_span(proposal.source_quote, context))
-        except ValueError: continue
-    if len(spans) != 1:
-        raise ValueError("Ambiguous or unsupported evidence quote")
-    quote, start, end = spans.pop()
-    if resume.content[start:end] != quote:
-        raise ValueError("Quote does not match saved source")
-    if requirement.kind == "skill" and not any(contains_skill(quote, k) for k in requirement.alternatives or [requirement.canonical_key]):
-        raise ValueError("Unsupported literal skill")
-    level = verified_level(resume.content, start, end, requirement.canonical_key, proposal.level)
-    intervals = []
-    if requirement.kind == "tenure" and level == "demonstrated":
-        intervals = _verified_intervals(quote, start, end, resume, profile, as_of)
-        if not intervals: raise ValueError("Relevant tenure needs dated work provenance")
-    return Evidence(requirement_id=requirement.id, level=level, source_quote=quote,
-                    source_start=start, source_end=end, section=section_at(resume.content, start),
-                    relevant_intervals=intervals)
-
-
-def _assessment_round(requests, requirements, engine, deadline, as_of):
-    """Validate claims before reconciling the provider's coverage metadata."""
-    remaining = deadline - time.monotonic()
-    if remaining <= 0: raise TimeoutError
-    requested = {id for request in requests for id in request["payload"]["requirement_ids"]}
-    requirements = [r for r in requirements if r.id in requested]
-    payload = dict(task="evidence_batch", requirements=[r.model_dump(mode="json") for r in requirements],
-                   resumes=[request["payload"] for request in requests], schema=EvidenceBatchProposal.model_json_schema())
-    invalid_claims = []
-    def validate(response):
-        invalid_claims.clear()
-        errors = []
-        wire = EvidenceBatchProposal.model_validate(response)
-        records = {r.resume_id: r for r in wire.items}
-        expected_resumes = {r["resume"].id for r in requests}
-        if len(records) != len(wire.items) or not set(records) <= expected_resumes:
-            raise ValueError("Duplicate or foreign resume IDs")
-        outcomes = {}
-        for request in requests:
-            resume, profile = request["resume"], request["profile"]
-            expected = set(request["payload"]["requirement_ids"])
-            record = records.get(resume.id)
-            if record is None:
-                outcomes[resume.id] = ([], expected, "missing_assessment")
-                continue
-            if record.chunk_index != request["payload"]["chunk_index"]:
-                raise ValueError("Wrong source chunk acknowledgment")
-            by_id = {r.id: r for r in requirements}
-            items = []
-            seen = set()
-            for proposal in record.items:
-                if proposal.requirement_id not in expected or proposal.requirement_id in seen:
-                    raise ValueError("Duplicate or foreign requirement IDs")
-                seen.add(proposal.requirement_id)
-                try:
-                    items.append(_validate_evidence_proposal(proposal, by_id[proposal.requirement_id], resume,
-                                                            request["contexts"], profile, as_of))
-                except ValueError as exc:
-                    rule = _CORRECTION_RULES.get(str(exc))
-                    if rule is None: raise
-                    errors.append(str(exc))
-                    invalid_claims.append(dict(resume_id=resume.id, requirement_id=proposal.requirement_id,
-                                               validation_rule=rule))
-            assessed, unresolved = set(record.assessed_requirement_ids), set(record.unresolved_requirement_ids)
-            if len(assessed) != len(record.assessed_requirement_ids) or len(unresolved) != len(record.unresolved_requirement_ids) or assessed & unresolved or not (assessed | unresolved) <= expected:
-                raise ValueError("Invalid requirement coverage")
-            if seen - assessed:
-                raise ValueError("Positive outcome cannot repair unsupported coverage")
-            missing = expected - (seen & assessed)
-            outcomes[resume.id] = (items, missing, "missing_assessment" if expected - (assessed | unresolved) or assessed - seen else "unresolved_evidence" if missing else None)
-        if errors: raise ValueError(errors[0])
-        return outcomes
-    return _validated_chunk(payload,engine=engine,deadline=deadline,validate=validate,invalid_claims=invalid_claims)
-
-
-def _profile_contexts(resume, profile):
-    spans = []
-    for fact in sorted(profile.facts, key=lambda f: (f.source_start, f.source_end)):
-        if spans and fact.source_start <= spans[-1][1]:
-            spans[-1][1] = max(spans[-1][1], fact.source_end)
-        else:
-            spans.append([fact.source_start, fact.source_end])
-    return [TextChunk(start, end, resume.content[start:end]) for start, end in spans]
-
-
-def extract_evidence_batch(resumes: list[Resume], profiles: dict[str, ResumeProfile], requirements: list[Requirement], *, as_of: date, engine: Any, deadline: float) -> dict[str, EvidenceExtraction]:
-    """Assess one supplied batch; source fallback covers all original chunks."""
-    from .models import Evidence, EvidenceExtraction
-    from .profiles import profile_version_key, validate_profile
-    from .provenance import source_hash, section_at
-    identifiers = [r.id for r in resumes]
-    requirement_ids = [r.id for r in requirements]
-    if len(identifiers) != len(set(identifiers)) or len(requirement_ids) != len(set(requirement_ids)):
-        raise ValueError("Duplicate input IDs")
-    if len(resumes) > 5: raise ValueError("Partition evidence into at most five resumes")
-    by_id = {r.id: r for r in requirements}
-    outputs = {}
-    observations = {r.id: {} for r in resumes}
-    unresolved = {r.id: set() for r in resumes}
-    warnings = {r.id: set() for r in resumes}
-    accepted_profiles = {}
-    fallback = {}
-    def result(resume, status, reason=None, items=None, pending=None):
-        items = items or []
-        return EvidenceExtraction(status=status, source_hash=source_hash(resume.content), extractor_version=ASSESSMENT_VERSION,
-                                  warnings=[reason] if reason else sorted(warnings[resume.id]), items=items,
-                                  assessed_requirement_ids=sorted({i.requirement_id for i in items}),
-                                  unresolved_requirement_ids=sorted(pending or []))
-    def observe(resume_id, outcome):
-        items, missing, reason = outcome
-        unresolved[resume_id].update(missing)
-        if reason: warnings[resume_id].add(reason)
-        for item in items: observations[resume_id].setdefault(item.requirement_id, []).append(item)
-    try:
-        profile_requests = []
-        for resume in resumes:
-            if resume.extraction_warnings or not resume.content or not requirements or len(requirements)>64:
-                reason="rubric_limit" if len(requirements)>64 else "no_assessable_requirements" if not requirements else "source_incomplete"
-                outputs[resume.id]=result(resume,"needs_review",reason,pending=requirement_ids)
-                continue
-            chunk_text(resume.content)  # Enforce source limits even when a profile is available.
-            profile = profiles.get(resume.id)
-            if profile and profile.status == "complete":
-                validate_profile(profile, resume, profile_version_key(engine))
-            else: profile = None
-            accepted_profiles[resume.id] = profile
-            pending = []
-            for requirement in requirements:
-                local = _local_evidence(resume,profile,requirement,as_of)
-                if local is None: pending.append(requirement.id)
-                else: observations[resume.id][requirement.id] = local
-            if not pending: continue
-            contexts = _profile_contexts(resume, profile) if profile else []
-            # No keyword filter: all activities/credentials/work context may support semantics.
-            text = "\n".join(c.text for c in contexts)
-            missing_literal = any(by_id[id].kind=="skill" for id in pending)
-            if not contexts or len(text)>8000 or missing_literal:
-                fallback[resume.id]=pending
-                continue
-            profile_requests.append(dict(resume=resume,profile=profile,contexts=contexts,payload=dict(
-                resume_id=resume.id,profile_fingerprint=profile.profile_fingerprint,mode="profile",chunk_index=0,
-                chunk_count=1,source_text=text, facts=[f.model_dump(mode="json", exclude={"source_quote"}) for f in profile.facts],requirement_ids=pending)))
-        if profile_requests:
-            outcomes = _assessment_round(profile_requests,requirements,engine,deadline,as_of)
-            for request in profile_requests:
-                id = request["resume"].id
-                items, missing, reason = outcomes[id]
-                absent = {i.requirement_id for i in items if i.level == "not_evidenced"}
-                # Only an explicit absence with otherwise valid coverage triggers source escalation.
-                if absent and not missing:
-                    fallback[id]=sorted(absent)
-                    items=[i for i in items if i.requirement_id not in absent]
-                observe(id,(items,missing,reason))
-        sources={id:chunk_text(next(r.content for r in resumes if r.id==id)) for id in fallback}
-        for index in range(max((len(c) for c in sources.values()),default=0)):
-            requests=[]
-            for resume in resumes:
-                if resume.id not in sources or index>=len(sources[resume.id]): continue
-                chunk=sources[resume.id][index]
-                requests.append(dict(resume=resume,profile=accepted_profiles[resume.id],contexts=[chunk],payload=dict(
-                    resume_id=resume.id,mode="source",chunk_index=index,chunk_count=len(sources[resume.id]),
-                    source_text=chunk.text,section_context=section_at(resume.content,chunk.start),
-                    requirement_ids=fallback[resume.id])))
-            outcomes=_assessment_round(requests,requirements,engine,deadline,as_of)
-            for id,outcome in outcomes.items(): observe(id,outcome)
-        for resume in resumes:
-            if resume.id in outputs: continue
-            missing=set(requirement_ids)-set(observations[resume.id])
-            unresolved[resume.id].update(missing)
-            if missing: warnings[resume.id].add("missing_assessment")
-            items=[]
-            for id,observed in observations[resume.id].items():
-                if id in unresolved[resume.id]: continue
-                if has_evidence_conflict({i.level for i in observed}):
-                    unresolved[resume.id].add(id)
-                    warnings[resume.id].add("unresolved_evidence")
-                    continue
-                positive=[i for i in observed if i.level!="not_evidenced"]
-                distinct={}
-                for item in positive:
-                    span=(item.source_start,item.source_end)
-                    if span in distinct and distinct[span].model_dump()!=item.model_dump():
-                        raise ValueError("Conflicting classifications for identical evidence")
-                    distinct[span]=item
-                items.extend(distinct.values() if positive else [Evidence(requirement_id=id,level="not_evidenced")])
-            outputs[resume.id]=result(resume,"needs_review" if unresolved[resume.id] else "complete",items=items,pending=unresolved[resume.id])
-        return outputs
-    except TimeoutError:
-        return {r.id:result(r,"needs_review","deadline_exceeded",pending=requirement_ids) for r in resumes}
-    except Exception:
-        return {r.id:result(r,"failed","invalid_provider_response") for r in resumes}

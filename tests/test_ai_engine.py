@@ -386,7 +386,7 @@ def test_match_request_requires_ai_and_positive_timeout():
         engine.extract_match_chunk({"task": "requirements"}, timeout=0)
 
 
-def test_profile_and_evidence_transport_use_guarded_non_scoring_prompts(monkeypatch):
+def test_only_extraction_tasks_can_reach_provider(monkeypatch):
     from types import SimpleNamespace
     calls=[]
     def create(**kwargs):
@@ -394,11 +394,10 @@ def test_profile_and_evidence_transport_use_guarded_non_scoring_prompts(monkeypa
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"items": []}'))])
     engine=AIEngine(api_key="test-key")
     monkeypatch.setattr(engine,"_get_client",lambda:SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))))
-    for task in ("resume_profile","evidence_batch"):
-        engine.extract_match_chunk({"task":task,"source_text":"x"*8000,"schema":{"type":"object"}},timeout=15)
-    assert all(c["temperature"]==0 and c["timeout"]==15 for c in calls)
-    assert "job-independent" in calls[0]["messages"][0]["content"]
-    assert "untrusted" in calls[1]["messages"][0]["content"] and "frozen rubric" in calls[1]["messages"][0]["content"]
+    engine.extract_match_chunk({"task":"resume_profile","source_text":"x"*8000,"schema":{"type":"object"}},timeout=15)
+    assert calls[0]["temperature"]==0 and calls[0]["timeout"]==15
+    with pytest.raises(ValueError):engine.extract_match_chunk({"task":"evidence_batch"},timeout=15)
+    assert len(calls)==1
 
 
 def test_json_parser_accepts_only_redundant_closing_delimiters_after_complete_value():

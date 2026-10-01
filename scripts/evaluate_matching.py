@@ -372,31 +372,6 @@ def run_lifecycle(case, *, engine, as_of):
     return runs
 
 
-def _full_source(case, resumes, aliases, frozen_batch, storage, engine, as_of):
-    from backend.services.matching import extraction, scoring
-    from backend.services.matching.models import Evaluation, EvaluationBatch, RequirementExtraction
-    from backend.services.matching.pipeline import rubric_version_key
-    row=storage.get_matching_rubric(user_id='benchmark',job_hash=source_hash(case['job_text']),version_key=rubric_version_key(engine))
-    if not row:
-        raise ValueError('No frozen rubric for source diagnostic')
-    requirements=RequirementExtraction.model_validate_json(row['payload_json']).items
-    deadline=time.monotonic()+300
-    evidence=extraction.extract_evidence_batch(resumes,{},requirements,as_of=as_of,engine=engine,deadline=deadline)
-    evaluations=[]
-    for resume in resumes:
-        extracted=evidence[resume.id]
-        common=dict(resume_id=resume.id,status=extracted.status,as_of=as_of,job_fingerprint=source_hash(case['job_text']),
-                    resume_fingerprint=source_hash(resume.content),source_fingerprint=source_hash(resume.content),
-                    rubric_fingerprint=row['rubric_fingerprint'],scorer_version=scoring.SCORER_VERSION)
-        if extracted.status=='complete':
-            common.update(scoring.calculate_score(requirements,extracted.items,as_of=as_of).model_dump())
-        else:
-            common['reason_codes']=extracted.warnings or ['missing_assessment']
-        evaluations.append(Evaluation(**common))
-    ranked=scoring.rank_evaluations(evaluations)
-    return EvaluationBatch(job_fingerprint=source_hash(case['job_text']),comparison_complete=all(e.status=='complete' for e in ranked),evaluations=ranked)
-
-
 def run_quality(cases, *, engine, as_of):
     from backend.storage import StorageService
     from backend.services.matching.pipeline import evaluate_resumes
@@ -422,17 +397,10 @@ def run_quality(cases, *, engine, as_of):
                                 full_journey_seconds=cold['elapsed_seconds']+analysis_seconds if analysis_seconds is not None else None)
                     runs.append(cold)
                     if repeat==0:
-                        # Evidence repeats require already prepared profiles; failed preparation is a cold-run failure.
+                        # Local repeats require valid extracted artifacts; failed preparation stays a cold-run failure.
                         for index in range(3) if all(e.get('profile_fingerprint') for e in cold['evaluations']) else []:
                             if engine.exhausted: break
                             runs.append(_measure(case,'fixed_rubric',index,engine,lambda:evaluate(True),aliases,sources))
-                        if not engine.exhausted:
-                            full=_measure(case,'full_source',0,engine,lambda:_full_source(case,resumes,aliases,cold,storage,engine,as_of),aliases,sources)
-                            first={e['resume_id']:e for e in cold['evaluations']}; second={e['resume_id']:e for e in full['evaluations']}
-                            full['score_changes']=sum(first[id].get('raw_score')!=second[id].get('raw_score') for id in first)
-                            full['ranking_changes']=sum(_order(cold,a,b)!=_order(full,a,b) for a,b in combinations(sorted(first),2))
-                            full['completeness_regression']=cold['comparison_complete'] and not full['comparison_complete']
-                            runs.append(full)
                 finally: storage.close()
     return runs
 
@@ -604,9 +572,6 @@ def main(argv=None):
         report['profile_fallback']=dict(resume_chunks=sum(r['metrics']['full_source_resume_chunks'] for r in compared),resume_comparisons=sum(len(r['evaluations']) for r in compared),resume_fallbacks=sum(len(r['metrics']['full_source_resume_ids']) for r in compared))
         report['gates']['live_performance_and_cache']=performance_gate(performance or {})
         report['gates']['development_passed_before_holdout']=args.phase=='holdout'
-        diagnostics=[r for r in quality if r['phase']=='full_source']
-        report['gates']['profile_quality_preserved']=len(diagnostics)==len(cases) and all(r['comparison_complete'] and r['score_changes']==0 and r['ranking_changes']==0 for r in diagnostics)
-        report['development_gate_passed'] &= report['gates']['profile_quality_preserved']
         report['release_gate_passed']=all(report['gates'].values())
         report['failed_gates']=[k for k,v in report['gates'].items() if not v]
         args.output.parent.mkdir(parents=True,exist_ok=True)

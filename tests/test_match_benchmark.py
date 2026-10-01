@@ -111,7 +111,7 @@ def test_sdk_usage_and_request_cap_are_observed_without_keys_or_source():
 
 
 def test_warm_second_job_edit_and_scorer_lifecycle_uses_real_pipeline(tmp_path):
-    m=benchmark(); c=case(); c['second_job_text']='Responsibilities:\nKeep service uptime high.'
+    m=benchmark(); c=case(); c['second_job_text']='Required:\nPython knowledge.'
     c['edited_resume']=dict(id='a',content='Projects:\nOther work.')
     provider=m.CountingEngine(Provider(),max_calls=80)
     runs=m.run_lifecycle(c,engine=provider,as_of=date(2026,9,30))
@@ -154,13 +154,13 @@ def test_real_runner_separates_cold_rubrics_from_fixed_assessment_repeats():
     assert all(r['comparison_complete'] for r in runs)
 
 
-def test_profile_full_source_diagnostic_preserves_scores_and_counts_fallback():
+def test_local_repeats_use_cached_skills_without_source_assessment():
     m=benchmark(); engine=m.CountingEngine(Provider(),max_calls=80)
     runs=m.run_quality([case()],engine=engine,as_of=date(2026,9,30))
-    diagnostics=[r for r in runs if r['phase']=='full_source']
-    assert len(diagnostics)==1 and diagnostics[0]['comparison_complete']
-    assert diagnostics[0]['score_changes']==0 and diagnostics[0]['ranking_changes']==0
-    assert diagnostics[0]['metrics']['full_source_resume_chunks']==2
+    assert not [r for r in runs if r['phase']=='full_source']
+    fixed=[r for r in runs if r['phase']=='fixed_rubric']
+    assert len(fixed)==3 and all(r['comparison_complete'] and r['metrics']['provider_calls']==0 for r in fixed)
+    assert all(r['metrics']['stages'].get('evidence_batch',{}).get('calls',0)==0 for r in runs)
 
 
 def test_gate_requires_each_cold_comparison_and_complete_profile_measurements():
