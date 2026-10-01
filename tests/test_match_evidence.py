@@ -55,3 +55,10 @@ def test_incomplete_profile_cannot_prove_absence_and_activities_cannot_supply_sk
     p=profile("Projects:\nBuilt Python services.",[fact("Built Python services.","Python services","activity")])
     assert match([req("python")],p)[0].level=="not_evidenced"
     with pytest.raises(ValueError):match([req("python")],p.model_copy(update={"status":"needs_review"}))
+
+
+@pytest.mark.parametrize("level",["listed","demonstrated"])
+def test_coursework_only_positive_fact_cannot_match(level):
+    p=profile("Coursework:\nPython",[fact("Python","Python",level=level)])
+    assert p.facts[0].level=="learning"
+    assert match([req("python")],p)[0].level=="not_evidenced"

@@ -192,3 +192,28 @@ def test_received_malformed_json_uses_the_same_single_correction_limit():
         assert len(engine.calls)==2
         assert engine.calls[1]['source_text']==engine.calls[0]['source_text']
         assert engine.calls[1]['validation_feedback']==dict(reason='invalid_json_response',previous_response='{broken')
+
+
+@pytest.mark.parametrize("quote,items",[
+    ("Java, Python, or Rust",[proposal("Java, Python, or Rust","Java"),proposal("Java, Python, or Rust","Python",alternatives=["Python","Rust"])]),
+    ("Java, Python, or Rust",[proposal("Java, Python, or Rust","Python",alternatives=["Python","Rust"])]),
+    ("Java, Python or Rust",[proposal("Python or Rust","Python",alternatives=["Python","Rust"])]),
+])
+def test_comma_or_clause_cannot_be_split_or_truncated(quote,items):
+    assert extract(quote,Provider(items)).status=="failed"
+
+
+def test_complete_comma_or_group_and_alias_equivalents_have_one_denominator():
+    jd="Java, Python, or Rust"
+    group=extract(jd,Provider([proposal(jd,"Java",alternatives=["Java","Python","Rust"])]))
+    assert group.status=="complete" and len(group.items)==1
+    from backend.services.matching.scoring import match_cached_skills,calculate_score
+    from tests.test_match_evidence import profile
+    from tests.test_match_profiles import fact
+    from datetime import date
+    p=profile("Skills:\nJava",[fact("Java","Java",level="listed")])
+    assert calculate_score(group.items,match_cached_skills(group.items,p),as_of=date(2026,10,1)).raw_score==100
+    jd="Required: JavaScript or JS."
+    same=extract(jd,Provider([proposal(jd,"JavaScript",alternatives=["JavaScript","JS"])]))
+    assert same.status=="complete" and len(same.items)==1
+    assert same.items[0].canonical_key=="javascript" and not same.items[0].alternatives

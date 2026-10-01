@@ -290,3 +290,19 @@ def test_profile_does_not_retry_explicitly_unresolved_or_network_failure():
     engine=NetworkFailure([])
     assert extract_resume_profile(r,engine=engine,deadline=time.monotonic()+30).status!='complete'
     assert len(engine.calls)==1
+
+
+def test_cached_coursework_listing_is_revalidated_before_matching(tmp_path,monkeypatch):
+    from backend.services.matching import profiles
+    storage=StorageService(str(tmp_path/"coursework.db"),force_sqlite=True)
+    try:
+        r=storage.add_resume("R","Coursework:\nPython",user_id="u")
+        engine=ProfileProvider([fact("Python","Python",level="listed")])
+        original=profiles.verified_level
+        monkeypatch.setattr(profiles,"verified_level",lambda text,start,end,key,level:level)
+        old=build(r,engine,storage)
+        assert old.facts[0].level=="listed"
+        monkeypatch.setattr(profiles,"verified_level",original)
+        corrected=build(r,engine,storage)
+        assert corrected.facts[0].level=="learning" and len(engine.calls)==2
+    finally:storage.close()

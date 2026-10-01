@@ -48,22 +48,36 @@ class RequirementChunk(MatchContract):
 
 
 def _skill_group(quote: str, key: str, alternatives: list[str]) -> None:
-    def spans(value):
-        return sorted({(m.start(), m.end()) for alias in aliases_for_skill(value)
+    def spans(value, literal=False):
+        return sorted({(m.start(), m.end()) for alias in ((value,) if literal else aliases_for_skill(value))
                        for m in re.finditer(r"(?<![\w+#])" + re.escape(alias) + r"(?![\w+#])", quote, re.I)})
+    # A comma list ending in OR belongs to one qualification, including unknown tools.
+    def omitted_neighbor(start, end, grouped):
+        before, after = quote[:start], quote[end:]
+        return (grouped and re.search(r",\s*$", before)) or re.match(r"\s*,\s*(?:[\w+#./-]+(?:\s+[\w+#./-]+)*\s*,\s*)*or\b", after, re.I)
+    def is_or_group(positions):
+        joins = [quote[left[1]:right[0]] for left, right in zip(positions, positions[1:])]
+        return bool(joins) and all(re.fullmatch(r"\s*(?:,\s*)?(?:or\s*)?", join, re.I) for join in joins) and any(re.search(r"\bor\b", join, re.I) for join in joins)
     if not alternatives:
-        for start, end in spans(key):
-            if re.search(r"\bor\s*$", quote[:start], re.I) or re.match(r"\s+or\b", quote[end:], re.I):
-                raise ValueError("A skill in an OR clause needs the whole alternative group")
-        return
-    located = [spans(a) for a in alternatives]
-    if any(len(matches) != 1 for matches in located):
-        raise ValueError("Alternative skill names must be unambiguous")
-    ordered = sorted(matches[0] for matches in located)
+        ordered = spans(key)
+        # Canonical aliases can already be collapsed to a single stored qualification.
+        if not is_or_group(ordered):
+            for start, end in ordered:
+                if omitted_neighbor(start,end,False):
+                    raise ValueError("An OR group cannot omit a neighboring alternative")
+                if re.search(r"\bor\s*$", quote[:start], re.I) or re.match(r"\s+or\b", quote[end:], re.I):
+                    raise ValueError("A skill in an OR clause needs the whole alternative group")
+            return
+    else:
+        located = [spans(a,literal=True) or spans(a) for a in alternatives]
+        if any(len(matches) != 1 for matches in located):
+            raise ValueError("Alternative skill names must be unambiguous")
+        ordered = sorted(matches[0] for matches in located)
+    if omitted_neighbor(ordered[0][0],ordered[-1][1],True):
+        raise ValueError("An OR group cannot omit a neighboring alternative")
     if re.search(r"\bor\s*$", quote[:ordered[0][0]], re.I) or re.match(r"\s+or\b", quote[ordered[-1][1]:], re.I):
         raise ValueError("An OR group cannot omit a neighboring alternative")
-    joins = [quote[left[1]:right[0]] for left, right in zip(ordered, ordered[1:])]
-    if not all(re.fullmatch(r"\s*(?:,\s*)?(?:or\s*)?", join, re.I) for join in joins) or not any(re.search(r"\bor\b", join, re.I) for join in joins):
+    if not is_or_group(ordered):
         raise ValueError("Alternatives must form one explicit OR group")
 
 
@@ -75,19 +89,21 @@ def _materialize(item: RequirementProposal, chunk: TextChunk, source: str, sourc
     if _INSTRUCTION.search(context) or _ELIGIBILITY.search(quote) or _NON_FIT.search(context):
         raise ValueError("Instructions and eligibility are not fit requirements")
     key = canonicalize_skill(item.canonical_key)
-    alternatives = sorted({canonicalize_skill(a) for a in item.alternatives})
+    raw_alternatives = list(dict.fromkeys(item.alternatives))
+    alternatives = sorted({canonicalize_skill(a) for a in raw_alternatives})
     if not key or any(not a for a in alternatives):
         raise ValueError("Empty requirement identity")
+    if raw_alternatives and (len(raw_alternatives) < 2 or not re.search(r"\bor\b", quote, re.I)):
+        raise ValueError("Alternatives require an explicit OR group")
+    if item.category not in {RequirementCategory.REQUIRED_SKILLS, RequirementCategory.PREFERRED_QUALIFICATIONS}:
+        raise ValueError("Skills are qualifications, not activities or tenure")
+    # Validate against the surrounding source too: a short quote cannot hide an option.
+    _skill_group(context, key, raw_alternatives)
+    if not all(contains_skill(quote, a) for a in alternatives or [key]):
+        raise ValueError("Literal skill must occur in its source quote")
     if alternatives:
-        if len(alternatives) < 2 or not re.search(r"\bor\b", quote, re.I):
-            raise ValueError("Alternatives require an explicit OR group")
         key = "|".join(alternatives)
-    if item.kind == "skill":
-        if item.category not in {RequirementCategory.REQUIRED_SKILLS, RequirementCategory.PREFERRED_QUALIFICATIONS}:
-            raise ValueError("Skills are qualifications, not activities or tenure")
-        _skill_group(quote, key, alternatives)
-        if not all(contains_skill(quote, a) for a in alternatives or [key]):
-            raise ValueError("Literal skill must occur in its source quote")
+        if len(alternatives) == 1: alternatives = []
     identity = [source_hash, EXTRACTOR_VERSION, item.category.value, item.kind, key, alternatives, item.required_months]
     identifier = "req_" + hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode("utf-8")).hexdigest()[:20]
     return Requirement(id=identifier, category=item.category, kind=item.kind, canonical_key=key,

@@ -46,18 +46,17 @@ def verified_level(text, start, end, key, level):
     quote = text[line_start:line_end if line_end != -1 else len(text)]
     if INSTRUCTION.search(quote):
         raise ValueError("Document instructions cannot supply evidence")
-    if level == "demonstrated" and (quote.strip(" •-*\t\r\n").casefold() == key.casefold()
-            or re.fullmatch(r"[\w+#./-]+(?:\s*[,|;]\s*[\w+#./-]+)+", quote.strip())):
-        return "listed"
-    # Retain the source branch's learning distinction, including machine learning.
-    if re.search(r"\b(?:(?<!machine )(?<!deep )(?<!reinforcement )learning|studying|coursework|tutorial|beginner|plan to learn)\b", quote, re.I):
-        return "learning"
     from .normalization import aliases_for_skill
     negative_skill = any(re.search(r"\b(?:no|not|without)\s+(?:any\s+)?" + re.escape(alias) + r"(?![\w+#])", quote, re.I) for alias in aliases_for_skill(key))
-    if negative_skill or re.search(r"\b(?:never|lack(?:ing)?|no experience|not (?:use[ds]?|built|worked|implemented|proficient|familiar|experienced))\b", quote, re.I):
+    if level == "contradicted" or negative_skill or re.search(r"\b(?:never|lack(?:ing)?|no experience|not (?:use[ds]?|built|worked|implemented|proficient|familiar|experienced))\b", quote, re.I):
         return "contradicted"
-    if section_at(text, start) in {"skills", "coursework"} and level == "demonstrated":
-        return "listed" if section_at(text, start) == "skills" else "learning"
+    # Source context takes precedence over a provider's positive presence level.
+    section = section_at(text, start)
+    if re.search(r"\b(?:(?<!machine )(?<!deep )(?<!reinforcement )learning|studying|coursework|tutorial|beginner|plan to learn)\b", quote, re.I) or (section == "coursework" and level in {"listed", "demonstrated"}):
+        return "learning"
+    if level == "demonstrated" and (section == "skills" or quote.strip(" •-*\t\r\n").casefold() == key.casefold()
+            or re.fullmatch(r"[\w+#./-]+(?:\s*[,|;]\s*[\w+#./-]+)+", quote.strip())):
+        return "listed"
     return level
 
 

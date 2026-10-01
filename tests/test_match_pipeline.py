@@ -358,3 +358,21 @@ def test_complete_cached_profile_omission_does_not_launch_source_assessment(setu
     p=EmptyProfile();result=run(s,[r],p)
     assert result.comparison_complete and result.evaluations[0].raw_score==0
     assert p.counts()=={'requirements':1,'resume_profile':1}
+
+
+def test_alias_equivalent_or_rubric_round_trips_and_reuses_cache(setup):
+    s,r,p=setup
+    jd="Required: JavaScript or JS."
+    original=p.extract_match_chunk
+    def aliases(payload,*,timeout):
+        if payload["task"]=="requirements":
+            p.calls.append(payload)
+            return dict(chunk_index=payload["chunk_index"],complete=True,items=[dict(category="required_skills",kind="skill",canonical_key="JavaScript",alternatives=["JavaScript","JS"],source_quote=jd,required_months=None)])
+        return original(payload,timeout=timeout)
+    p.extract_match_chunk=aliases
+    from backend.services.matching.pipeline import evaluate_resumes
+    first=evaluate_resumes(jd,[r],user_id="u",as_of=AS_OF,engine=p,storage=s)
+    assert first.comparison_complete and len(first.evaluations[0].requirement_results)==1
+    p.calls.clear()
+    second=evaluate_resumes(jd,[r],user_id="u",as_of=AS_OF,engine=p,storage=s,fresh=True)
+    assert second.model_dump()==first.model_dump() and not p.calls
