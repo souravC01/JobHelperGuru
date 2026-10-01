@@ -1,5 +1,15 @@
 # AI overall job-fit evaluation
 
+## Current scope — owner-approved pivot on 2026-10-01
+
+Task 9 now targets **Skill fit**: one-time JD/resume skill extraction, reuse of cached resume skills, and deterministic backend matching/scoring. AI responsibility judgments, per-comparison evidence requests, full-source AI consistency runs and the proposed passage-reference repair are retired from the active plan. See [the revised Task 9 plan](superpowers/plans/2026-10-01-cached-skill-matching.md) for implementation steps, score rules, extraction review and replacement gates.
+
+This is a planning change only. The pivot has not been implemented or tested. Existing code last passed 460 backend tests; all new implementation/quality/performance gates remain pending. Repeated comparisons over valid cached JD/profiles must make zero provider requests. Development usage remains **173/200**, with **27 remaining**; this update made no provider calls. Holdout remains unopened, the feature remains default-off, and no PR or release is authorized.
+
+All sections below are **historical measurements of the superseded overall-fit design**. Their scores, human preferences, gates and proposed next fixes must not be interpreted as validation requirements or achievements for Skill fit. Preserve them as the audit record; append new measurements with the new score scope when execution resumes.
+
+---
+
 Task 9 is **in progress** on `feat/ai-overall-job-fit`. The initial live development benchmark failed completeness and quality gates. Measured fixes are implemented and undergoing verification; untouched holdout and actual-size performance evidence remain pending. The matching feature remains default-off. Synthetic tests establish report/cache behavior, not ranking quality, live speed or readiness for release.
 
 ## What is measured

@@ -1,20 +1,20 @@
-# AI Overall Job Fit Implementation Plan
+# AI Matching Implementation Plan — Current Scope: Cached Skill Fit
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execution method must be selected by the owner before implementation.
+> **For agentic workers:** Use superpowers:executing-plans with the already selected native, task-by-task method. Read the active 2026-10-01 Task 9 revision first; completed earlier tasks are historical records. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Help one person choose among their resume versions using complete, source-backed AI assessments, a shared overall-job-fit rubric, logical comparable scores, and cached results.
+**Goal:** Parse explicit JD skills once, reuse cached resume skills and calculate comparable skill-fit scores in the backend.
 
-**Architecture:** Start a new branch from up-to-date remote main in an isolated checkout at execution time. Borrow small validated contracts, normalization, scoring, document-warning, and cache components; build a lean AI requirement/evidence adapter rather than copying the current dual-mode extraction pipeline. AI interprets source text; the server validates coverage and provenance, calculates scores, and assigns ties. Preserve the separately labeled existing matching endpoint for rollback and offline use.
+**Architecture:** The owner approved a pivot on 2026-10-01: AI performs document extraction only; local code matches cached skills, calculates scores and ranks resumes. Per-comparison AI evidence, responsibility/experience assessment, semantic fallback and the proposed passage-reference fix are superseded.
 
-**Approved extension:** Analyze each saved resume into a reusable, job-independent evidence profile. Store canonical skills, evidence levels, activities, credentials and dated work with validated source spans. New jobs reuse those profiles; job-specific semantic assessment and deterministic scoring remain separate. This replaces repeated full-resume extraction, not the original source document.
+**Tech Stack:** Existing Python/FastAPI/Pydantic/Decimal, SQLite/PostgreSQL, guarded provider client and React/Vite/Vitest. No new runtime dependency.
 
-**Tech Stack:** Existing Python/FastAPI/Pydantic, OpenAI-compatible guarded client, SQLite/PostgreSQL storage, React/Vite/Vitest, pytest. No new runtime dependency.
+**Active specification:** [Cached Skill Matching — Task 9 Revision](2026-10-01-cached-skill-matching.md). Read that revision before implementing any further Task 9 changes. It defines the score, reusable components, removed paths, exact interfaces/tests and revised gates. Its requirements take precedence over historical sections below.
 
-**Spec:** This plan's “Design baseline” section records the in-chat design and the owner's choice of overall job fit. Earlier evidence-branch specs are reference material, not authority for the new branch. The proposed numeric weights, credits, batching ceilings, and release thresholds below require owner review with this plan before execution.
+**Execution status:** Tasks 1–8 were implemented under the previous overall-fit design. Task 9 is replanned as Tasks 9.1–9.5 in the linked revision; implementation of the pivot is pending. Task 10 remains pending. Preserve the existing native, task-by-task execution method and `feat/ai-overall-job-fit` branch. Latest existing-code verification is 460 backend tests; it does not establish the new design. Development usage remains 173/200, with 27 requests remaining. No calls were made for this planning update; holdout and feature activation remain unauthorized.
 
-**Execution status:** The owner authorized implementation task-by-task. Tasks 1–8, including prerequisite 4A, are complete on `feat/ai-overall-job-fit`; Task 9 is in progress and Task 10 remains pending. The owner authorized the supplied document folder and saved `exp/gpt6 luna` provider. The owner reviewed the same-person development preferences and approved up to 100 requests total for main/candidate; the resumed run used the explicit benchmark dotenv key and failed quality/completeness gates; release activation remains unauthorized. Each completion updates this plan and the execution ledger.
+**Historical records:** Earlier completed steps and measurements are retained for provenance, not as instructions to restore semantic overall-fit scoring. Existing code still implements that older path until the revised tasks are executed.
 
-**Plan persistence:** The repository ignores `docs/superpowers/`. This file is saved locally but is not automatically tracked. Task 1 must explicitly transfer it to the destination and force-add this one approved plan path when committing planning records; do not change the ignore rule or force-add the entire directory.
+**Plan persistence:** `docs/superpowers/` is ignored. The original plan is already tracked; explicitly force-add only the new `2026-10-01-cached-skill-matching.md` revision when committing it. Do not change the ignore rule or stage private planning directories.
 
 ## Current task status
 
@@ -29,7 +29,7 @@
 | 6 — rubric and assessment caches | Complete | 40 cache tests and 368 backend tests passed; warm zero-call comparisons, mixed hits, concurrent rubric freezing and migrations checked |
 | 7 — authenticated API | Complete | 59 focused, 411 backend and 71 frontend tests passed; production build passed |
 | 8 — truthful UI and request lifecycle | Complete | 89 frontend and 43 authenticated API tests passed; production build passed (1,593 modules); no live provider calls |
-| 9 — quality/stability/speed evidence | In progress | Benchmark implemented; 28 focused / 439 backend checks passed; Live initial run failed: main 9/12 preferences; candidate 0/6 cold complete; 74/100 requests used; fixes under verification |
+| 9 — cached skill matching pivot and validation | Replanned; implementation pending | Active Tasks 9.1–9.5; 173/200 requests used; former evidence/semantic experiments superseded |
 | 10 — final regression and handoff | Pending | |
 
 Task 3 accepts validated proposals with stable source/version-based requirement IDs; persisted frozen rubrics belong to Task 6. Its provider schema requires exact chunk acknowledgment and explicit completion. Unknown technologies survive without a taxonomy gate. Server validation rejects ambiguous quotes, split/partial literal OR groups, unsupported tenure minima, non-equivalent category conflicts and explicit document instructions. Semantic interpretation remains the AI's responsibility and is not yet validated by live quality measurements. Over-limit rubrics remain needs_review without trimming.
@@ -70,7 +70,7 @@ Vault saves publish the saved resume before independent profile preparation. Upl
 
 Task 8 verification: 89 frontend tests and 43 authenticated API tests passed, including all named UI regressions and repeat-profile cache checks. Production build passed (1,593 modules); existing Starlette/AnyIO warning only. All 40 pinned source hashes and the original branch/status remain unchanged. No dependencies, live AI calls, deployment or flag activation were added. Tasks 9–10 remain pending; synthetic checks do not establish ranking quality or live latency.
 
-## Global Constraints
+## Historical Global Constraints — superseded by the active Task 9 revision
 
 - Compare versions of one person's resume, not different applicants; the percentage is documented overall job fit, never a hiring probability or an actual external ATS score.
 - Use the same frozen job requirements, category weights, credits, and denominator for every resume in a comparison.
@@ -83,7 +83,7 @@ Task 8 verification: 89 frontend tests and 43 authenticated API tests passed, in
 - Keep private resume/JD text, keys, and provider response bodies out of tracked fixtures, logs, and public reports. Live development/holdout usage needs explicit permission for the selected documents, provider, and costs; other-chat permissions are not assumed to cover new requests.
 - Preserve the dirty source checkout. Do not stash, reset, clean, switch it, or commit another chat's work to facilitate transfer.
 
-## Review Focus
+## Historical Review Focus
 
 - A late requirement or project must survive extraction and matching, including documents above ordinary request-batch limits (Tasks 2–4).
 - “Java or Python,” “Java and Python,” preferred tenure, and the same qualification repeated in multiple sections must produce the correct denominator (Tasks 2–3).
@@ -91,7 +91,7 @@ Task 8 verification: 89 frontend tests and 43 authenticated API tests passed, in
 - A cached resume mixed with an edited/new resume must still use one frozen rubric, and different users/providers must never share results (Task 6).
 - A job/profile switch during an in-flight request, resume edit with unchanged count, or tied result must not display stale scores or an invented winner (Tasks 7–8).
 
-## Design baseline
+## Historical design baseline — overall-fit scoring retired by the owner
 
 ### Meaning of the score
 
@@ -385,31 +385,18 @@ expect(screen.getByText('Overall job fit')).toBeInTheDocument();
 - [x] **Step 4: Show backend-authoritative overall/raw/category and separate skill-coverage summaries.** Label `Overall job fit`; explain percentage as source-backed fit, never hiring probability. Show tied leaders and actionable review/error states with accessible controls. Remove projected-score/Boost arithmetic on the new path; adopted suggestions trigger a real reevaluation only after saved resume text changes. No new full evidence component. Verify tests and frontend build.
 - [x] **Step 5: Commit.** Subject: `fix: display current evidence backed fit rankings`.
 
-## Task 9: Quality, stability, speed, and release evidence
+## Task 9: Cached skill matching pivot, quality and performance
 
-**Files:** Adapt `scripts/evaluate_matching.py`; `tests/test_match_benchmark.py`; `docs/ai-matching-evaluation.md`; anonymized authorized fixtures under `tests/fixtures/matching/` only.
+**Active plan:** [2026-10-01-cached-skill-matching.md](2026-10-01-cached-skill-matching.md). This replaces the former Task 9 execution steps and their AI-evidence/full-source gates.
 
-**Interfaces:** AI-only report contains run/source/rubric fingerprints, provider/model (no keys), complete/incomplete counts and reasons, correct/tied/reversed/unscored strict pairs, per-category/skill scores, per-job elapsed time, cache behavior, provider calls/tokens and usage availability. Missing token usage is unavailable, not zero. Existing cross-person/offline fixture outcomes never satisfy this gate.
+- [x] Record the owner-approved scope: AI extracts; backend compares cached skills and scores.
+- [ ] **9.1:** Narrow frozen JD extraction to required/preferred skills.
+- [ ] **9.2:** Implement pure cached-skill matching and deterministic Skill fit arithmetic.
+- [ ] **9.3:** Connect local matching to existing caches and delete retired AI comparison paths.
+- [ ] **9.4:** Update API/UI scope, copy and matched/missing skill summaries.
+- [ ] **9.5:** Verify reviewed extraction accuracy, deterministic scores, zero-call cached comparisons, lifecycle and honest performance gates.
 
-**Profile measurement extension:** Report profile extraction, rubric extraction and semantic assessment calls/tokens separately. Measure (a) first upload/profile preparation, (b) first job with prepared profiles, (c) a second different job against the same vault, (d) a warm identical comparison, (e) one edited resume, and (f) a scorer-only version bump. Second-job comparison must make zero profile-extraction calls; scorer-only change must make zero profile-extraction/assessment calls. Count original-source fallback frequency and compare ranking quality against full-source assessment to detect profile omissions. A speed gain that hides evidence or worsens completeness does not pass.
-
-- [x] **Step 1: Add failing report checks.** `test_tied_and_unscored_pairs_stay_in_denominator`; `test_report_separates_per_job_latency_from_suite_total`; `test_missing_usage_is_unavailable`; `test_same_person_gate_rejects_cross_person_fixture`; `test_stability_reports_repeated_order_changes`.
-
-```python
-assert report["strict_pairs"]["total"] == 3  # One correct, one tied, one unscored.
-assert report["strict_pairs"]["correct"] == 1
-assert report["token_usage"] is None  # Provider omitted usage metadata.
-assert cross_person_report["release_gate_passed"] is False
-assert changing_order_report["stability"]["reversed_pairs"] == 1
-```
-- [x] **Step 2: Run `./.venv/Scripts/python.exe -m pytest -q tests/test_match_benchmark.py`.** Confirm intentional missing report behavior fails.
-- [x] **Step 3: Implement lean measurement/reporting.** Establish main and new-branch baselines with the same approved provider and same allowed development inputs. Use temporary isolated storage for true cold runs; test repeated evidence against a fixed rubric separately from repeated cold rubric extraction. Report rubric drift separately from evidence/ranking drift. No test-only score overrides or desired-winner bonuses.
-- [ ] **Step 4: Perform authorized development measurements.** At least three runs on each approved development comparison. Require complete evaluations and no preferred-pair reversal across those repeats before freezing a fresh holdout. If it fails, trace category/evidence contributions and fix the measured cause; do not add weight knobs or consume holdout prematurely.
-- [ ] **Step 5: Run untouched reviewed holdout and performance gates only after development passes.** Proposed gate: at least 10 real same-person jobs and 20 strict reviewed pairs; >=90% strict ordering agreement, 100% evaluation completeness, no invalid quote credits. Ties/unscored strict preferences are failures; explicitly reviewed ties are measured separately. Repeat holdout evaluation three times against the frozen rubric; all runs must satisfy the gate. These requirements are new proposed gates, not historical achievements.
-- [ ] **Step 6: Measure individual cold/warm comparisons.** Five real approved resume versions plus their full real approved JD, at actual document lengths (owner waived the fixed 8,000-character workload): complete each cold comparison within 120 seconds, report actual per-job latency and calls/tokens; warm repeats preserve IDs/scores with zero calls. Compare to main cold baseline, and report any latency/token regression honestly. A five-job total cannot establish the single-job target. Include analysis-call latency when reporting the full user journey.
-- [ ] **Step 7: Publish the gate report and commit.** Subject: `test: measure AI ranking quality and cache performance`. Leave flag off if any required gate fails; list exact failures and next diagnosis.
-
-**Execution note (2026-09-30):** Initial reporting checks passed (28 focused/439 backend). The owner confirmed same-person inputs, all four preferences and 100 total provider requests. The explicit benchmark dotenv key resumed execution after local saved-key decryption failed. At candidate `841dafe`, main completed six cold comparisons and got 9/12 preferences correct; candidate completed none, with every strict observation unscored. Initial benchmark used 73 requests; one profile diagnostic brought total to 74. No holdout or exact-size performance inputs were used. Transport cutoff, wrapped literal phrases, unrecognized headings and expanded skill names were traced and fixed; failed preparation no longer causes repeated fixed/warm setup. Initial fixes passed 153 focused and 448 full backend tests. Nine subsequent pair-diagnostic requests had no SDK failures but still produced incomplete source-validated results; a one-request trace identified an invalid JD quote. Cumulative usage is 84/100. A single bounded schema/source correction pass passed 174 focused tests; all 452 backend tests passed. The targeted cold smoke accepted the JD and both profiles but its evidence JSON failed parsing; an identical request subsequently parsed without truncation. Cumulative usage is 89/100. Received JSON failures now share the same single-correction cap; The final cold smoke remained incomplete after seven requests: quote repair succeeded but full-source JSON had redundant closing delimiters. Usage is 96/100. A narrow shared-parser fix passed all 454 backend tests; an offline replay validated all 50 supplied source evidence items. Three fresh source-only repeats completed with identical provider payloads; reviewed order was correct 2/3, with 14 semantic credits varying and literal credits stable. Total usage is 99/100, one remains. Next: review unstable semantic requirement/source pairings, tighten direct action/object relevance without desired-winner weight adjustments, then rerun the complete development/cache checks after a higher total request cap is approved. Full development, holdout, exact-size performance and cache gates remain open. Owner subsequently approved 200 total development requests (99 already used). A focused semantic decision-procedure change passed 108 regressions and the exact-payload three-repeat live comparison was complete/correct 3/3; scores still varied. Usage is 102/200. Recorded profiles exposed overlapping-context inflation; merging original intervals preserves all facts/coordinates and passed all 455 backend tests. Full five-version/two-job development/cache measurements are pending. Only assessment cache identity changes; scorer weights and resume/JD extraction stay unchanged. Steps 4–7 remain incomplete until their actual gates pass. Private documents/response fixtures remain ignored. See `docs/ai-matching-evaluation.md` for measured results and limitations.
+Keep existing profile/source validation, cache isolation, parser fixes, aliases and UI race safeguards. The passage-reference and atomic-semantic experiments are cancelled. Historical measurements remain in `docs/ai-matching-evaluation.md`; they do not pass the revised gates. All implementation checkboxes remain open until their actual verification passes.
 
 ## Task 10: Final regression, selective cleanup, and release handoff
 
@@ -423,7 +410,7 @@ assert changing_order_report["stability"]["reversed_pairs"] == 1
 - [ ] **Step 4: Review the complete destination diff against the transfer manifest.** Every borrowed working-tree fix has a corresponding regression; source checkout hashes/status remain intact except independently authored source-chat changes. No keys, private fixtures, unrelated main changes, or deployment changes included.
 - [ ] **Step 5: Commit final documentation and hand off for owner review.** Subject: `docs: document AI matching validation and rollout`. Push/PR only when authorized by the subsequent execution request/workflow. Release flag activation requires explicit approval after passing gates; rollback disables the flag and restores labeled legacy/offline behavior without deleting saved data.
 
-## Acceptance and coverage checklist
+## Historical acceptance and coverage checklist — see active revision for current gates
 
 | Loose end | Owning task | Completion evidence |
 |---|---|---|
@@ -445,7 +432,7 @@ assert changing_order_report["stability"]["reversed_pairs"] == 1
 | Synthetic-only “quality” / unstable rankings / misleading speed | 9 | Reviewed same-person gates, repeated runs, per-job measurements |
 | Legacy clients / offline fallback / safe rollback | 7–10 | Separate old route, explicit modes, default-off flag journey |
 
-## Self-review record
+## Historical self-review record
 
 - Design requirements map to Tasks 1–10 plus inserted Task 4A and the coverage table; there is no planned offline enhancement or unexplained role bonus. Execute Task 4A before Task 4.
 - Signatures/model names are consistent across extraction, scoring, pipeline, storage and API tasks. New fields have explicit null/incomplete semantics.
@@ -470,16 +457,6 @@ Task 9 source-isolation diagnostic: identical full-source/frozen-rubric inputs a
 Task9 v9 controlled retry fails source validation after2calls/52.02s/20,351tokens; usage169/200,31remain. Correction now lists all invalid claims using server-supplied IDs and fixed rule codes, one correction only; v10 assessment cache invalidation. RED observed,138focused/460backend GREEN. Live verification pending. Offline QA rubric21criteria/16sentences reveals split targets vs whole-sentence assessment ambiguity; investigate without weight tuning. Steps4-7 open, Task10 pending.
 
 
-### Task 9 architecture decision pending after source-copy failures
+### Task 9 architecture decision resolved — 2026-10-01
 
-Latest v10 live correction remains unscored after2requests/122.43s/19,720tokens. Runtime-only QA atomic-criterion control and experiment each return InternalServerError; stopped after2requests, no production prompt change or semantic conclusion. Conservative usage173/200,27remain. Latest production verification460backend tests passing. Steps4-7 remain open, Task10 pending.
-
-Proposed smallest next experiment, pending owner architecture review:
-
-- [ ] Supply server-generated source-passage references and let evidence proposals select a reference rather than freely copy source_quote. Reuse existing profile spans and original chunk helpers; preserve every supplied context and all original source in fallback, with no keyword filtering, new database table, second model or invented work.
-- [ ] Resolve the selected reference on the server to exact saved text and offsets before the existing evidence/section/literal/tenure checks. Reject unknown, foreign-resume, foreign-chunk or unsupplied references. Reference boundaries come from the server; the provider cannot publish offsets or arbitrary quoted text. Preserve explicit absence and unresolved handling.
-- [ ] Retain complete per-resume checklist coverage, original chunk coverage, strict scoring and one bounded correction. Regression must cover repeated text selected by an unambiguous reference, invalid reference rejection, section/negation/learning rules and failure remaining unscored. Bump assessment cache identity only if the transport changes; preserve original JD/profile data and scorer weights.
-- [ ] Verify the previously failed source input first, capped at two additional requests. Expand to five resumes only if complete; stop on failure and record evidence. All further development calls stay within the existing173/200 ledger and retain the two interrupted-call reservations.
-- [ ] Separately test atomic-criterion versus whole-sentence grading after provider availability returns, using the identical frozen QA rubric/source inputs. Do not assume a preferred winner proves correct credits, remove legitimate cloud/pipeline evidence or change weights to fit labels.
-- [ ] Consider removing unused provider-facing provenance fields only after retaining all facts/source and measuring the effect: current offline estimate123,379->82,701serialized characters,33.0% smaller, not a latency/token claim. Preserve all server-native provenance and cache validation.
-- [ ] Rerun authorized full development/cold/cache measurements only after the bounded probes pass. Holdout stays unopened until development gates pass; release flag remains off. No Task10, push or PR from this checkpoint.
+The owner explicitly rejected per-comparison responsibility/supporting-evidence assessment and approved cached skill matching plus backend scoring. The source-passage-reference prototype and atomic-semantic prompt experiment are superseded and must not be implemented. Follow the linked Task 9 revision. Request usage stays 173/200; this planning update used zero requests. Existing product code is unchanged; Tasks 9.1–9.5 and Task 10 remain pending.
