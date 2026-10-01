@@ -217,3 +217,15 @@ def test_complete_comma_or_group_and_alias_equivalents_have_one_denominator():
     same=extract(jd,Provider([proposal(jd,"JavaScript",alternatives=["JavaScript","JS"])]))
     assert same.status=="complete" and len(same.items)==1
     assert same.items[0].canonical_key=="javascript" and not same.items[0].alternatives
+
+
+def test_literal_jd_skill_rejection_supplies_specific_correction_rule():
+    class Correctable:
+        def __init__(self):self.calls=[]
+        def extract_match_chunk(self,payload,*,timeout):
+            self.calls.append(payload)
+            key="UI" if payload.get("validation_feedback",{}).get("validation_rule")=="unsupported_literal_skill" else "UI testing"
+            return dict(chunk_index=0,complete=True,items=[proposal("Required: UI tests.",key)])
+    engine=Correctable();result=extract("Required: UI tests.",engine)
+    assert result.status=="complete" and result.items[0].canonical_key=="ui"
+    assert len(engine.calls)==2

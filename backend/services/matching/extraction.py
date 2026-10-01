@@ -20,6 +20,7 @@ from .normalization import aliases_for_skill, canonicalize_skill
 EXTRACTOR_VERSION = "skill-jd-v1"
 _CORRECTION_RULES = {"Source quote must occur exactly once in the supplied chunk":"source_quote_not_unique",
                   "Alternatives require an explicit OR group":"alternatives_require_explicit_or",
+                  "Literal skill must occur in its source quote":"unsupported_literal_skill",
                   "Unsupported skill fact":"unsupported_literal_skill",
 }
 MAX_REQUIREMENTS = 64
