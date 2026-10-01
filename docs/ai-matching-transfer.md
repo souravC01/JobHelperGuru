@@ -156,3 +156,10 @@ Tasks 1–5, including 4A, are complete. Task 6 and later tasks remain pending p
 - RED reproduced missing new routing/lifecycle/tie/incomplete behavior, nullable App callback failure, missing profile save workflow, absent source-less legacy choice and the wrong extraction warning field. A separate check reproduced first-resume selection in BulletCraft after null selection. Corrected duplicate fixture display queries and an incomplete mechanical App guard insertion without weakening assertions.
 - GREEN: 89 frontend tests, 43 authenticated API checks and production build (1,593 modules) passed. The API zero-call repeat test uses isolated storage and a synthetic provider; no live requests. Only the existing Starlette/AnyIO deprecation warning remains. Original source checkout is clean, still on the pinned branch/head, with all 40 hashes unchanged.
 - Task 9 remains pending. Live quality/latency and release activation are not established by these checks; rollout stays disabled by default.
+
+
+## Task 9 measured fixes (in progress)
+
+Shared whitespace-aware literal matching, combined-section recognition and guarded SDK timeout propagation fix causes measured with the approved provider. JD/profile prompts distinguish literal skills from described activities. One received invalid schema/source response can be corrected once under the same deadline and validator; explicit unresolved source and network failures are not retried. Version bumps invalidate affected caches. These fixes reuse existing modules and add no dependency, scoring weight or offline matching pipeline.
+
+Initial fixes passed 448 full backend checks; bounded correction passed 174 focused checks, fresh full regression passed all 452 tests. Live usage is 84/100: the initial candidate completed no cold comparisons, and subsequent targeted measurements still failed strict source validation despite successful transport. Steps 4–7 remain open; no holdout/performance or release pass is claimed. The original evidence branch ref remains unchanged; the primary checkout independently moved to the AI feature branch and was safely fast-forwarded to tested fixes.

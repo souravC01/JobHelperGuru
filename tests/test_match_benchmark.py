@@ -284,8 +284,8 @@ def test_failed_preparation_does_not_repeat_profiles_as_fixed_evidence_or_lifecy
     runs=m.run_quality([case()],engine=engine,as_of=date(2026,9,30))
     assert len([r for r in runs if r['phase']=='cold'])==3
     assert not [r for r in runs if r['phase']=='fixed_rubric']
-    assert engine.engine.counts()['resume_profile']==6
+    assert engine.engine.counts()['resume_profile']==12
     engine=m.CountingEngine(FailedProfiles(),max_calls=80)
     lifecycle=m.run_lifecycle(case(),engine=engine,as_of=date(2026,9,30))
     assert [r['phase'] for r in lifecycle]==['profile_preparation']
-    assert engine.engine.counts()['resume_profile']==2
+    assert engine.engine.counts()['resume_profile']==4

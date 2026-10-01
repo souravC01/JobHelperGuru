@@ -149,3 +149,18 @@ def test_overlap_proposals_deduplicate_and_partial_or_group_is_rejected():
     quote = "Java or Python or Rust"
     result = extract(quote, Provider([proposal(quote, "Java", alternatives=["Java", "Python"])]))
     assert result.status == "failed"
+
+
+def test_jd_repairs_received_quote_without_relaxing_provenance():
+    from backend.services.matching.extraction import extract_requirements
+    import time
+    class Repair:
+        def __init__(self):self.calls=[]
+        def extract_match_chunk(self,payload,*,timeout=None):
+            self.calls.append(payload)
+            quote="Must use Python." if len(self.calls)==1 else "Required Python."
+            return dict(chunk_index=0,complete=True,items=[dict(category="required_skills",kind="skill",canonical_key="Python",alternatives=[],source_quote=quote,required_months=None)])
+    engine=Repair();result=extract_requirements("Required Python.",engine=engine,deadline=time.monotonic()+30)
+    assert result.status=='complete' and len(engine.calls)==2
+    assert result.items[0].source_quote=="Required Python." and result.items[0].source_start==0
+    assert engine.calls[1]['validation_feedback']['previous_response']['items'][0]['source_quote']=="Must use Python."

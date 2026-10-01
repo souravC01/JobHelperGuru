@@ -10,7 +10,7 @@ from .models import MatchContract, NonEmptyString, EvaluationStatus, EvidenceLev
 from .normalization import CANONICAL_SKILL_ALIASES, canonicalize_skill
 from .provenance import _quote_span, date_ranges, fingerprint, section_at, source_hash, verified_level, work_span
 
-PROFILE_EXTRACTOR_VERSION = "resume-profile-v2"
+PROFILE_EXTRACTOR_VERSION = "resume-profile-v3"
 
 
 class FactProposal(MatchContract):
@@ -82,6 +82,7 @@ def validate_profile(profile, resume, version_key=None):
 def extract_resume_profile(resume: Resume, *, engine: Any, deadline: float) -> ResumeProfile:
     metadata=dict(resume_id=resume.id, source_hash=source_hash(resume.content),
                   extractor_version=PROFILE_EXTRACTOR_VERSION, version_key=profile_version_key(engine))
+    from .extraction import _validated_chunk
     chunks=chunk_text(resume.content)
     if resume.extraction_warnings or not chunks:
         return ResumeProfile(status="needs_review",warnings=["source_incomplete"],**metadata)
@@ -92,12 +93,11 @@ def extract_resume_profile(resume: Resume, *, engine: Any, deadline: float) -> R
             if remaining<=0: raise TimeoutError
             payload=dict(task="resume_profile",source_text=chunk.text,section_context=section_at(resume.content,chunk.start),
                          chunk_index=index,chunk_count=len(chunks),schema=ProfileChunk.model_json_schema())
-            response=engine.extract_match_chunk(payload,timeout=remaining)
-            if time.monotonic()>=deadline: raise TimeoutError
-            result=ProfileChunk.model_validate(response)
-            if result.chunk_index!=index or not result.complete: raise ValueError("Incomplete source analysis")
-            for proposal in result.items:
-                f=_fact(proposal,chunk,resume.content)
+            def validate(response):
+                result=ProfileChunk.model_validate(response)
+                if result.chunk_index!=index or not result.complete: raise ValueError("Incomplete source analysis")
+                return [_fact(proposal,chunk,resume.content) for proposal in result.items]
+            for f in _validated_chunk(payload,engine=engine,deadline=deadline,validate=validate):
                 unique.setdefault(f.id,f)
         facts=sorted(unique.values(),key=lambda f:(f.source_start,f.source_end,f.id))
         employment=[f for f in facts if f.kind=="employment"]

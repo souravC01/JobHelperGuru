@@ -80,4 +80,13 @@ A separate one-request diagnostic on the shortest reviewed resume returned usabl
 - JD/profile prompts require literal skill names/acronyms from their quotes and classify described work activities separately. Unsupported expansions remain rejected. JD, profile and assessment versions are bumped to invalidate earlier derived artifacts.
 - Fixed-rubric evidence repeats require prepared profiles. Failed upload preparation stops the lifecycle measurement instead of repeatedly rebuilding failed profiles under warm/scorer labels. Missing phases cannot pass any gate.
 
-These changes passed 153 focused checks. Fresh full regression and bounded live smoke outcomes will be added after verification; no passing development/holdout claim is made.
+The first fixes passed 153 focused checks and all 448 backend tests. A subsequent bounded correction pass has passed 174 focused checks; all 452 backend tests also pass, and live smoke is pending. No passing development/holdout claim is made.
+
+
+### Targeted follow-up and bounded correction
+
+Candidate `296a316` received nine requests on the already reviewed QA-over-Java-without-skills pair. All nine SDK requests returned without transport failure (43,920 reported tokens), but none of the three cold comparisons completed. A source-backed Java profile was accepted; the QA profile still proposed a nonliteral Database skill. JD and evidence responses also failed strict source/schema validation. A one-request pipeline trace then identified a JD quote absent verbatim from the source. Cumulative development usage is **84/100 requests**, with 16 remaining. These are targeted diagnoses, not passing full-development observations.
+
+One received response rejected by schema/source checks now receives at most one correction request using the identical source, schema and original deadline. The rejected response is untrusted input; feedback uses a fixed reason without private exception text or desired winners. The corrected response passes the same validator. Network failures, explicitly incomplete source, and missing/unresolved evidence do not trigger this correction. JD/profile/assessment versions invalidate earlier cached artifacts. No new dependencies or scoring weights were added.
+
+During Task 9 the primary checkout independently moved onto `feat/ai-overall-job-fit`; the managed worktree became detached. The clean primary feature branch was safely fast-forwarded to the tested fixes. The original `feat/evidence-based-resume-matching` ref remains pinned at `bccc938`; historical source-file hash checks refer to that earlier checkout, not the now-switched primary directory. No PR, release activation or holdout access occurred.

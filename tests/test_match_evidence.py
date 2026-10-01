@@ -217,3 +217,26 @@ def test_contradicted_profile_claim_cannot_be_dropped_before_scoring():
     assert result.status=="needs_review" and result.unresolved_requirement_ids==["q"]
     assert not result.items and "unresolved_evidence" in result.warnings
     assert not engine.calls
+
+
+def test_received_invalid_evidence_gets_one_source_validated_correction():
+    import time
+    from datetime import date
+    from backend.models import Resume
+    from backend.services.matching.extraction import extract_evidence_batch
+    from backend.services.matching.models import Requirement
+    class Repair:
+        api_base_url='https://provider.example/v1'
+        model_name='test'
+        def __init__(self):self.calls=[]
+        def extract_match_chunk(self,payload,*,timeout=None):
+            self.calls.append(payload);r=payload['resumes'][0]
+            quote='Invented reliability claim.' if len(self.calls)==1 else 'Maintained service availability.'
+            return {'items':[{'resume_id':r['resume_id'],'chunk_index':r['chunk_index'],'assessed_requirement_ids':['q'],'unresolved_requirement_ids':[],
+                'items':[{'requirement_id':'q','level':'demonstrated','source_quote':quote}]}]}
+    requirement=Requirement(id='q',category='responsibilities',kind='semantic',canonical_key='availability',source_quote='Maintain availability.',source_start=0,source_end=22)
+    engine=Repair();resume=Resume(id='r',name='R',content='Projects:\nMaintained service availability.')
+    results=extract_evidence_batch([resume],{},[requirement],as_of=date(2026,9,30),engine=engine,deadline=time.monotonic()+30)
+    assert results['r'].status=='complete' and len(engine.calls)==2
+    assert results['r'].items[0].source_quote=='Maintained service availability.'
+    assert 'validation_feedback' in engine.calls[1]

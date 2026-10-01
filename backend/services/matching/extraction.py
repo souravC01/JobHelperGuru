@@ -20,8 +20,8 @@ from .provenance import _quote_span
 from .models import MatchContract, NonEmptyString, Requirement, RequirementCategory, RequirementExtraction, ResumeProfile, EvidenceExtraction, has_evidence_conflict
 from .normalization import aliases_for_skill, canonicalize_skill
 
-EXTRACTOR_VERSION = "overall-jd-v2"
-ASSESSMENT_VERSION = "overall-assessment-v2"
+EXTRACTOR_VERSION = "overall-jd-v3"
+ASSESSMENT_VERSION = "overall-assessment-v3"
 MAX_REQUIREMENTS = 64
 _INSTRUCTION = re.compile(r"ignore\b.*\b(?:rubric|instructions?)|\bscore\s*\d+|\bsystem\s*prompt", re.I)
 _ELIGIBILITY = re.compile(r"\b(?:work authorization|legally authorized|sponsorship|graduation window|class of 20\d{2})\b", re.I)
@@ -131,6 +131,22 @@ def _deduplicate(items: list[Requirement]) -> list[Requirement]:
     return sorted(selected.values(), key=lambda r: (r.source_start, r.id))
 
 
+def _validated_chunk(payload, *, engine, deadline, validate):
+    """Correct one received invalid response; every attempt uses the same source and validator."""
+    for attempt in range(2):
+        remaining=deadline-time.monotonic()
+        if remaining<=0: raise TimeoutError
+        response=engine.extract_match_chunk(payload,timeout=remaining)
+        if time.monotonic()>=deadline: raise TimeoutError
+        try:
+            return validate(response)
+        except (ValueError,TypeError,KeyError):
+            if attempt or isinstance(response,dict) and response.get('complete') is False:
+                raise
+            # Exception messages may contain private text; feedback uses a fixed server-owned reason.
+            payload={**payload,'validation_feedback':dict(reason='schema_or_source_validation_failed',previous_response=response)}
+
+
 def extract_requirements(text: str, *, engine: Any, deadline: float) -> RequirementExtraction:
     """Freeze an accepted interpretation; never score partial provider observations."""
     metadata = dict(source_hash=hashlib.sha256(text.encode("utf-8")).hexdigest(), extractor_version=EXTRACTOR_VERSION)
@@ -147,13 +163,12 @@ def extract_requirements(text: str, *, engine: Any, deadline: float) -> Requirem
             payload = dict(task="requirements", chunk_index=index, chunk_count=len(chunks),
                            section_context=section_context,
                            source_text=chunk.text, schema=RequirementChunk.model_json_schema())
-            response = engine.extract_match_chunk(payload, timeout=remaining)
-            if time.monotonic() >= deadline:
-                raise TimeoutError
-            result = RequirementChunk.model_validate(response)
-            if result.chunk_index != index or not result.complete:
-                raise ValueError("Missing complete chunk acknowledgment")
-            items.extend(_materialize(p, chunk, text, metadata["source_hash"]) for p in result.items)
+            def validate(response):
+                result=RequirementChunk.model_validate(response)
+                if result.chunk_index!=index or not result.complete:
+                    raise ValueError("Missing complete chunk acknowledgment")
+                return [_materialize(p,chunk,text,metadata["source_hash"]) for p in result.items]
+            items.extend(_validated_chunk(payload,engine=engine,deadline=deadline,validate=validate))
         items = _deduplicate(items)
     except TimeoutError:
         return RequirementExtraction(status="needs_review", warnings=["deadline_exceeded"], **metadata)
@@ -264,40 +279,40 @@ def _assessment_round(requests, requirements, engine, deadline, as_of):
     if remaining <= 0: raise TimeoutError
     payload = dict(task="evidence_batch", requirements=[r.model_dump(mode="json") for r in requirements],
                    resumes=[request["payload"] for request in requests], schema=EvidenceBatchProposal.model_json_schema())
-    response = engine.extract_match_chunk(payload, timeout=remaining)
-    if time.monotonic() >= deadline: raise TimeoutError
-    wire = EvidenceBatchProposal.model_validate(response)
-    records = {r.resume_id: r for r in wire.items}
-    expected_resumes = {r["resume"].id for r in requests}
-    if len(records) != len(wire.items) or not set(records) <= expected_resumes:
-        raise ValueError("Duplicate or foreign resume IDs")
-    outcomes = {}
-    for request in requests:
-        resume, profile = request["resume"], request["profile"]
-        expected = set(request["payload"]["requirement_ids"])
-        record = records.get(resume.id)
-        if record is None:
-            outcomes[resume.id] = ([], expected, "missing_assessment")
-            continue
-        if record.chunk_index != request["payload"]["chunk_index"]:
-            raise ValueError("Wrong source chunk acknowledgment")
-        by_id = {r.id: r for r in requirements}
-        items = []
-        seen = set()
-        for proposal in record.items:
-            if proposal.requirement_id not in expected or proposal.requirement_id in seen:
-                raise ValueError("Duplicate or foreign requirement IDs")
-            seen.add(proposal.requirement_id)
-            items.append(_validate_evidence_proposal(proposal, by_id[proposal.requirement_id], resume,
-                                                    request["contexts"], profile, as_of))
-        assessed, unresolved = set(record.assessed_requirement_ids), set(record.unresolved_requirement_ids)
-        if len(assessed) != len(record.assessed_requirement_ids) or len(unresolved) != len(record.unresolved_requirement_ids) or assessed & unresolved or not (assessed | unresolved) <= expected:
-            raise ValueError("Invalid requirement coverage")
-        if seen - assessed:
-            raise ValueError("Positive outcome cannot repair unsupported coverage")
-        missing = expected - (seen & assessed)
-        outcomes[resume.id] = (items, missing, "missing_assessment" if expected - (assessed | unresolved) or assessed - seen else "unresolved_evidence" if missing else None)
-    return outcomes
+    def validate(response):
+        wire = EvidenceBatchProposal.model_validate(response)
+        records = {r.resume_id: r for r in wire.items}
+        expected_resumes = {r["resume"].id for r in requests}
+        if len(records) != len(wire.items) or not set(records) <= expected_resumes:
+            raise ValueError("Duplicate or foreign resume IDs")
+        outcomes = {}
+        for request in requests:
+            resume, profile = request["resume"], request["profile"]
+            expected = set(request["payload"]["requirement_ids"])
+            record = records.get(resume.id)
+            if record is None:
+                outcomes[resume.id] = ([], expected, "missing_assessment")
+                continue
+            if record.chunk_index != request["payload"]["chunk_index"]:
+                raise ValueError("Wrong source chunk acknowledgment")
+            by_id = {r.id: r for r in requirements}
+            items = []
+            seen = set()
+            for proposal in record.items:
+                if proposal.requirement_id not in expected or proposal.requirement_id in seen:
+                    raise ValueError("Duplicate or foreign requirement IDs")
+                seen.add(proposal.requirement_id)
+                items.append(_validate_evidence_proposal(proposal, by_id[proposal.requirement_id], resume,
+                                                        request["contexts"], profile, as_of))
+            assessed, unresolved = set(record.assessed_requirement_ids), set(record.unresolved_requirement_ids)
+            if len(assessed) != len(record.assessed_requirement_ids) or len(unresolved) != len(record.unresolved_requirement_ids) or assessed & unresolved or not (assessed | unresolved) <= expected:
+                raise ValueError("Invalid requirement coverage")
+            if seen - assessed:
+                raise ValueError("Positive outcome cannot repair unsupported coverage")
+            missing = expected - (seen & assessed)
+            outcomes[resume.id] = (items, missing, "missing_assessment" if expected - (assessed | unresolved) or assessed - seen else "unresolved_evidence" if missing else None)
+        return outcomes
+    return _validated_chunk(payload,engine=engine,deadline=deadline,validate=validate)
 
 
 def extract_evidence_batch(resumes: list[Resume], profiles: dict[str, ResumeProfile], requirements: list[Requirement], *, as_of: date, engine: Any, deadline: float) -> dict[str, EvidenceExtraction]:

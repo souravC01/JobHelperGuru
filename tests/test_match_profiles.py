@@ -261,3 +261,31 @@ def test_multiline_literal_skill_fact_keeps_exact_original_quote():
     text="Work History\nBuilt REST \nAPIs with Java."
     profile=extract_resume_profile(Resume(id="r",name="R",content=text),engine=ProfileProvider([fact("Built REST \nAPIs with Java.","REST APIs")]),deadline=time.monotonic()+30)
     assert profile.status=="complete" and profile.facts[0].source_quote==text.split("\n",1)[1]
+
+
+def test_profile_repairs_one_received_unsupported_claim_with_source_feedback():
+    from backend.services.matching.profiles import extract_resume_profile
+    class RepairProvider(ProfileProvider):
+        def extract_match_chunk(self,payload,*,timeout=None):
+            self.calls.append(payload)
+            key="Database" if len(self.calls)==1 else "PostgreSQL"
+            return dict(chunk_index=0,complete=True,items=[fact("Built PostgreSQL services.",key)])
+    engine=RepairProvider([])
+    profile=extract_resume_profile(Resume(id="r",name="R",content="Projects:\nBuilt PostgreSQL services."),engine=engine,deadline=time.monotonic()+30)
+    assert profile.status=="complete" and profile.facts[0].canonical_key=="postgresql"
+    assert len(engine.calls)==2 and engine.calls[1]['validation_feedback']['reason']=='schema_or_source_validation_failed'
+    assert engine.calls[0]['source_text']==engine.calls[1]['source_text']
+
+
+def test_profile_does_not_retry_explicitly_unresolved_or_network_failure():
+    from backend.services.matching.profiles import extract_resume_profile
+    r=Resume(id="r",name="R",content="Projects:\nBuilt PostgreSQL services.")
+    engine=ProfileProvider([],mutate=lambda response:dict(response,complete=False))
+    assert extract_resume_profile(r,engine=engine,deadline=time.monotonic()+30).status!='complete'
+    assert len(engine.calls)==1
+    class NetworkFailure(ProfileProvider):
+        def extract_match_chunk(self,payload,*,timeout=None):
+            self.calls.append(payload);raise TimeoutError
+    engine=NetworkFailure([])
+    assert extract_resume_profile(r,engine=engine,deadline=time.monotonic()+30).status!='complete'
+    assert len(engine.calls)==1
