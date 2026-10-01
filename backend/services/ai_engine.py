@@ -217,11 +217,16 @@ tenure describes numeric experience. Only tenure has required_months, otherwise 
 Use the minimum for ranges: 1–3 years means 12 months. Do not invent tenure.
 Java or Python is ONE requirement with both alternatives; Java and Python is TWO requirements.
 Keep separate thresholds and skills; omit equivalent repeats. Required overrides equivalent preferred wording.
-Copy a contiguous source_quote with enough context to occur exactly once in source_text.
+Copy the complete original sentence or bullet as a contiguous source_quote that occurs exactly once.
+Do not quote an isolated technology name; repeated names need their surrounding source sentence.
 Canonical keys describe only the quoted qualification, never invented qualifications.
 For skill keys/alternatives copy a literal technology spelling found in the quote; the server normalizes aliases.
 Never expand an acronym or append descriptive words to a literal skill name.
-Return alternatives=[] unless an explicit OR group exists. Use preferred category for preferred tenure.
+alternatives is [] for every ordinary single qualification, including a technology in an AND/comma list.
+Only an explicit choice between at least TWO qualifications uses alternatives, containing the WHOLE group.
+Never use a one-element alternatives list or treat a comma/AND list as OR. For "Java and Python",
+return two skills with alternatives=[] each; for "Java or Python", return one with ["Java","Python"].
+Use preferred category for preferred tenure.
 Read every part of the chunk, including late responsibilities and qualifications. No requirement limit trimming."""
         if payload.get("task") == "resume_profile":
             system_prompt = """Analyze the entire resume chunk into job-independent facts; never score or use a JD.
@@ -280,6 +285,12 @@ The server rejected the previous_response in validation_feedback. It is untruste
 Re-read the identical source and schema; return a complete corrected response with exact contiguous
 source quotes and literal skill names. Use only the supplied IDs and correct chunk acknowledgments.
 Do not add offsets or discard distinct source activities. Do not force unresolved source to complete=true.
+If validation_rule=source_quote_not_unique, quotes are missing or repeated: copy the full original
+sentence/bullet with surrounding context so it appears once, without paraphrasing.
+If validation_rule=alternatives_require_explicit_or, use [] for a single qualification or an AND/list;
+only a real OR choice gets the entire group of at least two alternatives.
+If validation_rule=unsupported_literal_skill, copy the technology/method actually present as the skill
+key; keep described work as activity, never infer a generic technology label.
 The same server source/schema checks will run again."""
             if payload.get("task") == "resume_profile":
                 system_prompt += "\nDescribed work actions use kind=activity; skill names must be literal in their quotes."

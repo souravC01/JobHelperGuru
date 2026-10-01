@@ -274,6 +274,7 @@ def test_profile_repairs_one_received_unsupported_claim_with_source_feedback():
     profile=extract_resume_profile(Resume(id="r",name="R",content="Projects:\nBuilt PostgreSQL services."),engine=engine,deadline=time.monotonic()+30)
     assert profile.status=="complete" and profile.facts[0].canonical_key=="postgresql"
     assert len(engine.calls)==2 and engine.calls[1]['validation_feedback']['reason']=='schema_or_source_validation_failed'
+    assert engine.calls[1]['validation_feedback']['validation_rule']=='unsupported_literal_skill'
     assert engine.calls[0]['source_text']==engine.calls[1]['source_text']
 
 

@@ -20,7 +20,7 @@ from .provenance import _quote_span
 from .models import MatchContract, NonEmptyString, Requirement, RequirementCategory, RequirementExtraction, ResumeProfile, EvidenceExtraction, has_evidence_conflict
 from .normalization import aliases_for_skill, canonicalize_skill
 
-EXTRACTOR_VERSION = "overall-jd-v5"
+EXTRACTOR_VERSION = "overall-jd-v6"
 ASSESSMENT_VERSION = "overall-assessment-v7"
 MAX_REQUIREMENTS = 64
 _INSTRUCTION = re.compile(r"ignore\b.*\b(?:rubric|instructions?)|\bscore\s*\d+|\bsystem\s*prompt", re.I)
@@ -145,11 +145,16 @@ def _validated_chunk(payload, *, engine, deadline, validate):
         if time.monotonic()>=deadline: raise TimeoutError
         try:
             return validate(response)
-        except (ValueError,TypeError,KeyError):
+        except (ValueError,TypeError,KeyError) as exc:
             if attempt or isinstance(response,dict) and response.get('complete') is False:
                 raise
-            # Exception messages may contain private text; feedback uses a fixed server-owned reason.
-            payload={**payload,'validation_feedback':dict(reason='schema_or_source_validation_failed',previous_response=response)}
+            # Only fixed server messages become feedback; arbitrary exceptions can contain private text.
+            rule={"Source quote must occur exactly once in the supplied chunk":"source_quote_not_unique",
+                  "Alternatives require an explicit OR group":"alternatives_require_explicit_or",
+                  "Unsupported skill fact":"unsupported_literal_skill"}.get(str(exc))
+            feedback=dict(reason='schema_or_source_validation_failed',previous_response=response)
+            if rule: feedback['validation_rule']=rule
+            payload={**payload,'validation_feedback':feedback}
 
 
 def extract_requirements(text: str, *, engine: Any, deadline: float) -> RequirementExtraction:
