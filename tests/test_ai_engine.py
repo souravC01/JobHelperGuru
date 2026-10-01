@@ -7,6 +7,23 @@ from backend.models import (
     JobAnalysisResult,
 )
 
+
+def test_skill_extraction_distinguishes_slash_lists_from_compound_names(monkeypatch):
+    from types import SimpleNamespace
+    import json
+    requests = []
+    def create(**kwargs):
+        requests.append(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"chunk_index":0,"complete":true,"items":[]}'))])
+    engine = AIEngine(api_key=None)
+    monkeypatch.setattr(engine, '_get_client', lambda: SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))))
+    payload = dict(task='requirements', source_text='Use React/Redux and CI/CD.', chunk_index=0)
+    engine.extract_match_chunk(payload, timeout=30)
+    prompt = requests[0]['messages'][0]['content']
+    assert 'slash-separated distinct skills' in prompt
+    assert 'CI/CD' in prompt and 'single compound' in prompt
+    assert json.loads(requests[0]['messages'][1]['content']) == payload
+
 def test_extract_json_from_llm_response_with_think_tags():
     raw_llm = "<think>Analyzing candidates skills...</think>\n```json\n{\"company\": \"Google\", \"title\": \"SWE\"}\n```"
     parsed = extract_json_from_llm_response(raw_llm)

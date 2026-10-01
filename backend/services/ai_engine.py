@@ -219,6 +219,10 @@ paraphrase or quote an ambiguous isolated name. Retain named skills from late se
 Java or Python is ONE requirement with alternatives=["Java","Python"]. Java and Python is TWO
 requirements, each with alternatives=[]. Only an explicit OR choice uses alternatives, and it must
 contain the WHOLE group of at least two choices. Comma/AND lists are not OR groups.
+Extract slash-separated distinct skills as separate items, each with alternatives=[];
+React/Redux means React and Redux. Preserve a single compound name such as CI/CD or TCP/IP.
+Do not create one slash-joined skill key from distinct technologies or methods. If the source
+explicitly means a choice, use its complete OR group instead; unresolved meaning is complete=false.
 Deduplicate equivalent skills; required overrides equivalent preferred wording. Never trim requirements
 to a count limit or output semantic/credential/experience/tenure criteria."""
         if payload.get("task") == "resume_profile":

@@ -96,6 +96,7 @@ class CountingEngine:
 
     def extract_match_chunk(self, payload, *, timeout=None):
         sources = [r['resume_id'] for r in payload.get('resumes', []) if r.get('mode') == 'source']
+        if payload['task']=='resume_profile': sources=[source_hash(payload['source_text'])]
         return self.invoke(payload['task'], 'extract_match_chunk', payload, sources=sources, timeout=timeout)
 
     def since(self, mark):
@@ -109,8 +110,9 @@ class CountingEngine:
         combined = metrics(records)
         return dict(provider_calls=combined.pop('calls'), **combined,
                     stages={stage: metrics([r for r in records if r['stage']==stage]) for stage in sorted({r['stage'] for r in records})},
-                    full_source_resume_chunks=sum(len(r['source_ids']) for r in records),
-                    full_source_resume_ids=sorted({id for r in records for id in r['source_ids']}),
+                    profile_source_call_counts=dict(Counter(id for r in records if r['stage']=='resume_profile' for id in r['source_ids'])),
+                    full_source_resume_chunks=sum(len(r['source_ids']) for r in records if r['stage']!='resume_profile'),
+                    full_source_resume_ids=sorted({id for r in records if r['stage']!='resume_profile' for id in r['source_ids']}),
                     request_limit_reached=self.exhausted)
 
 
@@ -313,7 +315,7 @@ def build_report(cases, runs, *, execution='synthetic', review_verified=False, s
     safe_runs=[]
     contents={c['id']:{r['id']:r['content'] for r in c['resumes']} for c in cases}
     for run in runs:
-        fields=('case_id','phase','repeat','elapsed_seconds','comparison_complete','job_fingerprint','metrics','analysis_seconds','analysis_metrics','analysis_succeeded','full_journey_seconds','same_scores_and_ids','score_changes','ranking_changes','completeness_regression','extraction_matches')
+        fields=('case_id','phase','repeat','elapsed_seconds','comparison_complete','job_fingerprint','metrics','analysis_seconds','analysis_metrics','analysis_succeeded','full_journey_seconds','same_scores_and_ids','score_changes','ranking_changes','completeness_regression','extraction_matches','expected_profile_source_hashes')
         safe={k:run[k] for k in fields if k in run}
         safe['evaluations']=[_safe_evaluation(e,contents[run['case_id']].get(e['resume_id'],'')) for e in run.get('evaluations',[])]
         safe_runs.append(safe)
@@ -388,7 +390,10 @@ def run_lifecycle(case, *, engine, as_of):
                 id=next(id for id,alias in aliases.items() if alias==edit['id'])
                 storage.update_resume(id,content=edit['content'],user_id='benchmark')
                 resumes=[storage.get_resume(r.id,user_id='benchmark') for r in resumes]
-                previous=measure('edited_resume'); runs.append(previous)
+                previous=measure('edited_resume')
+                from backend.services.matching.chunking import chunk_text
+                previous['expected_profile_source_hashes']=[source_hash(c.text) for c in chunk_text(edit['content'])]
+                runs.append(previous)
             else: previous=warm
             original=scoring.SCORER_VERSION
             try:
@@ -458,6 +463,11 @@ def performance_gate(evidence):
     phases={r['phase']:r for r in evidence.get('lifecycle',[])}
     required={'profile_preparation','prepared_first_job','second_job','warm','rename','fresh','edited_resume','scorer_only'}
     if not required<=set(phases): return False
+    edit=phases['edited_resume']
+    expected=edit.get('expected_profile_source_hashes',[])
+    counts=edit['metrics'].get('profile_source_call_counts',{})
+    edited_calls=sum(counts.values())
+    edited_source_only=bool(expected) and set(counts)==set(expected) and all(1<=n<=2 for n in counts.values())
     return bool(evidence.get('execution')=='live'
         and type(evidence.get('job_chars')) is int and 0<evidence['job_chars']<=100000
         and len(evidence.get('resume_chars',[]))==5
@@ -468,8 +478,9 @@ def performance_gate(evidence):
         and phases['prepared_first_job']['metrics']['stages'].get('resume_profile',{}).get('calls',0)==0
         and phases['second_job']['metrics']['stages'].get('resume_profile',{}).get('calls',0)==0
         and all(phases[p]['metrics']['stages'].get('requirements',{}).get('calls',0)>0 and phases[p]['metrics']['provider_calls']==phases[p]['metrics']['stages']['requirements']['calls'] for p in ('prepared_first_job','second_job'))
-        and phases['edited_resume']['metrics']['stages'].get('resume_profile',{}).get('calls',0)==1
-        and phases['edited_resume']['metrics']['provider_calls']==1
+        and edited_source_only
+        and edit['metrics']['stages'].get('resume_profile',{}).get('calls',0)==edited_calls
+        and edit['metrics']['provider_calls']==edited_calls
         and all(r['metrics'].get('stages',{}).get('evidence_batch',{}).get('calls',0)==0 for r in cold+list(phases.values()))
         and all(phases[p]['metrics']['provider_calls']==0 and phases[p].get('same_scores_and_ids') for p in ('warm','rename','fresh','scorer_only')))
 

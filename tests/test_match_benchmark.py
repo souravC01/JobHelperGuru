@@ -227,6 +227,9 @@ def test_perf_gate_accepts_only_three_complete_cold_runs_and_required_reuse():
                    for phase,calls in [('profile_preparation',5),('prepared_first_job',0),('second_job',0),('warm',0),('rename',0),('fresh',0),('edited_resume',1),('scorer_only',0)]])
     for row in evidence['lifecycle']:
         if row['phase'] in {'prepared_first_job','second_job'}: row['metrics']=dict(provider_calls=1,stages={'requirements':{'calls':1}})
+        if row['phase']=='edited_resume':
+            row['expected_profile_source_hashes']=['edited']
+            row['metrics']['profile_source_call_counts']={'edited':1}
     assert m.performance_gate(evidence)
     for dimensions in ([0,3842,4000,4200,4502], [3215]*4, [100001]*5):
         assert not m.performance_gate({**evidence,'resume_chars':dimensions})
@@ -344,3 +347,37 @@ def test_local_repeats_continue_after_exact_extraction_request_cap():
     runs=m.run_quality([case()],engine=engine,as_of=date(2026,9,30))
     assert len([r for r in runs if r['phase']=='fixed_rubric'])==3
     assert all(r['metrics']['provider_calls']==0 for r in runs if r['phase']=='fixed_rubric')
+
+
+def test_edit_gate_allows_one_correction_per_changed_source_chunk_only():
+    m=benchmark()
+    metrics=lambda n: dict(provider_calls=n,stages={'resume_profile':{'calls':n}})
+    lifecycle=[dict(phase=p,comparison_complete=True,metrics=metrics(n),same_scores_and_ids=True)
+        for p,n in [('profile_preparation',5),('prepared_first_job',1),('second_job',1),('warm',0),('rename',0),('fresh',0),('edited_resume',2),('scorer_only',0)]]
+    for row in lifecycle:
+        if row['phase'] in {'prepared_first_job','second_job'}:
+            row['metrics']=dict(provider_calls=1,stages={'requirements':{'calls':1}})
+    edit=next(r for r in lifecycle if r['phase']=='edited_resume')
+    edit['expected_profile_source_hashes']=['edited-chunk']
+    edit['metrics']['profile_source_call_counts']={'edited-chunk':2}
+    evidence=dict(execution='live',job_chars=3200,resume_chars=[4000]*5,
+        cold=[dict(comparison_complete=True,elapsed_seconds=100,metrics=metrics(6)) for _ in range(3)],
+        main_cold=[dict(comparison_complete=True,metrics=metrics(2)) for _ in range(3)],lifecycle=lifecycle)
+    assert m.performance_gate(evidence)
+    edit['metrics']['profile_source_call_counts']={'unchanged-chunk':2}
+    assert not m.performance_gate(evidence)
+    edit['metrics']['profile_source_call_counts']={'edited-chunk':3}
+    edit['metrics']['provider_calls']=3
+    edit['metrics']['stages']['resume_profile']['calls']=3
+    assert not m.performance_gate(evidence)
+
+
+def test_profile_source_accounting_observes_calls_without_exposing_content():
+    m=benchmark(); engine=m.CountingEngine(Provider(),max_calls=2)
+    payload=dict(task='resume_profile',source_text='Projects:\n'+QUOTE,chunk_index=0)
+    engine.extract_match_chunk(payload,timeout=30)
+    engine.extract_match_chunk({**payload,'validation_feedback':{}},timeout=30)
+    metrics=engine.since(0)
+    assert metrics['profile_source_call_counts']=={m.source_hash(payload['source_text']):2}
+    assert metrics['full_source_resume_ids']==[]
+    assert payload['source_text'] not in json.dumps(metrics)
