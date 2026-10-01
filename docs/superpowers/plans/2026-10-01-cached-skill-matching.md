@@ -19,7 +19,7 @@
 - Keep the shared extraction parser, guarded transport and existing maximum of one correction for a received invalid extraction response. Remove evidence-comparison-specific corrections with their retired caller. No new retry strategy.
 - Existing complete profiles remain reusable without a profile-version bump merely because non-skill facts are unused. Read their skill facts; do not rebuild the vault just for this pivot. Missing/invalid profiles prepare once through the existing lifecycle.
 - Resume content edits invalidate only that resume's derived data; rename does not. JD changes invalidate its extraction and dependent results. Matcher/scorer changes invalidate derived results without repeating valid extraction.
-- The feature stays default-off. Private documents, response bodies and keys remain ignored. No live requests are needed for this planning update. Execution began at173/200; current development usage is **186/200**, including two conservative interrupted-call reservations; **14 remain** after execution (186/200 total). Holdout stays unopened and requires separate authorization before use.
+- The feature stays default-off. Private documents, response bodies and keys remain ignored. The owner granted 100 additional requests during the continuation, raising the total cap to 300. Current development usage is **243/300**, including two conservative interrupted-call reservations; **57 remain**. The continuation consumed 57 requests. Holdout stays unopened; more request capacity does not supply its missing reviewed inputs or waive its gate.
 
 ## Review focus
 
@@ -62,7 +62,7 @@ Example: required Java and Python; preferred SQL. A resume containing Java and S
 
 **Files:** `backend/services/matching/extraction.py`, `backend/services/ai_engine.py`, `tests/test_match_extraction.py`.
 
-**Interface:** Keep `extract_requirements(text: str, *, engine, deadline: float) -> RequirementExtraction`. Complete output contains only `kind="skill"`, category `required_skills` or `preferred_qualifications`, canonical key/alternatives and validated original source spans; `required_months=None`. Use JD extractor version `skill-jd-v1` to reject old overall rubrics.
+**Interface:** Keep `extract_requirements(text: str, *, engine, deadline: float) -> RequirementExtraction`. Complete output contains only `kind="skill"`, category `required_skills` or `preferred_qualifications`, canonical key/alternatives and validated original source spans; `required_months=None`. JD extractor is now `skill-jd-v2`, rejecting old overall and pre-slash-instruction rubrics. Existing valid profile-v5 caches remain reusable subject to their normal alias identity.
 
 - [x] Write regressions `test_skill_jd_keeps_tools_from_responsibilities`, `test_skill_jd_excludes_semantic_tenure_and_eligibility`, and grouping/alias/unknown-skill cases. “Build Java services” yields Java; generic collaboration and “three years experience” yield no scored criterion. A JD with no named skills remains unscored.
 - [x] Run `.venv/Scripts/python.exe -B -m pytest tests/test_match_extraction.py -q`; confirm the new assertions fail on the old broad extraction contract.
@@ -117,7 +117,7 @@ Example: required Java and Python; preferred SQL. A resume containing Java and S
 - [ ] Run the local reviewed-fixture comparisons first: exact expected arithmetic, 100% matching/alias/grouping checks, complete comparisons and identical three-repeat scores/ranks. A fresh live extraction must match the reviewed skill sets/categories/groups, with no unsupported additions or omissions, before it can count as passing on these small development fixtures.
 - [x] Run an initial live extraction smoke on an authorized JD with the prepared vault, capped at two of the remaining 27 requests. Stop and diagnose if extraction fails. Count every SDK request, including failures/corrections, against the existing shared 200-request cap; the two interrupted-call reservations remain charged. Never consume the holdout to debug development.
 - [ ] Once the smoke passes, measure three independent cold extraction comparisons per approved job only as the remaining request cap permits, plus the lifecycle: preparation, prepared first JD, different JD, warm repeat, one content edit, rename and scorer-only change. Ordinary prepared/new jobs call JD extraction only; warm/rename/scorer/fresh reranking use zero calls; content edit extracts only that resume. Report profile preparation and any separate job-metadata analysis independently and include both in full-journey totals.
-**Budget feasibility:** Six entirely cold five-resume comparisons need at least 36 successful extraction requests for one-chunk documents, before corrections or the smoke test. The remaining 27 cannot complete that entire gate. Prioritize local verification and the prepared-vault lifecycle; report unfunded cold runs as not run and obtain an increased total cap only before the additional live measurements. Do not silently redefine cold, drop a gate, or exceed the approved cap.
+**Budget and measured outcome:** The increased cap funded all six independent cold comparisons, consuming 47 requests including 6 upstream analysis calls. Only 1/6 completed; its full journey of 240.02 seconds exceeded 120 seconds. A separate 9-request lifecycle attempt failed profile preparation and correctly stopped before subsequent phases. Cached recorded-artifact repeats passed, but they do not replace failed fresh/preparation gates. 57 requests remain; no further speculative prompt reruns are scheduled while review questions and these extraction failures remain unresolved. Do not silently redefine cold, drop a gate, or exceed the approved cap.
 
 - [x] Retain the 120-second full cold comparison target and real document lengths; no artificial 8,000-character requirement or padding. Report local comparison time separately and compare costs/latency with the recorded main baseline without claiming the two scores mean the same thing. No latency improvement is claimed from payload-size estimates alone.
 - [ ] After development passes, retain the separate held-out quality gate of at least ten real jobs and twenty reviewed strict pairs, now explicitly reviewed for skill fit: at least 90% strict agreement, 100% complete evaluations and three identical fixed-input local repeats. Held-out extraction correctness must be reviewed too; use no unsupported skill credit. Acquire missing inputs/labels and explicit holdout request authorization at that stage. The current documents and development permission do not establish this gate.
@@ -129,14 +129,31 @@ Example: required Java and Python; preferred SQL. A resume containing Java and S
 - [x] Existing extraction/cache/scoring/UI files and caller dependencies identified; no new architecture layer or database migration assumed.
 - [x] Score arithmetic, grouping, absence/conflict semantics, public scope, cache compatibility and request budget specified.
 - [x] Every Review Focus item maps to a named test step; old preferences/results are explicitly separated from the new score's validation.
-- [x] Tasks9.1–9.5 code and regression checks implemented:457 backend,90 frontend, build and diff checks pass.
-- [ ] All required reviewed/live Task9 gates pass. Fresh first-JD extraction grouping, second-JD review, independent cold/performance and holdout remain open.
+- [x] Tasks9.1–9.5 code and regression checks implemented:462 backend,90 frontend, build and diff checks pass.
+- [x] Execute the newly funded six cold development measurements and record every failure, plus a bounded current lifecycle attempt and zero-request captured-artifact scoring checks.
+- [ ] All required reviewed/live Task9 gates pass. Cold completeness, fresh extraction accuracy,120s full-journey performance and current preparation/lifecycle failed; second-JD/category review and holdout remain open.
 
-Next validation unit: **Task9.5**. See `docs/ai-matching-evaluation.md` for pass/fail/not-run measurements. First-JD/resume skill sets are approved; the second-JD supplement awaits review. Resolve slash-group extraction consistency before spending on the full cold gate.14 requests remain, insufficient for its minimum36 calls. Task10/activation remain separate.
+Next validation unit: **Task 9.5 extraction repair and review**, still in progress. See `docs/ai-matching-evaluation.md` for the current failed live gates and successful local arithmetic/cache proof. Slash splitting now passes the targeted fresh check; source-quote, OR-group and unsupported literal-name failures remain. Keep approved first-JD/resume gold; resolve the ambiguous Docker category and second-JD supplement rather than silently adopting fresh model outputs. The holdout-or-deferral question is pending. 57 requests remain. Task 10/activation remain separate.
 
 
-## Execution update — 2026-10-01
+## Earlier execution checkpoint — 2026-10-01
 
 New resume extractions now retain skill facts only; existing complete rich cache entries remain validated/reusable with profile-v5. The source-validated cached matcher, API/UI and benchmark code are implemented. Warm/rename/fresh/scorer reranking is complete with zero requests. The edited source completes after one allowed correction; no unchanged source is sent. The specific literal-JD correction rule and OOP/OOPS alias were added after bounded diagnostics.
 
 The first JD's reviewed inputs produce exact scores and three identical local repeats. A fresh extraction combined Agile/Scrum instead of the approved separate groups, so extraction accuracy is failed. Second-JD extraction is complete but its13 proposed groups need review. Cold/holdout gates are not run, and the current strict one-request edit performance gate remains unmet. Usage186/200; no further calls in this documentation update. The retained workspace ledger records the review and execution rulings while Task9 is open.
+
+## Continuation results — 2026-10-01
+
+- [x] Clarify slash-separated distinct skills without splitting compound names; targeted fresh extraction splits Agile/Scrum. JD v2.
+- [x] Add explicit Microservices/Microservices Architecture alias; RED regression then GREEN, no fuzzy/semantic comparison or bulk backfill.
+- [x] Correct benchmark edit accounting to changed-source hashes, 1–2 calls per chunk; retain all unrelated-call prohibitions.
+- [x] Correct 120-second cold gate to include successful upstream analysis/full journey; reviewer reproduction RED then GREEN.
+- [x] Stop lifecycle after failed preparation/first JD; RED regression prevents mislabeled warm re-extractions.
+- [x] Six cold runs at product 7ade7f7: 47 requests, 339,983 tokens, zero SDK failures, 1/6 complete, only complete full journey 240.02 seconds. Quality/performance failed.
+- [x] Two jobs/three cached repeats from revalidated captured artifacts: 0.099–0.104 seconds, zero requests, identical scores/ranks, independent Decimal arithmetic passed. No fresh/ground-truth claim.
+- [x] Current lifecycle at 230861d: 9 requests, 78,546 tokens, 306.67 seconds sequential preparation, incomplete; remaining phases not run.
+- [x] Final 462 backend, 90 frontend, build and diff checks; updated report/plan; local commits only.
+- [ ] Outstanding human review: second JD's 13 groups; ambiguous Docker required/preferred; separate holdout inputs/labels or owner-approved deferral.
+- [ ] Fresh accuracy/completeness and cold/preparation/performance gates pass. Do not mark Task 9 complete because the diagnostic execution finished.
+
+Continuation total: 57 requests, 424,135 reported tokens (180,706 prompt; 243,429 completion). Budget 243/300. Source checks/correction bound/weights/default-off flag remain unchanged. Final review minor (deferred): identical text at chunk positions shares one hashed identity; add index when validating multi-chunk edit workloads. All current authorized sources are one chunk. Ledger retained while Task 9 is open.

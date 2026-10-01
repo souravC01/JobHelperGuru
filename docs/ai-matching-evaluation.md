@@ -1,4 +1,64 @@
-# AI overall job-fit evaluation
+# AI skill-matching evaluation
+
+## Latest continuation — 2026-10-01
+
+**Task 9 has not passed.** Implementation and regression checks are complete, but the independent live development gate failed. The feature remains default-off; Task 10, holdout, publication and activation have not started. The owner granted 100 additional requests, raising the total development cap to **300**. Current usage is **243/300**, including earlier conservative interrupted-call reservations; **57 remain**.
+
+This continuation added a JD instruction distinguishing slash-separated distinct skills from compound names such as CI/CD, and bumped JD extraction to `skill-jd-v2`. A fresh run split Agile and Scrum correctly. The shared explicit Microservices/Microservices Architecture alias now makes their JD/resume spellings comparable; normal alias-identity invalidation can require one lazy preparation, without a bulk rebuild or profile-version bump.
+
+The benchmark now verifies edited source-chunk hashes and permits the existing single correction per changed chunk, instead of incorrectly requiring exactly one request. It measures the full cold journey, including successful upstream job analysis, against 120 seconds. It also stops lifecycle measurements when preparation or the first job fails, rather than treating later extraction attempts as warm-cache comparisons. Source validators, transport guards, weights and the one-correction limit remain enforced.
+
+Final regression: **462 backend tests, 90 frontend tests and production build passed**. Existing Starlette/AnyIO deprecation warning only. A fresh reviewer found the full-journey gate defect; its regression reproduced the false pass before the fix. No Critical finding was reported.
+
+### Independent cold measurements
+
+Product candidate: `7ade7f7ae2f8951a9beabd1cf150a0752d617e8c`. Provider: the approved Experiential `gpt-6-luna` profile. Each run used a new isolated vault/cache and the full authorized documents. Upstream job analysis is measured separately and included in the full journey. Six runs consumed **47 requests / 339,983 reported tokens**, with **zero SDK failures**. Successful SDK responses can still fail source/schema validation.
+
+| Anonymous job | Repeat | Complete selected comparison | Matching seconds | Full journey seconds | Extraction requests |
+|---|---:|---|---:|---:|---:|
+| Java/full-stack | 1 | Fail | 61.90 | 69.39 | 2 |
+| Java/full-stack | 2 | Pass, 5/5 | 232.86 | 240.02 | 12 |
+| Java/full-stack | 3 | Fail | 223.79 | 231.26 | 11 |
+| QA engineer | 1 | Fail | 46.79 | 52.20 | 2 |
+| QA engineer | 2 | Fail | 46.53 | 53.59 | 2 |
+| QA engineer | 3 | Fail | 261.78 | 267.53 | 12 |
+
+The request column excludes the one upstream analysis request per row; all six analysis requests are included in the 47-request total. **Completeness is 1/6 comparisons**, and the sole complete cold journey exceeds 120 seconds. Fresh extraction sets did not match the proposed reviewed fixture sets. The second JD is still unreviewed, so it cannot establish reviewed quality even if a response completes. No new skill-fit preference agreement is claimed from the earlier overall-fit pairs.
+
+Failures are source interpretation/validation rather than transport or JSON syntax: missing/non-unique original quotes, incomplete/invalid OR groups, and proposed skill phrases unsupported by their quoted text. Some unsupported names expand abbreviated lists; others are not literal spellings in the selected passage. Received invalid responses get one correction; persistent invalid output remains unscored. The data does not support another broad “parsing fixed” claim or a faster-cold claim.
+
+The historical pinned-main observations remain separately labeled legacy keyword alignment: six complete comparisons, 13.78–16.67 seconds matching. Their JD hashes and resume source-hash sets agree with these development inputs. Those observations were not rerun or charged again. The two score scopes remain different.
+
+### Cached arithmetic and lifecycle
+
+Current validators revalidated fully valid recorded live JD/profile artifacts in isolated storage. Both jobs then completed three local repeats each: **0.099–0.104 seconds**, **zero provider requests**, identical raw scores/ranks, and exact agreement with an independent Decimal implementation of the approved score formula. This proves arithmetic and cache behavior for accepted extracted inputs; it is not new extraction, preparation timing, ground-truth accuracy or a cold-performance pass.
+
+A separate live lifecycle attempt at `230861d56e97fdb6b7347f9e91d739d53c305d79` consumed **9 resume-preparation requests / 78,546 tokens**. Preparation took **306.67 seconds** sequentially and was incomplete because a profile still failed source validation after its allowed correction. The benchmark therefore stopped before prepared/new-job, edit or warm phases. This sequential preparation time must not be confused with the two-worker cold comparison times above. Earlier successful recorded-artifact lifecycle observations remain historical diagnostics, not substitutes for this current live gate.
+
+| Required gate | Current status |
+|---|---|
+| Runtime/scoring/UI regression | **Pass** |
+| Cached comparison: no requests, exact arithmetic, stable scores/ranks | **Pass** on source-revalidated recorded artifacts |
+| Fresh slash-group smoke | Agile/Scrum split correctly; **not full extraction agreement** |
+| Human-reviewed JD/resume extraction sets | First JD/resumes approved; second JD supplement **pending** |
+| Full fresh extraction agreement | **Fail / incomplete review** |
+| Three complete cold runs per job | **Fail**, 1/6 complete |
+| 120-second full cold journey | **Fail** |
+| Full current live lifecycle | **Fail at preparation; subsequent phases not run** |
+| Separate ten-job/twenty-pair reviewed holdout | **Not run**; no qualifying reviewed fixture available; not opened |
+| Release/activation | **Not approved; default-off** |
+
+The first-JD review marks Docker required, while its source line “Docker, Kubernetes (preferred)” was freshly interpreted as both preferred. The owner was asked to settle that ambiguity; the approved gold was not silently changed. The second-JD supplement and the holdout-or-deferral question also remain unanswered. Exact-name matching can produce low/tied scores for broad category requirements that are not literal cached skill names; it deliberately does not infer Java → “programming languages” or a framework → a general testing category. Vocabulary/category review is required before claiming that those ranks are useful job-fit judgments.
+
+This continuation used **57 requests**, **424,135 reported tokens**: 180,706 prompt and 243,429 completion. All requests used the authorized development documents/model and stayed under the shared cap. Overall historical token usage is still unavailable for earlier failed/interrupted requests. Private documents, response captures, review sheets, score-oracle data and raw reports remain ignored.
+
+Execution rulings: keep the last approved gold while its ambiguous category is pending (cost: reviewed accuracy cannot pass yet); count cold failures rather than discard them (cost: no development/release claim); retain source checks and the correction bound rather than accept invalid output to finish a benchmark (cost: some comparisons remain unavailable); use the successful captured-artifact replay only for local arithmetic/cache proof (cost: extraction quality and timing remain independent); holdout is not waived by more request capacity (cost: Task 9 remains open until inputs/labels arrive or the owner explicitly changes that gate).
+
+Deferred minor: identical text at two chunk positions shares one hashed accounting identity, so a valid multi-chunk edit with a correction can conservatively fail the performance gate. Include chunk index with the hash when validating such workloads. All current approved source documents are one chunk. Manual UI inspection remains deferred for this continuation's unchanged UI; full suites were run by the implementer rather than repeated by the reviewer.
+
+**Next:** resolve the outstanding review questions, then decide the extraction repair against these captured failures before another full live run. Repeating the same prompts is not evidence that extraction has improved. Keep Task 9 open and the flag off while its measured gates fail.
+
+## Earlier checkpoint — before this continuation
 
 ## Current scope — owner-approved pivot on 2026-10-01
 
