@@ -21,18 +21,27 @@ def extract(text, provider):
     return extract_requirements(text, engine=provider, deadline=time.monotonic() + 30)
 
 
-def test_overall_rubric_keeps_late_responsibility_and_preferred_tenure():
-    jd = "Required: Python.\nRequired: 2 years backend experience.\n" + "Company overview.\n" * 600
-    jd += "Responsibilities: Maintain reliable payment services.\nPreferred: 1–3 years cloud experience."
-    provider = Provider([proposal("Required: Python.", "python"), proposal("Required: 2 years backend experience.", "backend", "relevant_experience", "tenure", months=24), proposal("Responsibilities: Maintain reliable payment services.", "maintain payment services", "responsibilities", "semantic"), proposal("Preferred: 1–3 years cloud experience.", "cloud", "preferred_qualifications", "tenure", months=12)])
+def test_skill_jd_keeps_tools_from_responsibilities():
+    jd = "Required: Python.\n" + "Company overview.\n" * 600
+    jd += "Responsibilities: Build Java services.\nPreferred: Rust knowledge."
+    provider = Provider([proposal("Required: Python.", "Python"), proposal("Responsibilities: Build Java services.", "Java"), proposal("Preferred: Rust knowledge.", "Rust", "preferred_qualifications")])
     result = extract(jd, provider)
-    assert result.status == "complete" and len(result.items) == 4
-    assert len({r.category for r in result.items}) == 4
+    assert result.status == "complete" and len(result.items) == 3
+    assert {r.canonical_key for r in result.items} == {"python", "java", "rust"}
+    assert all(r.kind == "skill" and r.required_months is None for r in result.items)
     assert all(jd[r.source_start:r.source_end] == r.source_quote for r in result.items)
-    assert result.items[-1].required_months == 12
     assert len(provider.calls) > 1
     assert all(0 < timeout <= 30 for _, timeout in provider.calls)
-    assert all(p["task"] == "requirements" and "schema" in p for p, _ in provider.calls)
+
+
+@pytest.mark.parametrize("quote,key,category,kind,months", [
+    ("Collaborate with teams.", "collaboration", "responsibilities", "semantic", None),
+    ("Required: 2 years backend experience.", "backend", "relevant_experience", "tenure", 24),
+    ("Required: bachelor's degree.", "degree", "required_skills", "credential", None),
+])
+def test_skill_jd_excludes_semantic_tenure_and_eligibility(quote,key,category,kind,months):
+    assert extract(quote, Provider([proposal(quote,key,category,kind,months=months)])).status == "failed"
+    assert extract("Must have work authorization.", Provider([])).status == "needs_review"
 
 
 def test_or_is_one_requirement_and_and_is_two():

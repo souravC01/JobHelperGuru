@@ -20,7 +20,7 @@ from .provenance import _quote_span
 from .models import MatchContract, NonEmptyString, Requirement, RequirementCategory, RequirementExtraction, ResumeProfile, EvidenceExtraction, has_evidence_conflict
 from .normalization import aliases_for_skill, canonicalize_skill
 
-EXTRACTOR_VERSION = "overall-jd-v6"
+EXTRACTOR_VERSION = "skill-jd-v1"
 ASSESSMENT_VERSION = "overall-assessment-v10"
 _CORRECTION_RULES = {"Source quote must occur exactly once in the supplied chunk":"source_quote_not_unique",
                   "Ambiguous or unsupported evidence quote":"source_quote_not_unique",
@@ -38,11 +38,11 @@ _SECTION = re.compile(r"^\s*(?:required(?: skills| qualifications)?|requirements
 
 class RequirementProposal(MatchContract):
     category: RequirementCategory
-    kind: Literal["skill", "semantic", "tenure", "credential", "experience"]
+    kind: Literal["skill"]
     canonical_key: NonEmptyString
     alternatives: list[NonEmptyString]
     source_quote: NonEmptyString
-    required_months: StrictInt | None = Field(gt=0)
+    required_months: None
 
 
 class RequirementChunk(MatchContract):

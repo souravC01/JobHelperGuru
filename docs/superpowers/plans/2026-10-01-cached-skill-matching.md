@@ -64,11 +64,11 @@ Example: required Java and Python; preferred SQL. A resume containing Java and S
 
 **Interface:** Keep `extract_requirements(text: str, *, engine, deadline: float) -> RequirementExtraction`. Complete output contains only `kind="skill"`, category `required_skills` or `preferred_qualifications`, canonical key/alternatives and validated original source spans; `required_months=None`. Use JD extractor version `skill-jd-v1` to reject old overall rubrics.
 
-- [ ] Write regressions `test_skill_jd_keeps_tools_from_responsibilities`, `test_skill_jd_excludes_semantic_tenure_and_eligibility`, and grouping/alias/unknown-skill cases. “Build Java services” yields Java; generic collaboration and “three years experience” yield no scored criterion. A JD with no named skills remains unscored.
-- [ ] Run `.venv/Scripts/python.exe -B -m pytest tests/test_match_extraction.py -q`; confirm the new assertions fail on the old broad extraction contract.
-- [ ] Narrow the provider task and server acceptance contract. Extract skills from required work/qualification sections as required, explicit nice-to-haves as preferred; exclude company boilerplate and explicitly unnecessary skills. Preserve source validation, complete coverage, AND/OR grouping, canonical deduplication and the 64-requirement limit without trimming.
-- [ ] Rerun the focused extraction checks and existing parser/normalization checks. All must pass; no live calls in this step.
-- [ ] Commit the extraction change and update this checklist.
+- [x] Write regressions `test_skill_jd_keeps_tools_from_responsibilities`, `test_skill_jd_excludes_semantic_tenure_and_eligibility`, and grouping/alias/unknown-skill cases. “Build Java services” yields Java; generic collaboration and “three years experience” yield no scored criterion. A JD with no named skills remains unscored.
+- [x] Run `.venv/Scripts/python.exe -B -m pytest tests/test_match_extraction.py -q`; confirm the new assertions fail on the old broad extraction contract.
+- [x] Narrow the provider task and server acceptance contract. Extract skills from required work/qualification sections as required, explicit nice-to-haves as preferred; exclude company boilerplate and explicitly unnecessary skills. Preserve source validation, complete coverage, AND/OR grouping, canonical deduplication and the 64-requirement limit without trimming.
+- [x] Rerun the focused extraction checks and existing parser/normalization checks. All must pass; no live calls in this step.
+- [x] Commit the extraction change and update this checklist.
 
 ## Task 9.2: Match cached skills and calculate exact scores
 
