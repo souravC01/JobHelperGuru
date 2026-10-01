@@ -1,53 +1,55 @@
-"""Pure overall-job-fit arithmetic and ranking of comparable evaluations."""
+"""Local matching of cached skills and comparable skill-fit arithmetic."""
 from __future__ import annotations
 
-from calendar import monthrange
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
 from .models import (
-    Evaluation, EvaluationBatch, Evidence, EvidenceLevel, RelevantInterval, Requirement,
+    Evaluation, EvaluationBatch, Evidence, EvidenceLevel, ResumeProfile, Requirement,
     RequirementCategory, RequirementResult, ScoreBreakdown, has_evidence_conflict,
 )
 
-SCORER_VERSION = "overall-fit-v1"
+MATCHER_VERSION = "cached-skills-v1"
+SCORER_VERSION = "skill-fit-v1"
 CATEGORY_WEIGHTS = {
     RequirementCategory.REQUIRED_SKILLS: Decimal(60),
-    RequirementCategory.RESPONSIBILITIES: Decimal(20),
-    RequirementCategory.RELEVANT_EXPERIENCE: Decimal(15),
     RequirementCategory.PREFERRED_QUALIFICATIONS: Decimal(5),
 }
 
 
-def calculate_verified_months(intervals: list[RelevantInterval], as_of: date) -> Decimal:
-    """Union elapsed work intervals, then count calendar months and residual days."""
-    spans = sorted((i.start, min(i.end or as_of, as_of)) for i in intervals if i.start <= as_of)
-    merged = []
-    for start, end in spans:
-        if end <= start: continue
-        if merged and start <= merged[-1][1]:
-            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+def match_cached_skills(requirements: list[Requirement], profile: ResumeProfile) -> list[Evidence]:
+    """Match complete, source-validated profile facts; no job-specific AI judgment."""
+    from .normalization import canonicalize_skill
+    if profile.status != "complete" or not profile.profile_fingerprint:
+        raise ValueError("Complete cached profile required")
+    facts = {}
+    for fact in profile.facts:
+        if fact.kind == "skill":
+            facts.setdefault(canonicalize_skill(fact.canonical_key), []).append(fact)
+    evidence = []
+    for requirement in requirements:
+        if requirement.kind != "skill" or requirement.category not in CATEGORY_WEIGHTS or requirement.required_months is not None:
+            raise ValueError("Only required or preferred skills can be matched")
+        positives, conflict = [], False
+        for key in requirement.alternatives or [requirement.canonical_key]:
+            candidates = facts.get(canonicalize_skill(key), [])
+            if has_evidence_conflict({f.level for f in candidates}):
+                conflict = True
+                continue
+            positives.extend(f for f in candidates if f.level in {EvidenceLevel.DEMONSTRATED, EvidenceLevel.LISTED})
+        if positives:
+            fact = min(positives, key=lambda f: (f.level != EvidenceLevel.DEMONSTRATED, f.source_start, f.source_end, f.id))
+            evidence.append(Evidence(requirement_id=requirement.id, level=fact.level, source_quote=fact.source_quote,
+                                     source_start=fact.source_start, source_end=fact.source_end, section=fact.section))
+        elif conflict:
+            raise ValueError("Conflicting cached skill facts")
         else:
-            merged.append((start, end))
-    total = Decimal(0)
-    for start, end in merged:
-        months = (end.year - start.year) * 12 + end.month - start.month
-        def anniversary(offset):
-            year, month = divmod(start.year * 12 + start.month - 1 + offset, 12)
-            return year, month + 1, min(start.day, monthrange(year, month + 1)[1])
-        anchor = date(*anniversary(months))
-        if anchor > end:
-            months -= 1
-            anchor = date(*anniversary(months))
-        # Avoid inventing a month or losing short spans at month-end boundaries.
-        next_day = anniversary(months + 1)[2]
-        days_to_next = monthrange(anchor.year, anchor.month)[1] - anchor.day + next_day
-        total += Decimal(months) + Decimal((end - anchor).days) / Decimal(days_to_next)
-    return total
+            evidence.append(Evidence(requirement_id=requirement.id, level="not_evidenced"))
+    return evidence
 
 
 def calculate_score(requirements: list[Requirement], evidence: list[Evidence], *, as_of: date) -> ScoreBreakdown:
-    """Score already source-validated, explicitly complete requirement evidence."""
+    """Score skill presence against a shared required/preferred denominator."""
     ids = [r.id for r in requirements]
     if not ids or len(ids) != len(set(ids)):
         raise ValueError("Scoring requires unique nonempty requirements")
@@ -65,26 +67,9 @@ def calculate_score(requirements: list[Requirement], evidence: list[Evidence], *
         levels = {item.level for item in items}
         if has_evidence_conflict(levels):
             raise ValueError("Conflicting evidence is unresolved")
-        if requirement.kind == "tenure":
-            if not requirement.required_months or requirement.category not in {
-                RequirementCategory.RELEVANT_EXPERIENCE, RequirementCategory.PREFERRED_QUALIFICATIONS,
-            }:
-                raise ValueError("Tenure requires a valid minimum and category")
-            demonstrated = [i for i in items if i.level == EvidenceLevel.DEMONSTRATED]
-            if any(not i.relevant_intervals or i.section != "work" for i in demonstrated):
-                raise ValueError("Demonstrated tenure requires verified work intervals")
-            months = calculate_verified_months([span for i in demonstrated for span in i.relevant_intervals], as_of)
-            credit = min(Decimal(1), months / Decimal(requirement.required_months))
-        else:
-            if requirement.kind == "skill" and requirement.category not in {
-                RequirementCategory.REQUIRED_SKILLS, RequirementCategory.PREFERRED_QUALIFICATIONS,
-            }:
-                raise ValueError("Literal skills require a qualification category")
-            if requirement.required_months is not None:
-                raise ValueError("Only tenure has required months")
-            credit = Decimal(1) if EvidenceLevel.DEMONSTRATED in levels else Decimal(0)
-            if requirement.kind == "skill" and EvidenceLevel.LISTED in levels:
-                credit = max(credit, Decimal("0.5"))
+        if requirement.kind != "skill" or requirement.category not in CATEGORY_WEIGHTS or requirement.required_months is not None:
+            raise ValueError("Only required or preferred skills can be scored")
+        credit = Decimal(1) if levels & {EvidenceLevel.DEMONSTRATED, EvidenceLevel.LISTED} else Decimal(0)
         credits[requirement.id] = credit
         # Exact repeated observations cannot change credit or persisted evidence volume.
         distinct = []

@@ -60,7 +60,8 @@ def complete_evaluation(**changes):
 
 
 def test_complete_scores_require_rubric_and_explicit_outcomes():
-    assert complete_evaluation().score_scope == "overall_job_fit"
+    assert complete_evaluation().score_scope == "skill_fit"
+    with pytest.raises(ValidationError): complete_evaluation(score_scope="overall_job_fit")
     for changes in [{"rubric_fingerprint": None}, {"raw_score": None}, {"requirement_results": []}, {"reason_codes": ["source_incomplete"]}]:
         with pytest.raises(ValidationError):
             complete_evaluation(**changes)

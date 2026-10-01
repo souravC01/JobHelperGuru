@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 CANONICAL_SKILL_ALIASES: dict[str, tuple[str, ...]] = {
+    "javascript": ("JavaScript", "JS"),
     "go": ("Go", "Golang"),
     "aws": ("AWS", "Amazon Web Services"),
     "gcp": ("GCP", "Google Cloud Platform"),

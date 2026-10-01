@@ -76,11 +76,11 @@ Example: required Java and Python; preferred SQL. A resume containing Java and S
 
 **Interfaces:** Add `match_cached_skills(requirements: list[Requirement], profile: ResumeProfile) -> list[Evidence]` in `scoring.py`; it consumes a complete source-validated profile and has no engine/network dependency. Retain `calculate_score(requirements, evidence, *, as_of) -> ScoreBreakdown` and `rank_evaluations(evaluations)`. Define `MATCHER_VERSION="cached-skills-v1"` and `SCORER_VERSION="skill-fit-v1"`. Use the existing `assessment_version` result field for matcher identity to avoid an unrelated transport rename.
 
-- [ ] Write exact-value checks: the Java/Python/SQL example is `Decimal("53.85")`; listed and demonstrated presence give equal credit; duplicating a fact or resume does not alter a score; Java/JavaScript and SQL/NoSQL stay distinct; an OR group receives at most one credit. Check learning/negation, same-skill contradictions and an incomplete profile staying unscored. Add raw-score tie and no-skill-JD checks.
-- [ ] Run the four matching/scoring/ranking/contract test files and confirm the new score/scope assertions fail before implementation.
-- [ ] Implement matching from `kind="skill"` profile facts using the existing canonical aliases. Reuse cached source fields in Evidence; emit explicit absence for unmatched groups only when profile coverage is complete. Raise a validation error for unresolved same-skill conflicts; the pipeline maps it to `needs_review`. Apply the score contract above and `score_scope="skill_fit"`; reject non-skill score inputs.
-- [ ] Run those tests to green, including reordering and adding another resume preserving every individual's score. No weights or exceptions keyed to the real development winners.
-- [ ] Commit and update the checklist.
+- [x] Write exact-value checks: the Java/Python/SQL example is `Decimal("53.85")`; listed and demonstrated presence give equal credit; duplicating a fact or resume does not alter a score; Java/JavaScript and SQL/NoSQL stay distinct; an OR group receives at most one credit. Check learning/negation, same-skill contradictions and an incomplete profile staying unscored. Add raw-score tie and no-skill-JD checks.
+- [x] Run the four matching/scoring/ranking/contract test files and confirm the new score/scope assertions fail before implementation.
+- [x] Implement matching from `kind="skill"` profile facts using the existing canonical aliases. Reuse cached source fields in Evidence; emit explicit absence for unmatched groups only when profile coverage is complete. Raise a validation error for unresolved same-skill conflicts; the pipeline maps it to `needs_review`. Apply the score contract above and `score_scope="skill_fit"`; reject non-skill score inputs.
+- [x] Run those tests to green, including reordering and adding another resume preserving every individual's score. No weights or exceptions keyed to the real development winners.
+- [x] Commit and update the checklist.
 
 ## Task 9.3: Route comparisons through local matching and retire AI assessment
 

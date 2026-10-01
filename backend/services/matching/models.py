@@ -219,7 +219,7 @@ class Evaluation(MatchContract):
     resume_fingerprint: NonEmptyString
     source_fingerprint: NonEmptyString
     match_score: StrictInt | None = Field(default=None, ge=0, le=100)
-    score_scope: Literal["overall_job_fit"] = "overall_job_fit"
+    score_scope: Literal["skill_fit"] = "skill_fit"
     rubric_fingerprint: NonEmptyString | None = None
     skill_coverage_score: CategoryScore | None = None
     reason_codes: list[Literal["source_incomplete", "rubric_limit", "invalid_provider_response", "missing_assessment", "unresolved_evidence", "deadline_exceeded", "no_assessable_requirements"]] = Field(default_factory=list)
