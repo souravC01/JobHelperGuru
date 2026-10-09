@@ -54,7 +54,7 @@ from backend.services.outbound_http import SSRFBlockedError
 from backend.services.matching.chunking import MAX_DOCUMENT_CHARS
 from backend.services.matching.models import EvaluationBatch
 from backend.services.matching.pipeline import evaluate_resumes
-from backend.services.matching.profiles import get_or_build_resume_profile
+from backend.services.matching.profiles import get_or_build_resume_profile, ProfileReviewRequest
 
 from backend.routers.auth import router as auth_router, get_current_user, get_optional_user, set_storage_service
 
@@ -725,6 +725,66 @@ def evaluate_resumes_endpoint(req: ResumeEvaluationRequest, current_user: User =
     return result
 
 
+def _resume_profile_response(profile):
+    fields={"resume_id","status","source_hash","profile_fingerprint","warnings"}
+    if profile.unresolved_skills: fields.add("unresolved_skills")
+    result = profile.model_dump(mode="json",include=fields)
+    if profile.unresolved_skills:
+        from backend.services.matching.provenance import fingerprint
+        result["review_token"] = fingerprint(profile.model_dump(mode="json"))
+    return result
+
+
+@app.post("/api/resumes/{resume_id}/profile/review")
+def review_resume_profile(resume_id: str, req: ProfileReviewRequest, current_user: User = Depends(get_current_user)):
+    from backend.services.matching.profiles import profile_version_key, validate_profile, resolve_profile_review
+    from backend.services.matching.provenance import source_hash, fingerprint
+    from backend.services.matching.models import ResumeProfile
+    _require_matching_enabled()
+    resume = storage.get_resume(resume_id,user_id=current_user.id)
+    if not resume: raise HTTPException(status_code=404,detail="Resume not found.")
+    key = profile_version_key(_get_matching_ai(current_user.id))
+    row = storage.get_resume_profile(user_id=current_user.id,resume_id=resume.id,source_hash=source_hash(resume.content),version_key=key)
+    try:
+        if not row: raise ValueError()
+        profile = validate_profile(ResumeProfile.model_validate_json(row['payload_json']),resume,key,allow_review=True)
+        if not profile.unresolved_skills or fingerprint(profile.model_dump(mode="json")) != req.review_token:
+            raise ValueError()
+    except (ValueError,TypeError,KeyError):
+        raise HTTPException(status_code=409,detail="Saved analysis changed. Reload the review.") from None
+    try:
+        resolved = resolve_profile_review(profile,resume,req.decisions)
+    except ValueError:
+        raise HTTPException(status_code=422,detail="Review every listed skill once. Supporting text must uniquely identify a passage containing that skill in the saved resume.") from None
+    try:
+        storage.save_resume_profile(user_id=current_user.id,resume_id=resume.id,source_hash=profile.source_hash,
+            version_key=key,payload_json=resolved.model_dump_json(),expected_payload=row['payload_json'])
+    except ValueError:
+        raise HTTPException(status_code=409,detail="Saved analysis changed. Reload the review.") from None
+    return _resume_profile_response(resolved)
+
+
+@app.get("/api/resumes/{resume_id}/profile")
+def read_resume_profile(resume_id: str, current_user: User = Depends(get_current_user)):
+    """Read current cached analysis without triggering extraction."""
+    from backend.services.matching.profiles import profile_version_key, validate_profile
+    from backend.services.matching.provenance import source_hash
+    from backend.services.matching.models import ResumeProfile
+    _require_matching_enabled()
+    resume=storage.get_resume(resume_id,user_id=current_user.id)
+    if not resume: raise HTTPException(status_code=404,detail="Resume not found.")
+    key=profile_version_key(_get_matching_ai(current_user.id))
+    row=storage.get_resume_profile(user_id=current_user.id,resume_id=resume.id,source_hash=source_hash(resume.content),version_key=key)
+    if row:
+        try:
+            profile=validate_profile(ResumeProfile.model_validate_json(row['payload_json']),resume,key,allow_review=True)
+            current=storage.get_resume(resume.id,user_id=current_user.id)
+            if current and current.content==resume.content and current.extraction_warnings==resume.extraction_warnings:
+                return _resume_profile_response(profile)
+        except (ValueError,TypeError,KeyError): pass
+    return dict(resume_id=resume.id,status="not_prepared",warnings=[])
+
+
 @app.post("/api/resumes/{resume_id}/profile")
 def prepare_resume_profile(resume_id: str, req: ResumeProfileRequest = Body(default=ResumeProfileRequest()),
                            current_user: User = Depends(get_current_user)):
@@ -740,7 +800,7 @@ def prepare_resume_profile(resume_id: str, req: ResumeProfileRequest = Body(defa
     except HTTPException: raise
     except Exception: raise _matching_provider_failure() from None
     if profile.status=="failed": raise _matching_provider_failure()
-    return profile.model_dump(mode="json",include={"resume_id","status","source_hash","profile_fingerprint","warnings"})
+    return _resume_profile_response(profile)
 
 
 # --- Bulletskill Optimizer ---

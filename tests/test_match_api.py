@@ -21,6 +21,32 @@ def evaluate(client,headers,ids,job=JOB,**extra):
     return client.post("/api/resumes/evaluate",headers=headers,json={"job_text":job,"resume_ids":ids,**extra})
 
 
+def test_unresolved_profile_is_visible_cached_and_never_scored(setup, monkeypatch):
+    client,a,b,r,p=setup
+    original=p.extract_match_chunk
+    def extract(payload, *, timeout):
+        response=original(payload,timeout=timeout)
+        if payload['task']=='resume_profile':
+            response['items'].append(dict(kind='skill',canonical_key='InventedTool',level='listed',source_line=2))
+        return response
+    monkeypatch.setattr(p,'extract_match_chunk',extract)
+    empty=client.get(f'/api/resumes/{r["id"]}/profile',headers=a)
+    assert empty.status_code==200 and empty.json()['status']=='not_prepared' and not p.calls
+    first=client.post(f'/api/resumes/{r["id"]}/profile',headers=a)
+    assert first.status_code==200 and first.json()['status']=='needs_review'
+    assert first.json()['unresolved_skills']==['inventedtool']
+    assert client.get(f'/api/resumes/{r["id"]}/profile',headers=a).json()==first.json()
+    assert client.get(f'/api/resumes/{r["id"]}/profile',headers=b).status_code==404
+    assert client.post(f'/api/resumes/{r["id"]}/profile',headers=a).json()==first.json()
+    assert p.counts()=={'resume_profile':1}
+    result=evaluate(client,a,[r['id']])
+    assert result.status_code==200
+    evaluation=result.json()['evaluations'][0]
+    assert evaluation['raw_score'] is None and evaluation['rank'] is None
+    assert evaluation['reason_codes']==['unresolved_skill_claims']
+    assert p.counts()=={'resume_profile':1,'requirements':1}
+
+
 def test_flag_off_preserves_legacy(setup,monkeypatch):
     client,a,b,r,p=setup; monkeypatch.delenv("MATCHING_V2_ENABLED")
     p.rank_resumes=Mock(return_value=[])
@@ -270,3 +296,54 @@ def test_skill_fit_response_and_cached_fresh_comparison(setup):
     again=client.post("/api/resumes/evaluate",headers=a,json={"job_text":JOB,"resume_ids":[r["id"]],"fresh":True})
     assert again.status_code==200 and p.counts()==calls
     assert again.json()["evaluations"][0]["raw_score"]==row["raw_score"]
+
+
+@pytest.mark.parametrize("accept", [False, True])
+def test_review_resolves_claim_without_ai_and_rejects_stale_foreign_input(setup, monkeypatch, accept):
+    client,a,b,r,p=setup
+    original=p.extract_match_chunk
+    def extract(payload, *, timeout):
+        response=original(payload,timeout=timeout)
+        if payload['task']=='resume_profile':
+            response['items'].append(dict(kind='skill',canonical_key='Python' if accept else 'InventedTool',level='listed',source_quote='Projects:'))
+        return response
+    monkeypatch.setattr(p,'extract_match_chunk',extract)
+    # Heading reference cannot recover across a section boundary.
+    first=client.post(f'/api/resumes/{r["id"]}/profile',headers=a).json()
+    assert first['status']=='needs_review'
+    key=first['unresolved_skills'][0]
+    body=dict(review_token=first['review_token'], decisions=[dict(skill=key,source_quote=QUOTE if accept else None)])
+    url=f'/api/resumes/{r["id"]}/profile/review'
+    before=p.counts().copy()
+    assert client.post(url,json=body).status_code==401
+    assert client.post(url,headers=b,json=body).status_code==404
+    assert client.post(url,headers=a,json={**body,'review_token':'stale'}).status_code==409
+    assert client.post(url,headers=a,json={**body,'decisions':[dict(skill=key,source_quote='fabricated source')]}).status_code==422
+    done=client.post(url,headers=a,json=body)
+    assert done.status_code==200 and done.json()['status']=='complete'
+    assert p.counts()==before
+    assert client.post(url,headers=a,json=body).status_code==409
+    assert client.get(f'/api/resumes/{r["id"]}/profile',headers=a).json()['status']=='complete'
+    assert evaluate(client,a,[r['id']]).json()['comparison_complete']
+    assert p.counts()=={'resume_profile':1,'requirements':1}
+
+
+def test_review_save_rejects_content_edit_during_transaction(setup, monkeypatch):
+    client,a,b,r,p=setup
+    original=p.extract_match_chunk
+    def extract(payload, *, timeout):
+        response=original(payload,timeout=timeout)
+        if payload['task']=='resume_profile':
+            response['items'].append(dict(kind='skill',canonical_key='InventedTool',level='listed',source_quote='Projects:'))
+        return response
+    monkeypatch.setattr(p,'extract_match_chunk',extract)
+    first=client.post(f'/api/resumes/{r["id"]}/profile',headers=a).json()
+    body=dict(review_token=first['review_token'],decisions=[dict(skill='inventedtool',source_quote=None)])
+    save=main.storage.save_resume_profile
+    def race(**kwargs):
+        assert client.patch(f'/api/resumes/{r["id"]}',headers=a,json={'content':'Skills: Rust'}).status_code==200
+        return save(**kwargs)
+    monkeypatch.setattr(main.storage,'save_resume_profile',race)
+    assert client.post(f'/api/resumes/{r["id"]}/profile/review',headers=a,json=body).status_code==409
+    assert client.get(f'/api/resumes/{r["id"]}/profile',headers=a).json()['status']=='not_prepared'
+    assert p.counts()=={'resume_profile':1}

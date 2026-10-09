@@ -303,11 +303,11 @@ def test_failed_preparation_does_not_repeat_profiles_as_fixed_evidence_or_lifecy
     runs=m.run_quality([case()],engine=engine,as_of=date(2026,9,30))
     assert len([r for r in runs if r['phase']=='cold'])==3
     assert not [r for r in runs if r['phase']=='fixed_rubric']
-    assert engine.engine.counts()['resume_profile']==12
+    assert engine.engine.counts()['resume_profile']==6
     engine=m.CountingEngine(FailedProfiles(),max_calls=80)
     lifecycle=m.run_lifecycle(case(),engine=engine,as_of=date(2026,9,30))
     assert [r['phase'] for r in lifecycle]==['profile_preparation']
-    assert engine.engine.counts()['resume_profile']==4
+    assert engine.engine.counts()['resume_profile']==2
 
 
 def test_failed_first_job_stops_lifecycle_before_mislabeled_warm_extraction():
@@ -372,26 +372,26 @@ def test_local_repeats_continue_after_exact_extraction_request_cap():
     assert all(r['metrics']['provider_calls']==0 for r in runs if r['phase']=='fixed_rubric')
 
 
-def test_edit_gate_allows_one_correction_per_changed_source_chunk_only():
+def test_edit_gate_requires_one_request_per_changed_source_chunk_only():
     m=benchmark()
     metrics=lambda n: dict(provider_calls=n,stages={'resume_profile':{'calls':n}})
     lifecycle=[dict(phase=p,comparison_complete=True,metrics=metrics(n),same_scores_and_ids=True)
-        for p,n in [('profile_preparation',5),('prepared_first_job',1),('second_job',1),('warm',0),('rename',0),('fresh',0),('edited_resume',2),('scorer_only',0)]]
+        for p,n in [('profile_preparation',5),('prepared_first_job',1),('second_job',1),('warm',0),('rename',0),('fresh',0),('edited_resume',1),('scorer_only',0)]]
     for row in lifecycle:
         if row['phase'] in {'prepared_first_job','second_job'}:
             row['metrics']=dict(provider_calls=1,stages={'requirements':{'calls':1}})
     edit=next(r for r in lifecycle if r['phase']=='edited_resume')
     edit['expected_profile_source_hashes']=['edited-chunk']
-    edit['metrics']['profile_source_call_counts']={'edited-chunk':2}
+    edit['metrics']['profile_source_call_counts']={'edited-chunk':1}
     evidence=dict(execution='live',job_chars=3200,resume_chars=[4000]*5,
         cold=[dict(comparison_complete=True,elapsed_seconds=100,metrics=metrics(6)) for _ in range(3)],
         main_cold=[dict(comparison_complete=True,metrics=metrics(2)) for _ in range(3)],lifecycle=lifecycle)
     assert m.performance_gate(evidence)
-    edit['metrics']['profile_source_call_counts']={'unchanged-chunk':2}
+    edit['metrics']['profile_source_call_counts']={'unchanged-chunk':1}
     assert not m.performance_gate(evidence)
-    edit['metrics']['profile_source_call_counts']={'edited-chunk':3}
-    edit['metrics']['provider_calls']=3
-    edit['metrics']['stages']['resume_profile']['calls']=3
+    edit['metrics']['profile_source_call_counts']={'edited-chunk':2}
+    edit['metrics']['provider_calls']=2
+    edit['metrics']['stages']['resume_profile']['calls']=2
     assert not m.performance_gate(evidence)
 
 

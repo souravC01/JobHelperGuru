@@ -115,10 +115,12 @@ def test_empty_rubric_needs_review_and_unassessable_content_excluded():
     assert "no_assessable_requirements" in result.warnings
 
 
-def test_split_or_and_partial_alternative_groups_are_rejected():
+def test_complete_split_or_is_recovered_but_partial_group_is_rejected():
     jd = "Required: Java or Python."
-    for items in [[proposal(jd, "Java"), proposal(jd, "Python")], [proposal(jd, "Java")]]:
-        assert extract(jd, Provider(items)).status == "failed"
+    recovered = extract(jd, Provider([proposal(jd, "Java"), proposal(jd, "Python")]))
+    assert recovered.status == "complete" and len(recovered.items) == 1
+    assert recovered.items[0].alternatives == ["java", "python"]
+    assert extract(jd, Provider([proposal(jd, "Java")])).status == "failed"
     jd = "Java or Python and SQL"
     assert extract(jd, Provider([proposal(jd, "Java", alternatives=["Java", "SQL"])] )).status == "failed"
 
@@ -160,38 +162,26 @@ def test_overlap_proposals_deduplicate_and_partial_or_group_is_rejected():
     assert result.status == "failed"
 
 
-def test_jd_repairs_received_quote_without_relaxing_provenance():
-    from backend.services.matching.extraction import extract_requirements
-    import time
-    class Repair:
-        def __init__(self):self.calls=[]
-        def extract_match_chunk(self,payload,*,timeout=None):
-            self.calls.append(payload)
-            quote="Required Python." if payload.get("validation_feedback",{}).get("validation_rule")=="source_quote_not_unique" else "Must use Python."
-            return dict(chunk_index=0,complete=True,items=[dict(category="required_skills",kind="skill",canonical_key="Python",alternatives=[],source_quote=quote,required_months=None)])
-    engine=Repair();result=extract_requirements("Required Python.",engine=engine,deadline=time.monotonic()+30)
-    assert result.status=='complete' and len(engine.calls)==2
-    assert result.items[0].source_quote=="Required Python." and result.items[0].source_start==0
-    assert engine.calls[1]['validation_feedback']['previous_response']['items'][0]['source_quote']=="Must use Python."
-    assert engine.calls[1]['validation_feedback']['validation_rule']=='source_quote_not_unique'
-
-
-def test_received_malformed_json_uses_the_same_single_correction_limit():
+@pytest.mark.parametrize("failure", ["quote", "schema", "json", "skill"])
+def test_invalid_jd_stops_after_one_request(failure):
     import json
-    from backend.services.matching.extraction import extract_requirements
-    class Repair:
-        def __init__(self, persistent):self.calls=[];self.persistent=persistent
-        def extract_match_chunk(self,payload,*,timeout=None):
+    class ProviderOnce:
+        def __init__(self): self.calls = []
+        def extract_match_chunk(self, payload, *, timeout):
             self.calls.append(payload)
-            if len(self.calls)==1 or self.persistent:json.loads('{broken')
-            return dict(chunk_index=0,complete=True,items=[proposal('Required Python.','Python')])
-    for persistent in (False,True):
-        engine=Repair(persistent)
-        result=extract_requirements('Required Python.',engine=engine,deadline=time.monotonic()+30)
-        assert result.status==('failed' if persistent else 'complete')
-        assert len(engine.calls)==2
-        assert engine.calls[1]['source_text']==engine.calls[0]['source_text']
-        assert engine.calls[1]['validation_feedback']==dict(reason='invalid_json_response',previous_response='{broken')
+            if len(self.calls) > 1:
+                return dict(chunk_index=0, complete=True, items=[proposal("Required Python.", "Python")])
+            if failure == "json":
+                raise json.JSONDecodeError("Invalid JSON", "private source", 0)
+            item = proposal("Invented quote" if failure == "quote" else "Required Python.",
+                            "Kafka" if failure == "skill" else "Python")
+            return dict(chunk_index=99 if failure == "schema" else 0, complete=True, items=[item])
+    engine = ProviderOnce()
+    result = extract("Required Python.", engine)
+    assert len(engine.calls) == 1
+    assert result.status == "failed" and not result.items
+    assert result.warnings == ["invalid_provider_response"]
+    assert "private source" not in result.model_dump_json()
 
 
 @pytest.mark.parametrize("quote,items",[
@@ -217,15 +207,3 @@ def test_complete_comma_or_group_and_alias_equivalents_have_one_denominator():
     same=extract(jd,Provider([proposal(jd,"JavaScript",alternatives=["JavaScript","JS"])]))
     assert same.status=="complete" and len(same.items)==1
     assert same.items[0].canonical_key=="javascript" and not same.items[0].alternatives
-
-
-def test_literal_jd_skill_rejection_supplies_specific_correction_rule():
-    class Correctable:
-        def __init__(self):self.calls=[]
-        def extract_match_chunk(self,payload,*,timeout):
-            self.calls.append(payload)
-            key="UI" if payload.get("validation_feedback",{}).get("validation_rule")=="unsupported_literal_skill" else "UI testing"
-            return dict(chunk_index=0,complete=True,items=[proposal("Required: UI tests.",key)])
-    engine=Correctable();result=extract("Required: UI tests.",engine)
-    assert result.status=="complete" and result.items[0].canonical_key=="ui"
-    assert len(engine.calls)==2

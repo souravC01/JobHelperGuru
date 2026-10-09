@@ -326,6 +326,20 @@ export async function prepareResumeProfile(resumeId, { signal = null } = {}) {
   return res.json();
 }
 
+export async function getResumeProfile(resumeId, { signal = null } = {}) {
+  const res = await authFetch(`${API_BASE}/resumes/${encodeURIComponent(resumeId)}/profile`, { signal });
+  if (!res.ok) throw await parseApiError(res, 'Failed to read saved analysis');
+  return res.json();
+}
+
+export async function reviewResumeProfile(resumeId, review, { signal = null } = {}) {
+  const res = await authFetch(`${API_BASE}/resumes/${encodeURIComponent(resumeId)}/profile/review`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(review), signal,
+  });
+  if (!res.ok) throw await parseApiError(res, 'Failed to save skill review');
+  return res.json();
+}
+
 export async function optimizeBullet({
   target_job_title,
   section_type,

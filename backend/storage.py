@@ -816,7 +816,7 @@ class StorageService:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def save_resume_profile(self, *, user_id: str, resume_id: str, source_hash: str, version_key: str, payload_json: str) -> None:
+    def save_resume_profile(self, *, user_id: str, resume_id: str, source_hash: str, version_key: str, payload_json: str, expected_payload: str | None = None) -> None:
         from backend.services.matching.models import ResumeProfile
         from backend.services.matching.profiles import validate_profile
         profile = ResumeProfile.model_validate_json(payload_json)
@@ -828,11 +828,18 @@ class StorageService:
             if not row or hashlib.sha256(row["content"].encode("utf-8")).hexdigest() != source_hash:
                 raise ValueError("Resume source changed or is unavailable")
             resume = Resume(id=row["id"], name=row["name"], content=row["content"], extraction_warnings=self._resume_extraction_warnings(row))
-            validate_profile(profile, resume, version_key)
+            validate_profile(profile, resume, version_key, allow_review=True)
+            if expected_payload is not None:
+                cursor.execute(self._format_sql("""UPDATE resume_profiles SET payload_json = ?, profile_fingerprint = ?
+                    WHERE user_id = ? AND resume_id = ? AND source_hash = ? AND version_key = ? AND payload_json = ?"""),
+                    (payload_json, profile.profile_fingerprint, user_id, resume_id, source_hash, version_key, expected_payload))
+                if cursor.rowcount != 1: raise ValueError("Saved analysis changed; reload review")
+                return
             cursor.execute(self._format_sql("""INSERT INTO resume_profiles
                 (user_id, resume_id, source_hash, version_key, profile_fingerprint, payload_json, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (user_id, resume_id, source_hash, version_key) DO NOTHING"""),
-                (user_id, resume_id, source_hash, version_key, profile.profile_fingerprint, payload_json, datetime.now().isoformat()))
+                # Review rows need a storage identity, but publish no scoring fingerprint.
+                (user_id, resume_id, source_hash, version_key, profile.profile_fingerprint or hashlib.sha256(payload_json.encode("utf-8")).hexdigest(), payload_json, datetime.now().isoformat()))
 
     def delete_resume_profiles(self, *, user_id: str, resume_id: str) -> int:
         with self._get_cursor() as cursor:

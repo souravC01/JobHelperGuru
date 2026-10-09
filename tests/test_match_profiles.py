@@ -261,19 +261,25 @@ def test_multiline_literal_skill_fact_keeps_exact_original_quote():
     assert profile.status=="complete" and profile.facts[0].source_quote==text.split("\n",1)[1]
 
 
-def test_profile_repairs_one_received_unsupported_claim_with_source_feedback():
+@pytest.mark.parametrize("failure", ["skill", "schema", "json"])
+def test_invalid_profile_stops_after_one_request(failure):
+    import json
     from backend.services.matching.profiles import extract_resume_profile
-    class RepairProvider(ProfileProvider):
-        def extract_match_chunk(self,payload,*,timeout=None):
+    class ProviderOnce(ProfileProvider):
+        def extract_match_chunk(self, payload, *, timeout=None):
             self.calls.append(payload)
-            key="Database" if len(self.calls)==1 else "PostgreSQL"
-            return dict(chunk_index=0,complete=True,items=[fact("Built PostgreSQL services.",key)])
-    engine=RepairProvider([])
-    profile=extract_resume_profile(Resume(id="r",name="R",content="Projects:\nBuilt PostgreSQL services."),engine=engine,deadline=time.monotonic()+30)
-    assert profile.status=="complete" and profile.facts[0].canonical_key=="postgresql"
-    assert len(engine.calls)==2 and engine.calls[1]['validation_feedback']['reason']=='schema_or_source_validation_failed'
-    assert engine.calls[1]['validation_feedback']['validation_rule']=='unsupported_literal_skill'
-    assert engine.calls[0]['source_text']==engine.calls[1]['source_text']
+            if failure == "json" and len(self.calls) == 1:
+                raise json.JSONDecodeError("Invalid JSON", "private source", 0)
+            key = "Database" if failure == "skill" and len(self.calls) == 1 else "PostgreSQL"
+            return dict(chunk_index=99 if failure == "schema" and len(self.calls) == 1 else 0,
+                        complete=True, items=[fact("Built PostgreSQL services.", key)])
+    engine = ProviderOnce([])
+    profile = extract_resume_profile(Resume(id="r", name="R", content="Projects:\nBuilt PostgreSQL services."),
+                                     engine=engine, deadline=time.monotonic()+30)
+    assert len(engine.calls) == 1
+    assert profile.status == ("needs_review" if failure == "skill" else "failed") and not profile.facts
+    assert profile.warnings == (["unresolved_skill_claims"] if failure == "skill" else ["invalid_provider_response"])
+    assert "private source" not in profile.model_dump_json()
 
 
 def test_profile_does_not_retry_explicitly_unresolved_or_network_failure():
@@ -315,7 +321,8 @@ def test_new_profile_ignores_unused_activity_claims_but_validates_skills():
     assert p.status=="complete" and len(p.facts)==1
     assert p.facts[0].kind=="skill" and p.facts[0].canonical_key=="python"
     items[0]["canonical_key"]="Invented technology"
-    assert extract_resume_profile(r,engine=engine,deadline=time.monotonic()+30).status=="failed"
+    rejected=extract_resume_profile(r,engine=engine,deadline=time.monotonic()+30)
+    assert rejected.status=="needs_review" and rejected.unresolved_skills==["invented technology"]
 
 
 def test_existing_rich_profile_remains_reusable_without_reextraction(tmp_path):

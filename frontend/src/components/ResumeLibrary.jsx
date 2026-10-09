@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import {
   getResumes,
+  getResumeProfile,
+  reviewResumeProfile,
   addResume,
   deleteResume,
   uploadResumeFile,
@@ -62,20 +64,28 @@ export default function ResumeLibrary({ onResumesUpdated, profilePreparationEnab
     };
   }, [profilePreparationEnabled, refreshKey]);
 
-  const prepareProfile = async (resume) => {
+  const prepareProfile = async (resume, cachedOnly = false, review = null) => {
     if (!preparationEnabledRef.current || !resume?.id) return;
     preparationRef.current[resume.id]?.abort();
     const controller = new AbortController();
     preparationRef.current[resume.id] = controller;
     const current = () => preparationRef.current[resume.id] === controller && !controller.signal.aborted;
-    setProfileStates(prev => ({ ...prev, [resume.id]: { status: 'preparing' } }));
+    setProfileStates(prev => ({ ...prev, [resume.id]: { ...prev[resume.id], status: 'preparing', error: null } }));
     try {
-      const prepared = await prepareResumeProfile(resume.id, { signal: controller.signal });
-      if (current()) setProfileStates(prev => ({ ...prev, [resume.id]: { status: prepared.status, warnings: prepared.warnings || [] } }));
+      const prepared = await (review ? reviewResumeProfile(resume.id, review, { signal: controller.signal })
+        : (cachedOnly ? getResumeProfile : prepareResumeProfile)(resume.id, { signal: controller.signal }));
+      if (current()) {
+        setProfileStates(prev => ({ ...prev, [resume.id]: { status: prepared.status, warnings: prepared.warnings || [], unresolvedSkills: prepared.unresolved_skills || [], reviewToken: prepared.review_token, decisions: {} } }));
+        if (review) onResumesUpdated?.(resumes);
+      }
     } catch (err) {
-      if (current()) setProfileStates(prev => ({ ...prev, [resume.id]: { status: 'failed', error: err.message || 'Check AI settings and retry.' } }));
+      if (current()) setProfileStates(prev => ({ ...prev, [resume.id]: { ...prev[resume.id], status: review ? 'needs_review' : 'failed', error: err.message || 'Check AI settings and retry.' } }));
     }
   };
+
+  const updateReview = (resumeId, skill, values) => setProfileStates(prev => ({ ...prev,
+    [resumeId]: { ...prev[resumeId], decisions: { ...prev[resumeId].decisions,
+      [skill]: { ...prev[resumeId].decisions?.[skill], ...values } } } }));
 
   const publishSavedResume = saved => {
     const updated = resumes.some(r => r.id === saved.id)
@@ -455,14 +465,39 @@ export default function ResumeLibrary({ onResumesUpdated, profilePreparationEnab
               <div className="pt-2 border-t border-[#e0e0e0] flex items-center justify-between text-[11px] text-[#666666]">
                 <div aria-live="polite" className="space-y-1">
                   {profilePreparationEnabled ? <>
+                    {!profileStates[resume.id] && <button className="btn-secondary-corporate" aria-label={`Check saved analysis for ${resume.name}`} onClick={() => prepareProfile(resume, true)}>Check saved analysis</button>}
                     <p>{profileStates[resume.id]?.status === 'preparing' ? 'Preparing resume analysis...'
                       : profileStates[resume.id]?.status === 'complete' ? 'Ready for job comparison'
                       : profileStates[resume.id]?.status === 'failed' ? 'Analysis failed. Your resume is saved.'
-                      : profileStates[resume.id]?.status === 'needs_review' ? 'Analysis needs review. Check saved text and retry.'
+                      : profileStates[resume.id]?.status === 'needs_review' ? 'Analysis needs review. Check saved text.'
                       : 'Analyzed when compared with a job'}</p>
                     {profileStates[resume.id]?.error && <p>{profileStates[resume.id].error}</p>}
-                    {(profileStates[resume.id]?.warnings || []).map((warning, i) => <p key={i}>{warning}</p>)}
-                    {['failed', 'needs_review'].includes(profileStates[resume.id]?.status) && <button className="btn-secondary-corporate" aria-label={`Retry analysis for ${resume.name}`} onClick={() => prepareProfile(resume)}>Retry analysis</button>}
+                    {(profileStates[resume.id]?.warnings || []).map((warning, i) => <p key={i}>{warning === 'unresolved_skill_claims' ? 'Score withheld. Review the skills below and correct the saved text where needed.' : warning}</p>)}
+                    {profileStates[resume.id]?.unresolvedSkills?.length > 0 && <p>Skills needing review: {profileStates[resume.id].unresolvedSkills.join(', ')}</p>}
+                    {profileStates[resume.id]?.reviewToken && <fieldset disabled={profileStates[resume.id].status === 'preparing'}>
+                      <legend>Review unsupported skill claims</legend>
+                      <p>Exclude a claim, or copy supporting text from the saved resume. Existing verified occurrences are kept.</p>
+                      {profileStates[resume.id].unresolvedSkills.map(skill => <div key={skill}>
+                        <label>Decision for {skill}
+                          <select value={profileStates[resume.id].decisions?.[skill]?.action || ''} onChange={e => updateReview(resume.id, skill, { action: e.target.value })}>
+                            <option value="">Choose a decision</option><option value="exclude">Exclude unsupported claim</option><option value="support">Verify with saved text</option>
+                          </select>
+                        </label>
+                        {profileStates[resume.id].decisions?.[skill]?.action === 'support' && <label>Supporting text for {skill}
+                          <textarea value={profileStates[resume.id].decisions?.[skill]?.quote || ''} onChange={e => updateReview(resume.id, skill, { quote: e.target.value })} />
+                        </label>}
+                      </div>)}
+                      <button className="btn-secondary-corporate" disabled={!profileStates[resume.id].unresolvedSkills.every(skill => {
+                        const decision = profileStates[resume.id].decisions?.[skill];
+                        return decision?.action === 'exclude' || (decision?.action === 'support' && decision.quote?.trim());
+                      })} onClick={() => prepareProfile(resume, false, {
+                        review_token: profileStates[resume.id].reviewToken,
+                        decisions: profileStates[resume.id].unresolvedSkills.map(skill => ({ skill,
+                          source_quote: profileStates[resume.id].decisions[skill].action === 'exclude' ? null : profileStates[resume.id].decisions[skill].quote })),
+                      })}>Save skill review</button>
+                      <button className="btn-secondary-corporate" onClick={() => prepareProfile(resume, true)}>Reload saved review</button>
+                    </fieldset>}
+                    {['failed', 'needs_review'].includes(profileStates[resume.id]?.status) && !profileStates[resume.id]?.unresolvedSkills?.length && <button className="btn-secondary-corporate" aria-label={`Retry analysis for ${resume.name}`} onClick={() => prepareProfile(resume)}>Retry analysis</button>}
                   </> : <p>Saved for job comparison</p>}
                   {(resume.extraction_warnings || []).map((warning, i) => <p key={i}>{warning}</p>)}
                 </div>

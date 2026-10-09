@@ -6,6 +6,8 @@ import * as apiClient from '../api/client'
 vi.mock('../api/client', () => ({
   getResumes: vi.fn(),
   prepareResumeProfile: vi.fn(),
+  getResumeProfile: vi.fn(),
+  reviewResumeProfile: vi.fn(),
   addResume: vi.fn(),
   deleteResume: vi.fn(),
   uploadResumeFile: vi.fn(),
@@ -106,6 +108,29 @@ describe('Vault profile preparation', () => {
   const resume = { id: 'saved', name: 'Saved Resume', content: 'Saved source text', created_at: '2026-09-30' }
   beforeEach(() => { vi.resetAllMocks(); apiClient.getResumes.mockResolvedValue([resume]); apiClient.prepareResumeProfile.mockResolvedValue({ resume_id: 'saved', status: 'complete', warnings: [] }) })
 
+  it('reads saved review details after reopening without extracting again', async () => {
+    apiClient.getResumeProfile.mockResolvedValue({ status: 'needs_review', warnings: ['unresolved_skill_claims'], unresolved_skills: ['inventedtool'] })
+    render(<ResumeLibrary profilePreparationEnabled />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Check saved analysis for Saved Resume' }))
+    expect(await screen.findByText(/Skills needing review: inventedtool/)).toBeInTheDocument()
+    expect(apiClient.prepareResumeProfile).not.toHaveBeenCalled()
+  })
+
+  it('shows unresolved skills for review without offering a repeated extraction', async () => {
+    apiClient.getResumes.mockResolvedValueOnce([]).mockResolvedValue([resume])
+    apiClient.uploadResumeFile.mockResolvedValue(resume)
+    apiClient.parseResumeFile.mockResolvedValue({ text: resume.content, suggested_title: resume.name })
+    apiClient.prepareResumeProfile.mockResolvedValue({ status: 'needs_review', warnings: ['unresolved_skill_claims'], unresolved_skills: ['inventedtool'] })
+    render(<ResumeLibrary profilePreparationEnabled />)
+    fireEvent.click(await screen.findByText('Paste Text'))
+    const inputs = document.querySelectorAll('input[type="file"]')
+    fireEvent.change(inputs[inputs.length - 1], { target: { files: [new File(['pdf'], 'saved.pdf', { type: 'application/pdf' })] } })
+    await screen.findByDisplayValue(resume.content)
+    fireEvent.click(screen.getByText('Save to Vault'))
+    expect(await screen.findByText(/Skills needing review: inventedtool/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry analysis for Saved Resume' })).not.toBeInTheDocument()
+  })
+
   it('old_resume_profiles_lazily_without_bulk_calls', async () => {
     render(<ResumeLibrary profilePreparationEnabled />)
     await screen.findByText('Saved Resume')
@@ -202,4 +227,23 @@ it('repeated_saved_profile_requests_use_only_current_stored_id', async () => {
     expect(apiClient.prepareResumeProfile.mock.calls[i]).toEqual(['saved', { signal: expect.any(AbortSignal) }])
     await screen.findByText('Ready for job comparison')
   }
+})
+
+
+it('requires explicit review decisions and saves without preparing again', async () => {
+  vi.clearAllMocks()
+  apiClient.getResumes.mockResolvedValue([{ id: 'r', name: 'Review me', content: 'Skills: Python' }])
+  apiClient.getResumeProfile.mockResolvedValue({ status: 'needs_review', unresolved_skills: ['python', 'invented'], review_token: 'token', warnings: ['unresolved_skill_claims'] })
+  apiClient.reviewResumeProfile.mockResolvedValue({ status: 'complete', warnings: [] })
+  render(<ResumeLibrary profilePreparationEnabled />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Check saved analysis for Review me' }))
+  const save = await screen.findByRole('button', { name: 'Save skill review' })
+  expect(save).toBeDisabled()
+  fireEvent.change(screen.getByLabelText('Decision for python'), { target: { value: 'support' } })
+  fireEvent.change(screen.getByLabelText('Supporting text for python'), { target: { value: 'Skills: Python' } })
+  fireEvent.change(screen.getByLabelText('Decision for invented'), { target: { value: 'exclude' } })
+  fireEvent.click(save)
+  await screen.findByText('Ready for job comparison')
+  expect(apiClient.reviewResumeProfile).toHaveBeenCalledWith('r', { review_token: 'token', decisions: [{ skill: 'python', source_quote: 'Skills: Python' }, { skill: 'invented', source_quote: null }] }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+  expect(apiClient.prepareResumeProfile).not.toHaveBeenCalled()
 })

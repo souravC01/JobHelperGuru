@@ -201,7 +201,7 @@ class Evaluation(MatchContract):
     score_scope: Literal["skill_fit"] = "skill_fit"
     rubric_fingerprint: NonEmptyString | None = None
     skill_coverage_score: CategoryScore | None = None
-    reason_codes: list[Literal["source_incomplete", "rubric_limit", "invalid_provider_response", "missing_assessment", "unresolved_evidence", "deadline_exceeded", "no_assessable_requirements"]] = Field(default_factory=list)
+    reason_codes: list[Literal["source_incomplete", "rubric_limit", "invalid_provider_response", "missing_assessment", "unresolved_evidence", "unresolved_skill_claims", "deadline_exceeded", "no_assessable_requirements"]] = Field(default_factory=list)
     raw_score: RawScore | None = None
     category_scores: dict[RequirementCategory, CategoryScore] = Field(
         default_factory=dict
@@ -359,6 +359,7 @@ class ResumeProfile(MatchContract):
     facts: list[ProfileFact] = Field(default_factory=list)
     processed_source_chunks: list[SourceSpan] = Field(default_factory=list)
     warnings: list[NonEmptyString] = Field(default_factory=list)
+    unresolved_skills: list[NonEmptyString] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def completeness(self):
@@ -372,7 +373,7 @@ class ResumeProfile(MatchContract):
         if any(f.employment_id and f.employment_id not in employment for f in self.facts):
             raise ValueError("Unknown employment fact")
         if self.status == EvaluationStatus.COMPLETE:
-            if not self.profile_fingerprint or not self.processed_source_chunks or self.warnings:
+            if not self.profile_fingerprint or not self.processed_source_chunks or self.warnings or self.unresolved_skills:
                 raise ValueError("Complete profile needs coverage and identity, no unresolved warnings")
         elif self.profile_fingerprint:
             raise ValueError("Incomplete profile cannot publish a fingerprint")

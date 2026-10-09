@@ -148,6 +148,7 @@ export default function ResumeFitRanker({
       rubric_limit: 'The job description exceeds the supported requirement limit. Review the description.',
       invalid_provider_response: 'AI could not extract valid skills. Check AI settings and retry.',
       unresolved_evidence: 'Cached skill facts conflict. Review the saved resume text and retry.',
+      unresolved_skill_claims: 'Score withheld: some extracted skills need review in the resume vault.',
       deadline_exceeded: 'Evaluation timed out. Retry the comparison.',
       no_assessable_requirements: 'No required or preferred skills were found. Review the full job description.',
     };

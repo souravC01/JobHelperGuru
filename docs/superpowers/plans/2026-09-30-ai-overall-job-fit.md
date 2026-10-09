@@ -10,7 +10,7 @@
 
 **Active specification:** [Cached Skill Matching — Task 9 Revision](2026-10-01-cached-skill-matching.md). Read that revision before implementing any further Task 9 changes. It defines the score, reusable components, removed paths, exact interfaces/tests and revised gates. Its requirements take precedence over historical sections below.
 
-**Execution status:** Tasks 9.1–9.4 and benchmark code are implemented and verified. Task 9 remains in progress: six independent cold comparisons produced only one complete result, taking 240.02 seconds including analysis; current lifecycle preparation also failed. Cached artifact scoring is exact/stable in about 0.10 seconds with zero requests. Second-JD/category review and separate holdout remain pending. Task 10 and activation remain pending; the feature stays off. Current usage is 243/300, with 57 requests left. Final 462 backend and 90 frontend tests plus production build pass. Follow the active revision and evaluation report for current gate results.
+**Execution status (2026-10-08):** Task 9 complete: compound matching and authenticated cached-claim review implemented; 525 backend tests, 93 frontend tests and build pass. Reviewed saved-response development check scores49.23/100, cached identical0.028s/zero extraction calls. Owner explicitly deferred unseen-document validation to Task10/pre-release; it is not claimed passed. No new live requests;247/300 used. Task10 final regression, selective cleanup and release handoff remain pending; feature off. Read the active revision/report for current scope; older status entries are historical.
 
 **Historical records:** Earlier completed steps and measurements are retained for provenance, not as instructions to restore semantic overall-fit scoring. The revised tasks replace that older path.
 
@@ -29,7 +29,7 @@
 | 6 — rubric and assessment caches | Complete | 40 cache tests and 368 backend tests passed; warm zero-call comparisons, mixed hits, concurrent rubric freezing and migrations checked |
 | 7 — authenticated API | Complete | 59 focused, 411 backend and 71 frontend tests passed; production build passed |
 | 8 — truthful UI and request lifecycle | Complete | 89 frontend and 43 authenticated API tests passed; production build passed (1,593 modules); no live provider calls |
-| 9 — cached skill matching pivot and validation | In progress; pivot implemented | Tasks 9.1–9.4 verified; 9.5 reviewed/live gates pending; former semantic experiments superseded |
+| 9 — cached skill matching pivot and validation | Complete with explicit unseen-validation deferral | Compound matching and vault review complete; 525 backend/93 frontend/build pass; saved development score49.23; unseen validation moved to Task10/pre-release |
 | 10 — final regression and handoff | Pending | |
 
 Task 3 accepts validated proposals with stable source/version-based requirement IDs; persisted frozen rubrics belong to Task 6. Its provider schema requires exact chunk acknowledgment and explicit completion. Unknown technologies survive without a taxonomy gate. Server validation rejects ambiguous quotes, split/partial literal OR groups, unsupported tenure minima, non-equivalent category conflicts and explicit document instructions. Semantic interpretation remains the AI's responsibility and is not yet validated by live quality measurements. Over-limit rubrics remain needs_review without trimming.
@@ -399,6 +399,8 @@ expect(screen.getByText('Overall job fit')).toBeInTheDocument();
 Keep existing profile/source validation, cache isolation, parser fixes, aliases and UI race safeguards. The passage-reference and atomic-semantic experiments are cancelled. Historical measurements remain in `docs/ai-matching-evaluation.md`; they do not pass the revised gates. All implementation checkboxes remain open until their actual verification passes.
 
 ## Task 10: Final regression, selective cleanup, and release handoff
+
+- [ ] Complete the owner-deferred unseen-document accuracy check before activation; Task 9 development replay does not establish this. No new corpus or live request is authorized solely by this checkbox.
 
 **Files:** Only implementation paths above plus README/`docs/ai-matching-evaluation.md`. Do not import unrelated source-branch changes.
 

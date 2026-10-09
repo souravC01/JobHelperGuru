@@ -9,7 +9,7 @@ from .models import (
     RequirementCategory, RequirementResult, ScoreBreakdown, has_evidence_conflict,
 )
 
-MATCHER_VERSION = "cached-skills-v1"
+MATCHER_VERSION = "cached-skills-v4"
 SCORER_VERSION = "skill-fit-v1"
 CATEGORY_WEIGHTS = {
     RequirementCategory.REQUIRED_SKILLS: Decimal(60),
@@ -19,24 +19,37 @@ CATEGORY_WEIGHTS = {
 
 def match_cached_skills(requirements: list[Requirement], profile: ResumeProfile) -> list[Evidence]:
     """Match complete, source-validated profile facts; no job-specific AI judgment."""
-    from .normalization import canonicalize_skill
+    from .normalization import canonicalize_match_skill as canonicalize_skill, SKILL_CATEGORY_MEMBERS, skill_components
     if profile.status != "complete" or not profile.profile_fingerprint:
         raise ValueError("Complete cached profile required")
     facts = {}
     for fact in profile.facts:
         if fact.kind == "skill":
-            facts.setdefault(canonicalize_skill(fact.canonical_key), []).append(fact)
+            for key in {canonicalize_skill(fact.canonical_key), *skill_components(fact.canonical_key)}:
+                facts.setdefault(key, []).append(fact)
     evidence = []
     for requirement in requirements:
         if requirement.kind != "skill" or requirement.category not in CATEGORY_WEIGHTS or requirement.required_months is not None:
             raise ValueError("Only required or preferred skills can be matched")
         positives, conflict = [], False
         for key in requirement.alternatives or [requirement.canonical_key]:
-            candidates = facts.get(canonicalize_skill(key), [])
-            if has_evidence_conflict({f.level for f in candidates}):
+            canonical = canonicalize_skill(key)
+            direct = facts.get(canonical, [])
+            # A contradictory category claim must not be bypassed by a tool match.
+            if has_evidence_conflict({f.level for f in direct}):
                 conflict = True
                 continue
-            positives.extend(f for f in candidates if f.level in {EvidenceLevel.DEMONSTRATED, EvidenceLevel.LISTED})
+            category_positives = []
+            for member in {canonical, *SKILL_CATEGORY_MEMBERS.get(canonical, ())}:
+                candidates = facts.get(member, [])
+                if has_evidence_conflict({f.level for f in candidates}):
+                    conflict = True
+                    continue
+                category_positives.extend(f for f in candidates if f.level in {EvidenceLevel.DEMONSTRATED, EvidenceLevel.LISTED})
+            if category_positives and any(f.level == EvidenceLevel.CONTRADICTED for f in direct):
+                conflict = True
+            else:
+                positives.extend(category_positives)
         if positives:
             fact = min(positives, key=lambda f: (f.level != EvidenceLevel.DEMONSTRATED, f.source_start, f.source_end, f.id))
             evidence.append(Evidence(requirement_id=requirement.id, level=fact.level, source_quote=fact.source_quote,

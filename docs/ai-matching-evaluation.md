@@ -1,6 +1,88 @@
 # AI skill-matching evaluation
 
-## Latest continuation — 2026-10-01
+## Current result — Task 9 completed, 2026-10-08
+
+The owner explicitly deferred unseen-document validation and authorized completing implementation plus development validation. **Task 9 is complete on that basis; general extraction/ranking accuracy remains unverified and activation remains off.** Task 10 carries the deferred check.
+
+The remaining gaps are implemented: explicit Agile/Scrum and SDLC/STLC component matching (without arbitrary slash splitting); and an authenticated in-vault review form for unsupported claims. Every skill requires an explicit exclude or supporting-text decision. Supporting text must locate a unique saved passage; validation reads its original full lines and wrapped context, preserving negation and learning. Exclusion keeps already verified occurrences. No AI call occurs during review. A token tied to the profile and transactional comparison protect against stale reviews, concurrent edits and cross-user access.
+
+The final saved-data development check used the original captured 89-observation resume response, verified the rejected indices still matched the owner's 11 approved exclusions, and resolved them through the new review service. It retained 78 verified facts. The saved JD became 15 required groups and one preferred OR group. Eight required groups matched: programming languages, test automation frameworks, functional testing, end-to-end testing, CI/CD, SDLC, Agile and Scrum. Preferred coverage was zero. Independent arithmetic: `(60 × 8/15 + 5 × 0/1) / 65 × 100 = 49.23`; unweighted coverage 50%. The score change from 30.77 is exactly the three additional explicit compound components, not a weight change.
+
+Local saved-response processing took **0.040 seconds**; cached fresh comparison **0.028 seconds**, identical result and zero extraction calls. These timings exclude the earlier live extraction and human review. This turn made **zero live AI requests**, usage remains **247/300**, 53 remaining. It does not measure cold extraction or unseen-document accuracy. Private evidence: `scratch/matching/task9-completion-result.json` and preserved original captures.
+
+Final checks: **525 backend tests, 93 frontend tests and production build pass**. Source/review guards include negation, Java/JavaScript and SQL/NoSQL boundaries, conflicting/stale/foreign reviews, concurrent saved-text edits, duplicate-fact preservation and cached scoring. Fresh review found the wrapped-context omission, which was reproduced then fixed; no further substantive finding. One existing Starlette/AnyIO deprecation warning. Manual browser inspection not performed. JD extractor is v5 and matcher v4; existing profile-v5 facts are reused.
+
+Next: Task 10 final regression, selective cleanup and release handoff, with the explicitly deferred unseen-document check before activation. No new live benchmark, push, PR or activation in Task 9 completion. Historical measurements and formerly open statuses below are retained as history and superseded by this result.
+
+## Historical bounded result — 2026-10-08, local OR-group completion
+
+**Task 9's revised implementation and bounded functional check are complete.** The production path accepts the reviewed saved resume and saved JD response, computes **30.77/100 skill fit**, and reproduces the identical comparison from cache with zero extraction calls. This is not a fresh unreviewed extraction or a general accuracy/performance pass. Feature remains default-off.
+
+The backend now repairs separately proposed alternatives only when they share one exact source span and category and the combined list passes the existing complete explicit-OR validation. AND lists remain separate. Missing options, conflicting categories and invented acronym expansions remain blocked. Parenthetical names normalize only when the short and expanded forms resolve to the same known skill. JD extractor v4 and matcher v3 invalidate changed interpretations/results while retaining reusable resume profiles.
+
+Final local saved-response processing took **0.039 seconds**; the fresh local comparison using both cached artifacts took **0.028 seconds**, produced identical results and made **zero extraction calls**. The original live inputs cost one resume request (5,167 tokens) and one JD request (3,317 tokens), with explicit human review of 11 resume exclusions in between. This implementation turn made **zero live requests**. Budget remains **247/300; 53 remaining**.
+
+| Score component | Result |
+|---|---|
+| Required skill groups | 5/15 matched (33.33%) |
+| Preferred OR group | 0/1 matched (0%) |
+| Weighted score | `(60 × 5/15 + 5 × 0/1) / 65 × 100 = 30.77` |
+| Unweighted coverage | 5/16 = 31.25% |
+
+Matched groups: programming languages, test automation frameworks, functional testing, end-to-end testing, CI/CD. The preferred group is one requirement: WebdriverIO OR BDD OR performance testing.
+
+Known accuracy limit: resume keys such as `agile/scrum` and `sdlc/stlc` do not currently split into component skills. Broad phrases such as testing methodologies also have no general semantic inference. Thus this score verifies the present deterministic rules, not comprehensive skill recognition. No additional synonyms or inferred credit were added to improve this example's score. One resume cannot demonstrate comparative ranking quality.
+
+Validation: **517 backend tests passed**, followed by **88 focused pipeline/scoring/source tests** after the matcher version bump. The earlier 92 frontend tests and successful build still apply because this turn changed no frontend code. A fresh review found no substantive issue and recommended the applied matcher-version bump; the reviewer's independent test attempt was blocked by its temporary SQLite setup. Executor tests passed. Existing Starlette/AnyIO deprecation warning only.
+
+Remaining work: Task 10/release preparation, broader unseen-document accuracy/performance checks, compound skill handling if product requirements warrant it, and a general user-facing cached-claim approval workflow. The current development exclusions were explicitly reviewed; they are not an automatic discard policy. No push, PR or activation. Private final evidence: `scratch/matching/task9-or-final-result.json` and the preserved original captures.
+
+## Earlier result — 2026-10-08
+
+**Task 9 remains open: reviewed resume preparation passes, but the single JD response fails OR-group validation.** No score was produced, no retry was made, and the feature remains default-off.
+
+Implemented and verified: explicit testing shorthand and bounded neighboring-line recovery; wrapped negation/learning context is retained; valid resume facts survive unsupported claims in a cached `needs_review` profile. Scores are withheld until review. The vault exposes unresolved skills, including after reopening through a read-only cached-status endpoint. Repeated preparation reuses the review record without another AI request. There is no general approve/reject review endpoint yet; this development check applied the owner's explicit exclusions to a saved response.
+
+The owner approved excluding observations 47, 48, 61, 74, 75, 80, 82, 83, 84, 85 and 88 from the original 89-observation resume response. All other observations were retained. Production preparation accepted **78 verified facts** in **0.098 seconds**, using the saved reviewed response and **zero new resume requests**. This is reviewed-input validation, not a fresh unreviewed extraction success.
+
+The one authorized new JD extraction consumed **1 request**, **3,317 tokens** (2,222 input + 1,095 output), with **12.26 seconds** provider time and **13.06 seconds** through the comparison path. Transport and schema succeeded. Of 18 proposed requirements, 15 individually passed source validation. Three preferred items failed: the source says “WebdriverIO, BDD (Behavior Driven Development), or performance testing,” but the provider returned three independent requirements. The combined BDD name also differed from the literal source. Accepting the split would incorrectly treat alternatives as independent scoring requirements, so the batch remained unscored.
+
+**Next:** resolve explicit source-backed OR grouping locally using this saved response, preserving the full option group and recognized acronym identity; add the smallest regression check, then replay locally. Do not run another live benchmark or silently drop preferred requirements. Cache timing and score for this pair are still unmeasured. General unseen-document quality/performance and activation remain separate pre-release work.
+
+Verification after the follow-up review fixes: **514 backend tests, 92 frontend tests, production build passed**. Existing Starlette/AnyIO deprecation warning only. Important review findings fixed: wrapped negation/learning, shorthand OR omissions, and saved review visibility after reopening. Manual browser inspection was not performed. The review-record storage hash remains an unused internal column; cached facts are revalidated and review records cannot score.
+
+Development usage: **247/300**, **53 remaining**. Private captures, approval record, diagnosis and result are in ignored `scratch/matching/task9-reviewed-*` and `task9-approved-*` files. Original provider captures were preserved. Changes are uncommitted in the managed C: worktree at detached HEAD 13cf424; no push, PR or activation occurred.
+
+## Historical result — 2026-10-07
+
+**Task 9 remains in progress.** The approved one-pass implementation is locally verified, but its one authorized production-pair check stopped at resume extraction. No live retry or repeated benchmark was run. The feature remains default-off. Larger unseen-document accuracy/performance validation is deferred to pre-release under the owner's revised plan.
+
+Implemented: no automatic correction requests; source line references instead of AI-copied unique quotations; backend reconstruction of exact source spans; precise synonyms and clear testing-list expansion; directional mappings for programming languages, test automation frameworks and cloud platforms. JD v3 and matcher v2 reflect changed interpretations/results. Matching-only vocabulary preserves valid profile-v5 caches. Generic-duty exclusions were clarified in the extraction prompt; this is not proof that every model output follows them.
+
+Verification: **490 backend tests passed** after review fixes, with one existing Starlette/AnyIO deprecation warning. Coverage includes warm/new-JD/edit/rename/scorer cache behavior, isolation, deterministic scoring, source bounds, negation, unknown skills and complete AND/OR groups. Review exposed three important bugs (whitespace roundtrip, full alias spans in OR groups, expanded-skill negation); all seven reproductions failed before fixes and passed afterward. No frontend changes; prior frontend/build results below are historical.
+
+### Single production-pair attempt
+
+| Measure | Result |
+|---|---|
+| Approved inputs | QA Engineer I JD (5,594 characters); QA–SDET resume (3,842 characters) |
+| Provider/model | Approved Experiential / gpt-6-luna |
+| Actual requests | **1**, resume preparation only; zero corrections |
+| Resume preparation / total | 30.44 / 30.48 seconds |
+| Reported tokens | 1,540 input + 3,627 output = **5,167** |
+| Provider transport and JSON/schema | Succeeded; 89 skill observations returned |
+| Backend source validation | Failed: 25 observations unsupported by their referenced source spans |
+| JD extraction, comparison, score | Not attempted / no score |
+| Cached live timing | Not measured because preparation failed |
+| Total development usage | **246/300**, including historical reservations; **54 remaining** |
+
+Local inspection of the saved response found two concrete gaps. First, the resume's `QA & Testing: Functional, Regression, ...` heading/list is expanded into names such as `functional testing`; the backend currently supports trailing shared-suffix lists but not this heading form. Phrases such as `unit and integration tests` also differ from returned `unit testing`. Second, some references miss the actual line: `REST APIs` appears on line 36 but was cited on line 37. Other observations infer a testing skill from a described outcome or activity; they must not all be accepted indiscriminately.
+
+The failure is **source interpretation/reference validation**, not malformed JSON, transport failure or repeated AI requests. No new score or general accuracy improvement is claimed. The remaining work is to accept supported shorthand and recover source locations consistently without accepting invented skills, using the saved response as a local regression fixture first. The planned bounded stop was honored; no second live attempt was made.
+
+Private artifacts remain ignored: `scratch/matching/task9-single-pass-production-result.json`, `scratch/matching/task9-single-pass-captures.json` and its isolated database. The shared D: budget and this active worktree's mirrored budget both record 246/300. Current implementation is in the managed C: worktree; the previous D: source checkout was not edited apart from its authorized request counter. No push, PR or activation.
+
+## Historical continuation — 2026-10-01
 
 **Task 9 has not passed.** Implementation and regression checks are complete, but the independent live development gate failed. The feature remains default-off; Task 10, holdout, publication and activation have not started. The owner granted 100 additional requests, raising the total development cap to **300**. Current usage is **243/300**, including earlier conservative interrupted-call reservations; **57 remain**.
 

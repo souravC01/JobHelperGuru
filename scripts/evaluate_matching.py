@@ -468,7 +468,7 @@ def performance_gate(evidence):
     expected=edit.get('expected_profile_source_hashes',[])
     counts=edit['metrics'].get('profile_source_call_counts',{})
     edited_calls=sum(counts.values())
-    edited_source_only=bool(expected) and set(counts)==set(expected) and all(1<=n<=2 for n in counts.values())
+    edited_source_only=bool(expected) and set(counts)==set(expected) and all(n==1 for n in counts.values())
     def within_cold_target(run):
         if run.get('analysis_seconds') is not None:
             return (run.get('analysis_succeeded') is True

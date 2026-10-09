@@ -39,6 +39,29 @@ def contains_skill(text: str, skill: str) -> bool:
     return any(_contains_literal_skill(text, alias) for alias in aliases_for_skill(clean_skill))
 
 
+def supports_extracted_skill(text: str, skill: str) -> bool:
+    """Verify a named skill, explicit synonym, or clear shared-suffix testing list."""
+    from backend.services.matching.normalization import matching_aliases_for_skill
+    aliases = matching_aliases_for_skill(skill)
+    if any(_contains_literal_skill(text, alias) for alias in aliases):
+        return True
+    # ponytail: explicit testing syntax only; related work outcomes are not skill claims.
+    methods = {"manual", "automated", "functional", "regression", "integration", "performance", "accessibility", "unit", "api", "database", "ui", "end-to-end", "cross-browser"}
+    method = "(?:" + "|".join(re.escape(m) for m in sorted(methods)) + ")"
+    for alias in aliases:
+        name = alias.casefold().removesuffix(" testing")
+        if name not in methods or not alias.casefold().endswith(" testing"):
+            continue
+        pattern = r"(?<![\w+#])" + re.escape(name) + r"(?:\s*(?:,\s*(?:(?:and|or)\s+)?|(?:and|or)\s+|/\s*)" + method + r")*\s+(?:testing|tests?|test cases)\b"
+        if re.search(pattern, text, re.I):
+            return True
+        for line in text.splitlines():
+            heading = re.match(r"\s*(?:QA\s*&\s*)?Testing\s*:\s*([^.;]+)", line, re.I)
+            if heading and any(part.strip().casefold() == name for part in re.split(r",|\||;|\band\b", heading[1], flags=re.I)):
+                return True
+    return False
+
+
 def match_skills(text: str, target_skills: list[str]) -> tuple[list[str], list[str]]:
     """
     Matches target skills against text using punctuation-aware matching.

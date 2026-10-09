@@ -22,7 +22,7 @@ def test_skill_extraction_distinguishes_slash_lists_from_compound_names(monkeypa
     prompt = requests[0]['messages'][0]['content']
     assert 'slash-separated distinct skills' in prompt
     assert 'CI/CD' in prompt and 'single compound' in prompt
-    assert json.loads(requests[0]['messages'][1]['content']) == payload
+    assert json.loads(requests[0]['messages'][1]['content']) == {**payload, 'source_text': '1: Use React/Redux and CI/CD.'}
 
 def test_extract_json_from_llm_response_with_think_tags():
     raw_llm = "<think>Analyzing candidates skills...</think>\n```json\n{\"company\": \"Google\", \"title\": \"SWE\"}\n```"
@@ -389,7 +389,8 @@ def test_match_request_is_full_guarded_and_score_free(monkeypatch):
     assert engine.extract_match_chunk(payload, timeout=12)["complete"] is True
     request = calls[0]
     assert request["temperature"] == 0 and request["timeout"] == 12
-    assert json.loads(request["messages"][1]["content"]) == payload
+    assert json.loads(request["messages"][1]["content"]) == {**payload, "source_text": "1: " + payload["source_text"]}
+    assert payload["source_text"] == "x" * 8000
     prompt = request["messages"][0]["content"]
     assert "untrusted" in prompt and "eligibility" in prompt and "preferred" in prompt
     assert "Never generate scores" in prompt
