@@ -171,3 +171,12 @@ Task9 final cold smoke at248e5b2:7requests/77311tokens/217.89s,0SDKfailures, inc
 Task9 latest source-only diagnostic atc2b3f41:3/3complete, reviewedpair2/3correct/1reversed,3requests/36818tokens/0SDKfailures/47.28–47.95s evidence only. Identical payloads,14semantic credits varied (Java5,QA9), literal credits stable. Total99/100,1left. Root remaining uncertainty is semantic relevance/credit reliability; tighten against unstable original-source pairings before full development/cache reruns. Do not tune weights to the preferred winner. Tasks9 Steps4–7 and10 remain open; noholdout/perf/rollout/push/PR.
 
 Task9 resumed with200totalcap. Semantic direct action/object/qualifier procedure:controlled samepayload3/3correct/completevs2/3before,3requests,total102; scoresstillvaried. Overlapcontextmergedusingoriginalcoordinates keepsallfacts; recorded QA13144→3236chars and Java7817→3036, no sourceomission. Assessmentversiononly; no newdependencies/weights/profilerebuild. Fresh455backendpass. Full development/cache gates pending.
+
+
+## Task 10 source-content audit — 2026-10-16
+
+The original captured patch matches the pinned base-to-source diff after newline normalization. All 37 changed-file blob IDs match; the remaining three captured paths are unchanged from base. The original source branch ref and source-checkout file bytes were unchanged during the audit.
+
+The earlier 13 raw SHA-256 discrepancies compared working-copy bytes against Git blob bytes. Two are conclusively mixed line endings, verified against surviving checkout bytes with identical normalized content. Eleven historical working-byte sequences are no longer available, so their original raw hashes cannot be reverified; their content is verified by the exact captured patch and pinned blob IDs. The original manifest and patch remain untouched.
+
+The [source capture audit](ai-matching-source-audit.md) records all 40 canonical blob IDs/SHA-256 values, the 13 individual findings and this raw-byte limitation. Content provenance passes; this does not pass browser, unseen-accuracy or activation gates.

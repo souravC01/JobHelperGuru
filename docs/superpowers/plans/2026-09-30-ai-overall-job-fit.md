@@ -30,7 +30,7 @@
 | 7 — authenticated API | Complete | 59 focused, 411 backend and 71 frontend tests passed; production build passed |
 | 8 — truthful UI and request lifecycle | Complete | 89 frontend and 43 authenticated API tests passed; production build passed (1,593 modules); no live provider calls |
 | 9 — cached skill matching pivot and validation | Complete with explicit unseen-validation deferral | Compound matching and vault review complete; 525 backend/93 frontend/build pass; saved development score49.23; unseen validation moved to Task10/pre-release |
-| 10 — final regression and handoff | Pending | |
+| 10 — final regression and handoff | In progress | Recovery fix, source audit and core browser flows verified; delayed switches/rollback and final handoff pending |
 
 Task 3 accepts validated proposals with stable source/version-based requirement IDs; persisted frozen rubrics belong to Task 6. Its provider schema requires exact chunk acknowledgment and explicit completion. Unknown technologies survive without a taxonomy gate. Server validation rejects ambiguous quotes, split/partial literal OR groups, unsupported tenure minima, non-equivalent category conflicts and explicit document instructions. Semantic interpretation remains the AI's responsibility and is not yet validated by live quality measurements. Over-limit rubrics remain needs_review without trimming.
 
@@ -407,9 +407,16 @@ Keep existing profile/source validation, cache isolation, parser fixes, aliases 
 **Interfaces:** Produces reviewed destination diff, check results, source-transfer audit, default-off rollout instructions, and rollback instructions.
 
 - [ ] **Step 1: Audit imports/callers and delete unused borrowed code.** Remove offline-only exports, unused wire models and role fields from the new module; retain legacy functions still called by old endpoints/optimizer. Verify no scoring/quote validation exists in the frontend and no separate scorer calculates the same percentage.
-- [ ] **Step 2: Run full relevant verification in the destination.** `./.venv/Scripts/python.exe -m pytest -q --basetemp=scratch/pytest-ai-overall-fit`; frontend `npm run test:run`, `npm run build`; `git diff --check`. Record exact outcomes, not historical 517/82 counts. Any unexplained baseline or new failure blocks a ready-for-release claim.
+- [x] **Step 2: Run full relevant verification in the destination.** `./.venv/Scripts/python.exe -m pytest -q --basetemp=scratch/pytest-ai-overall-fit`; frontend `npm run test:run`, `npm run build`; `git diff --check`. Record exact outcomes, not historical 517/82 counts. Any unexplained baseline or new failure blocks a ready-for-release claim.
+  - Verified backend 526 tests; pre-push frontend 95 tests and build passed. Added RED-to-GREEN client coverage for manual resume creation after detecting an undefined update-only field. Diff whitespace check passes. Owner authorized branch push on 2026-10-16; no PR or activation. Full Task 10 remains in progress.
+
 - [ ] **Step 3: Verify the browser journey.** Upload readable/unreadable resume, analyze/paste JD, view scores and ties, save edit, rerank, switch job/provider mid-request, retry failure, use older source-less job, and disable flag. Confirm no stale selection/percentage or private-source logging.
+  - [x] Browser core flows2026-10-16: readable/partial uploads, corrected-text completeness confirmation, full JD, scores/ties/explicit selection, saved edit/rerank, failure/retry/recovery and incomplete-batch rank suppression. Synthetic fake provider; zero paid calls. See `docs/ai-matching-browser-verification.md`.
+  - [ ] Finish deliberately delayed job/provider switches and browser flag rollback; source-less historical-object browser reachability still to assess. Full Step3 remains open.
+
 - [ ] **Step 4: Review the complete destination diff against the transfer manifest.** Every borrowed working-tree fix has a corresponding regression; source checkout hashes/status remain intact except independently authored source-chat changes. No keys, private fixtures, unrelated main changes, or deployment changes included.
+  - [x] Source-content provenance audit (2026-10-16): exact normalized captured patch, 37/37 changed blob IDs and 3/3 unchanged paths verified; original records/source checkout unchanged. Two of 13 raw-hash discrepancies proven mixed line endings; original raw bytes unavailable for the other 11, whose content is verified by the captured patch. See `docs/ai-matching-source-audit.md`. This subcheck does not mark the full Step 4 or Task 10 complete.
+
 - [ ] **Step 5: Commit final documentation and hand off for owner review.** Subject: `docs: document AI matching validation and rollout`. Push/PR only when authorized by the subsequent execution request/workflow. Release flag activation requires explicit approval after passing gates; rollback disables the flag and restores labeled legacy/offline behavior without deleting saved data.
 
 ## Historical acceptance and coverage checklist — see active revision for current gates
