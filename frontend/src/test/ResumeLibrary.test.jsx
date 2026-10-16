@@ -247,3 +247,20 @@ it('requires explicit review decisions and saves without preparing again', async
   expect(apiClient.reviewResumeProfile).toHaveBeenCalledWith('r', { review_token: 'token', decisions: [{ skill: 'python', source_quote: 'Skills: Python' }, { skill: 'invented', source_quote: null }] }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
   expect(apiClient.prepareResumeProfile).not.toHaveBeenCalled()
 })
+
+
+it('requires full-text confirmation to clear unreadable warnings', async () => {
+  const resume = { id: 'warned', name: 'Unreadable', content: 'Complete text', extraction_warnings: ['Missing page'] }
+  apiClient.getResumes.mockResolvedValue([resume])
+  apiClient.updateResume.mockResolvedValue({ ...resume, extraction_warnings: [] })
+  apiClient.prepareResumeProfile.mockResolvedValue({ status: 'complete' })
+  render(<ResumeLibrary profilePreparationEnabled />)
+  fireEvent.click(await screen.findByTitle('Quick View full resume'))
+  fireEvent.click(screen.getByRole('button', { name: 'Edit saved text' }))
+  const confirmation = screen.getByRole('checkbox', { name: 'I confirm this is the complete resume text' })
+  expect(confirmation).not.toBeChecked()
+  fireEvent.click(confirmation)
+  fireEvent.click(screen.getByRole('button', { name: 'Save text' }))
+  await screen.findByText('Ready for job comparison')
+  expect(apiClient.updateResume).toHaveBeenLastCalledWith('warned', { content: 'Complete text', source_reviewed: true })
+})

@@ -1149,7 +1149,10 @@ class StorageService:
         name: Optional[str] = None,
         content: Optional[str] = None,
         user_id: Optional[str] = None,
+        source_reviewed: bool = False,
     ) -> Optional[Resume]:
+        if source_reviewed and not (content or "").strip():
+            raise ValueError("Full resume text required")
         existing = self.get_resume(resume_id, user_id=user_id)
         if not existing:
             return None
@@ -1185,7 +1188,15 @@ class StorageService:
                     (new_name, new_content, now, resume_id),
                 )
 
-            if content is not None and content != current["content"]:
+            if source_reviewed:
+                sql = "UPDATE resumes SET extraction_warnings = ? WHERE id = ?"
+                params = ('[]', resume_id)
+                if user_id:
+                    sql += " AND user_id = ?"
+                    params += (user_id,)
+                cursor.execute(self._format_sql(sql), params)
+
+            if (content is not None and content != current["content"]) or source_reviewed:
                 if user_id:
                     cursor.execute(self._format_sql("DELETE FROM resume_profiles WHERE resume_id = ? AND user_id = ?"), (resume_id, user_id))
                     cursor.execute(self._format_sql("DELETE FROM matching_snapshots WHERE resume_id = ? AND user_id = ?"), (resume_id, user_id))

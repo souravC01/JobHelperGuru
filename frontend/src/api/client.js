@@ -268,11 +268,11 @@ export async function uploadResumeFile(file, name = '', content_override = '') {
   return res.json();
 }
 
-export async function updateResume(id, { name, content }) {
+export async function updateResume(id, { name, content, source_reviewed }) {
   const res = await authFetch(`${API_BASE}/resumes/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, content }),
+    body: JSON.stringify({ name, content, source_reviewed }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Failed to update resume' }));

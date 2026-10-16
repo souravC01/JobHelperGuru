@@ -4,6 +4,19 @@ import * as api from '../api/client'
 const success = (data) => ({ ok: true, status: 200, json: async () => data })
 
 describe('overall fit client', () => {
+  it('creates a manual resume without sending update-only review fields', async () => {
+    localStorage.setItem('jh_token', 'test-token')
+    const resume = { id: 'r1', name: 'Manual resume', content: 'Skills: Python' }
+    fetch.mockResolvedValue(success(resume))
+    expect(await api.addResume({ name: resume.name, content: resume.content })).toEqual(resume)
+    expect(fetch).toHaveBeenLastCalledWith('/api/resumes', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ name: resume.name, content: resume.content }),
+    }))
+    await api.updateResume(resume.id, { content: resume.content, source_reviewed: true })
+    expect(fetch).toHaveBeenLastCalledWith('/api/resumes/r1', expect.objectContaining({
+      method: 'PATCH', body: JSON.stringify({ content: resume.content, source_reviewed: true }),
+    }))
+  })
   it('forwards raw job, selected IDs, fresh and abort signal with authentication', async () => {
     localStorage.setItem('jh_token', 'test-token')
     const controller = new AbortController()

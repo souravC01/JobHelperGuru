@@ -347,3 +347,18 @@ def test_review_save_rejects_content_edit_during_transaction(setup, monkeypatch)
     assert client.post(f'/api/resumes/{r["id"]}/profile/review',headers=a,json=body).status_code==409
     assert client.get(f'/api/resumes/{r["id"]}/profile',headers=a).json()['status']=='not_prepared'
     assert p.counts()=={'resume_profile':1}
+
+
+def test_reviewed_full_text_unblocks_unreadable_resume_only_with_explicit_confirmation(setup):
+    client,a,b,r,p=setup
+    uid=client.get('/api/auth/me',headers=a).json()['id']
+    warned=main.storage.add_resume('Unreadable','Partial',user_id=uid,extraction_warnings=['page missing'])
+    url=f'/api/resumes/{warned.id}'
+    text='Projects:\n'+QUOTE
+    assert client.patch(url,headers=a,json={'content':text}).json()['extraction_warnings']
+    assert client.patch(url,headers=a,json={'source_reviewed':True}).status_code==422
+    assert client.patch(url,headers=b,json={'content':text,'source_reviewed':True}).status_code==404
+    resolved=client.patch(url,headers=a,json={'content':text,'source_reviewed':True})
+    assert resolved.status_code==200 and not resolved.json()['extraction_warnings']
+    assert client.post(url+'/profile',headers=a).json()['status']=='complete'
+    assert evaluate(client,a,[warned.id]).json()['comparison_complete']

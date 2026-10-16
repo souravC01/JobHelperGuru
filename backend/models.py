@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, field_validator, ValidationInfo, ConfigDict, StrictStr, StrictBool
+from pydantic import BaseModel, Field, model_validator, field_validator, ValidationInfo, ConfigDict, StrictStr, StrictBool
 
 
 class ApplicationStatus(str, Enum):
@@ -103,6 +103,13 @@ class ResumeCreate(BaseModel):
 class ResumeUpdate(BaseModel):
     name: Optional[str] = None
     content: Optional[str] = None
+    source_reviewed: StrictBool = False
+
+    @model_validator(mode="after")
+    def reviewed_text_required(self):
+        if self.source_reviewed and not (self.content or "").strip():
+            raise ValueError("Full resume text is required when confirming completeness")
+        return self
 
 
 class ResumeEvaluationRequest(BaseModel):

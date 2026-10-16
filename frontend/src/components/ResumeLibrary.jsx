@@ -48,6 +48,7 @@ export default function ResumeLibrary({ onResumesUpdated, profilePreparationEnab
   const [viewingResume, setViewingResume] = useState(null);
   const [copied, setCopied] = useState(false);
   const [textDraft, setTextDraft] = useState(null);
+  const [sourceReviewed, setSourceReviewed] = useState(false);
   const [savingText, setSavingText] = useState(false);
   const [textError, setTextError] = useState('');
   const [profileStates, setProfileStates] = useState({});
@@ -100,7 +101,7 @@ export default function ResumeLibrary({ onResumesUpdated, profilePreparationEnab
     setSavingText(true);
     setTextError('');
     try {
-      const saved = await updateResume(viewingResume.id, { content: textDraft });
+      const saved = await updateResume(viewingResume.id, { content: textDraft, ...(sourceReviewed && viewingResume.extraction_warnings?.length ? { source_reviewed: true } : {}) });
       if (generation !== generationRef.current) return;
       publishSavedResume(saved);
       setViewingResume(saved);
@@ -725,11 +726,15 @@ export default function ResumeLibrary({ onResumesUpdated, profilePreparationEnab
               {textError && <p role="alert">{textError}</p>}
               {textDraft === null ? <>
                 <div className="bg-white border border-[#e0e0e0] rounded-lg p-5 font-mono text-xs whitespace-pre-wrap">{viewingResume.content}</div>
-                <button className="btn-secondary-corporate mt-3" onClick={() => { setTextDraft(viewingResume.content); setTextError(''); }}>Edit saved text</button>
+                <button className="btn-secondary-corporate mt-3" onClick={() => { setTextDraft(viewingResume.content); setSourceReviewed(false); setTextError(''); }}>Edit saved text</button>
               </> : <div className="space-y-3">
                 <label htmlFor="saved-resume-text">Saved resume text</label>
                 <textarea id="saved-resume-text" rows={16} className="input-corporate w-full" value={textDraft} disabled={savingText} onChange={e => setTextDraft(e.target.value)} />
                 <p>Save to use this text for matching. The original uploaded file stays available.</p>
+                {viewingResume.extraction_warnings?.length > 0 && <label>
+                  <input type="checkbox" checked={sourceReviewed} disabled={savingText} onChange={e => setSourceReviewed(e.target.checked)} />
+                  I confirm this is the complete resume text
+                </label>}
                 <button className="btn-primary-corporate" disabled={savingText || !textDraft.trim()} onClick={saveText}>{savingText ? 'Saving text...' : 'Save text'}</button>
                 <button className="btn-secondary-corporate" disabled={savingText} onClick={() => setTextDraft(null)}>Cancel text edit</button>
               </div>}

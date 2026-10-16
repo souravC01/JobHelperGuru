@@ -620,6 +620,7 @@ def update_resume(
         resume_id,
         name=req.name,
         content=req.content,
+        source_reviewed=req.source_reviewed,
         user_id=current_user.id,
     )
     if not updated:
